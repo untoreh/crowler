@@ -1,0 +1,12 @@
+* Backend
+** Data
+** Processing
+*** Tasks
+**** Fetch fresh articles daily
+***** If: sources present, continue
+****** Else: Lookup sources
+******* Save a list of sources
+***** Fetch and parse an article
+****** Try n3k
+****** Try news-fetch
+* Frontend

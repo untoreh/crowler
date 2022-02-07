@@ -1,17 +1,25 @@
 import os
-
+import warnings
 import requests_cache
-requests_cache.install_cache('cache')
+
+requests_cache.install_cache("cache")
+
+if os.getenv("PYTHON_NO_WARNINGS"):
+    warnings.simplefilter("ignore")
 
 PROXIES_EP = "http://127.0.0.1:8080/proxies.json"
 STATIC_PROXY_EP = "http://127.0.0.1:8082"
 STATIC_PROXY = True
 PROXY_DICT = {"http": STATIC_PROXY_EP, "https": STATIC_PROXY_EP}
+WORKERS = 4
+
 
 def setproxies(p=STATIC_PROXY_EP):
     os.environ["HTTPS_PROXY"] = os.environ["HTTP_PROXY"] = os.environ[
         "http_proxy"
     ] = os.environ["https_proxy"] = p
+
+
 setproxies()
 
 REQ_TIMEOUT = 15

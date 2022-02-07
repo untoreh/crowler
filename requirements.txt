@@ -1,0 +1,25 @@
+# general
+feedparser
+feedfinder2
+fake_user_agent
+unidecode
+clean-text
+requests-cache
+requests
+retry
+spacy
+pytrends
+git+https://github.com/searx/searx
+
+# articles
+news-please
+newspaper3k
+goose3
+
+# tags
+pyate
+pytextrank
+phrasemachine
+
+# not needed...
+# textacy

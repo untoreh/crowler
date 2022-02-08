@@ -5,14 +5,16 @@ import re
 import config as cfg
 import os
 import json
+import logging
+logger = logging.getLogger()
 
 # From a list of keywords
 def read_file(f, ext="txt", delim="\n"):
-    path = f"{f}.{ext}"
-    if os.path.exists(path):
+    path = f"{f}.{ext}" if ext is not None else f
+    if os.path.isfile(path):
         with open(path, "r") as f:
             read = f.read()
-            if ext == "ext":
+            if ext == "txt":
                 content = read.split(delim)
             elif ext == "json":
                 content = json.loads(read)
@@ -21,9 +23,12 @@ def read_file(f, ext="txt", delim="\n"):
             return content
 
 def save_file(contents, node, ext="txt", root=cfg.DATA_DIR, mode='w+', as_json=True, newline=False):
-    if not os.path.exists(root):
+    if root and not os.path.isdir(root):
+        assert not os.path.isfile(root)
         os.makedirs(root)
-    with open(root / f"{node}.{ext}", mode) as f:
+    file_name = f"{node}.{ext}"
+    file_path = file_name if root is None else root / file_name
+    with open(file_path, mode) as f:
         if as_json:
             r = json.dump(contents, f)
         else:

@@ -1,6 +1,7 @@
 import os
-import warnings
+from os.path import isdir, dirname
 from pathlib import Path
+import warnings
 import requests_cache
 
 requests_cache.install_cache("cache")
@@ -28,7 +29,9 @@ REQ_TIMEOUT = 15
 # How many concurrent requests
 POOL_SIZE = 8
 
-DATA_DIR = Path("data")
+DATA_DIR = Path("../data")
+assert isdir(Path(dirname(DATA_DIR)) / ".venv")
+
 TOPICS_DIR = DATA_DIR / "topics"
 KW_HISTORY = "history"
 SRC_FILE = "sources.json"

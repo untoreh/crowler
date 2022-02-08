@@ -1,5 +1,6 @@
 import os
 import warnings
+from pathlib import Path
 import requests_cache
 
 requests_cache.install_cache("cache")
@@ -7,6 +8,7 @@ requests_cache.install_cache("cache")
 if os.getenv("PYTHON_NO_WARNINGS"):
     warnings.simplefilter("ignore")
 
+PROXIES_ENABLED = False
 PROXIES_EP = "http://127.0.0.1:8080/proxies.json"
 STATIC_PROXY_EP = "http://127.0.0.1:8082"
 STATIC_PROXY = True
@@ -26,6 +28,9 @@ REQ_TIMEOUT = 15
 # How many concurrent requests
 POOL_SIZE = 8
 
+DATA_DIR = Path("data")
+TOPICS_DIR = DATA_DIR / "topics"
+KW_HISTORY = "history"
 SRC_FILE = "sources.json"
 SRC_HISTORY_FILE = "sources_history.json"
 # how many keywords to try for extracting source links from search engines

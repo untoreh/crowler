@@ -5,9 +5,7 @@ from requests import get
 from multiprocessing.pool import ThreadPool
 import json
 from random import shuffle
-import logging
-
-logger = logging.getLogger()
+from utils import logger
 
 from proxies import set_socket_timeout
 
@@ -35,7 +33,7 @@ def get_engine_params(engine):
         "engine": engine,
         "name": engine,
         "timeout": cfg.REQ_TIMEOUT,
-        "categories": "general"
+        "categories": "general",
     }
     if cfg.PROXIES_ENABLED:
         params["network"] = {"proxies": cfg.STATIC_PROXY_EP}
@@ -44,6 +42,7 @@ def get_engine_params(engine):
 
 ENGINES_PARAMS = [get_engine_params(engine) for engine in ENGINES]
 search.initialize(settings_engines=ENGINES_PARAMS)
+
 
 @retry(tries=cfg.SRC_MAX_TRIES, delay=1, backoff=3.0)
 def single_search(kw, engine, pages=1, timeout=cfg.REQ_TIMEOUT, category=""):
@@ -58,11 +57,13 @@ def single_search(kw, engine, pages=1, timeout=cfg.REQ_TIMEOUT, category=""):
         else:
             RESULTS[engine].extend(res)
 
+
 def try_search(*args, **kwargs):
     try:
         single_search(*args, **kwargs)
     except:
         pass
+
 
 def dedup_results():
     all_results = []
@@ -76,8 +77,8 @@ def dedup_results():
     return all_results
 
 
-def execute(
-    keyword="trending", verbose=False, n_engines=1, n_workers=cfg.WORKERS, save=False
+def fromkeyword(
+    keyword="trending", verbose=False, n_engines=1, n_workers=cfg.POOL_SIZE, save=False
 ):
     """
     `n_engines`: How many search engines to query.
@@ -88,9 +89,7 @@ def execute(
         engines = ENGINES.copy()
         shuffle(engines)
         logger.info("Finding sources for keyword: %", keyword)
-        pool.starmap(
-            try_search, [(keyword, engines[n], 1) for n in range(n_workers)]
-        )
+        pool.starmap(try_search, [(keyword, engines[n], 1) for n in range(n_workers)])
     except KeyboardInterrupt:
         pass
     res = dedup_results()

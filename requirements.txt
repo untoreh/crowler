@@ -1,4 +1,5 @@
 # general
+pyssl
 feedparser
 feedfinder2
 fake_user_agent

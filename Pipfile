@@ -1,0 +1,22 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+pyssl = "*"
+feedparser = "*"
+feedfinder2 = "*"
+fake-user-agent = "*"
+unidecode = "*"
+clean-text = "*"
+requests-cache = "*"
+requests = "*"
+retry = "*"
+spacy = "*"
+pytrends = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.10"

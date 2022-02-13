@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
 import config as cfg
 from pyate import combo_basic
+import utils as ut
 import spacy
 import pytextrank as _
 import phrasemachine
 from rake_nltk import Rake
 import nltk
 
-def __init__():
-    global rk
-
-    nltk.download('stopwords')
-
-    rk = Rake()
-    rk.max_length = cfg.TAGS_MAX_LEN
+nltk.download('stopwords')
+rk = Rake()
+rk.max_length = cfg.TAGS_MAX_LEN
 
 def ate(text, n=3):
     tags = combo_basic(text)
@@ -52,10 +49,8 @@ def phrasemac(text, n=3, max_len=cfg.TAGS_MAX_LEN):
 def rake(text, n=3, n_filter=100):
     rk.extract_keywords_from_text(text)
     kws = rk.get_ranked_phrases()
-    return dedup(kws[:n_filter])[:n]
+    return ut.dedup(kws[:n_filter])[:n]
 
-def dedup(l):
-    return list(dict.fromkeys(l))
 
 def all(text):
     res = dict()
@@ -66,4 +61,4 @@ def all(text):
     tags = []
     for v in res.values():
         tags.extend(v)
-    return dedup(tags)
+    return ut.dedup(tags)

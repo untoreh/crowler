@@ -1,0 +1,42 @@
+{
+  "name": "wsl",
+  "version": "1.0.0",
+  "description": "Start from a list of keywords",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "webpack serve --allowed-hosts=wsl",
+    "build": "webpack"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@babel/core": "^7.17.2",
+    "@babel/preset-env": "^7.16.11",
+    "autoprefixer": "^10.4.2",
+    "babel-loader": "^8.2.3",
+    "css-loader": "^6.6.0",
+    "extract-loader": "^5.1.0",
+    "file-loader": "^6.2.0",
+    "postcss-loader": "^6.2.1",
+    "sass": "^1.49.7",
+    "sass-loader": "^12.4.0",
+    "webpack": "^5.68.0",
+    "webpack-cli": "^4.9.2",
+    "webpack-dev-server": "^4.7.4"
+  },
+  "dependencies": {
+    "@material/button": "^13.0.0",
+    "@material/icon-button": "^13.0.0",
+    "@material/layout-grid": "^13.0.0",
+    "@material/ripple": "^13.0.0",
+    "@material/textfield": "^13.0.0",
+    "@material/theme": "^13.0.0",
+    "@material/tooltip": "^13.0.0",
+    "@material/top-app-bar": "^13.0.0",
+    "material-components": "^0.5.0"
+  },
+  "keywords": []
+}

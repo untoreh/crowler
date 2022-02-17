@@ -1,0 +1,116 @@
+// @use '@material/button/mdc-button';
+// @use '@material/button';
+
+@use "@material/theme";
+// @use "@material/icon-button" as icbs;
+@use "@material/icon-button/styles" as icbs;
+@use "@material/top-app-bar/mdc-top-app-bar";
+// @use "@material/layout-grid/mdc-layout-grid";
+@use "@material/ripple";
+
+@use "@material/floating-label/mdc-floating-label";
+@use "@material/line-ripple/mdc-line-ripple";
+@use "@material/notched-outline/mdc-notched-outline";
+@use "@material/textfield";
+@use "@material/tooltip";
+@use "@material/tooltip/styles" as tst;
+
+@include textfield.core-styles;
+
+@import "colors.scss";
+
+body,
+header {
+  min-width: 360px;
+}
+
+.app-bar-logo > span {
+  display: none;
+}
+
+//////////////////////////
+
+#title {
+  text-align: center;
+}
+
+.wsl-logo {
+  width: 100%;
+}
+
+.logo-dark-wrap {
+  display: none;
+}
+
+.app-bar-logo {
+  width: 7rem;
+  height: 100%;
+  padding: 0 1rem 0 1rem;
+}
+
+.menu-wrap,
+.title-wrap {
+  font-variant: small-caps;
+}
+
+body {
+  font-family: "Titillium Web", sans-serif;
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+main {
+  padding: 1rem;
+}
+
+.post-footer {
+  text-align: right;
+}
+
+footer {
+  padding: 0.25rem 1rem 0.25rem 1rem;
+}
+
+.site-footer {
+  font-family: Times;
+  font-size: 0.9rem;
+}
+
+.footer-copyright {
+  font-family: Times;
+  padding: 1rem 0 0 0.25rem;
+}
+
+.footer-links {
+  font-size: 1.5rem;
+  font-variant: all-petite-caps;
+}
+
+.footer-links > a {
+  padding: 0 0.25rem 0 0.25rem;
+}
+
+.mdc-ripple-surface {
+  @include ripple.surface;
+  @include ripple.radius-bounded;
+  @include ripple.states;
+}
+
+.dark .app-bar-logo {
+  .logo-light-icon-wrap,
+  .logo-light-wrap {
+    display: none;
+  }
+}
+.light .app-bar-logo {
+  .logo-dark-icon-wrap,
+  .logo-dark-wrap {
+    display: none;
+  }
+}
+
+.menu-wrap .page {
+  padding: 0 1rem 0 1rem;
+}
+
+@import "responsive.scss";

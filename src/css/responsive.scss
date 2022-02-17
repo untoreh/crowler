@@ -1,0 +1,53 @@
+@media (max-width: 480px) {
+  @media (prefers-color-scheme: dark) {
+    .app-bar-logo .logo-dark-icon-wrap {
+      display: initial;
+    }
+  }
+
+  @media (prefers-color-scheme: light) {
+    .app-bar-logo .logo-light-icon-wrap {
+      display: initial;
+    }
+  }
+  .light .app-bar-logo .logo-light-icon-wrap {
+    display: initial;
+  }
+  .dark .app-bar-logo .logo-dark-icon-wrap {
+    display: initial;
+  }
+  .app-bar-logo {
+    width: 3rem;
+  text-align: center;
+  padding: 0.5rem 0 0.5rem 0;
+  }
+}
+
+@media (min-width: 481px) {
+  @media (prefers-color-scheme: dark) {
+    .app-bar-logo .logo-dark-wrap {
+      display: initial;
+    }
+  }
+  @media (prefers-color-scheme: light) {
+    .app-bar-logo .logo-light-wrap {
+      display: initial;
+    }
+  }
+  .light .app-bar-logo .logo-light-wrap {
+    display: initial;
+  }
+  .dark .app-bar-logo .logo-dark-wrap {
+    display: initial;
+  }
+  .app-bar-logo.mdc-icon-button {
+    width: 9rem;
+  }
+  .app-bar-logo.mdc-icon-button svg {
+    width: inherit;
+    height: inherit;
+    margin: 1rem;
+    position: relative;
+    top: -0.5rem;
+  }
+}

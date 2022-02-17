@@ -1,0 +1,138 @@
+:root {
+  --primary: #eb921c;
+  --light-primary: #ffc351;
+  --dark-primary: #b36400;
+
+  --secondary: #0e2837;
+  --light-secondary: #385061;
+  --dark-secondary: #000012;
+
+  --on-primary: var(--secondary);
+  --on-secondary: var(--primary);
+
+  --text-primary-on-light: #000014;
+  --text-secondary-on-light: var(--dark-secondary);
+
+  --text-primary-on-dark: #c1f56a;
+  --text-secondary-on-dark: var(--light-secondary);
+
+  --background: #ffb574;
+  --surface: #0b1619;
+
+  --light-on-primary: var(--on-primary);
+  --light-on-secondary: var(--on-secondary);
+
+  --dark-on-primary: var(--on-primary);
+  --dark-on-secondary: var(--on-secondary);
+
+  --light-background: #ffe7a4;
+  --light-on-background: var(--dark-background);
+
+  --dark-background: #000012;
+  --dark-on-background: var(--light-background);
+
+  --light-surface: var(--light-secondary);
+  --light-on-surface: var(--light-on-secondary);
+
+  --dark-surface: var(--dark-secondary);
+  --dark-on-surface: var(--dark-on-secondary);
+}
+
+@mixin mdc-light {
+  --mdc-theme-primary: var(--light-primary);
+  --mdc-theme-secondary: var(--light-secondary);
+  --mdc-theme-surface: var(--light-surface);
+  --mdc-theme-on-primary: var(--light-on-primary);
+  --mdc-theme-on-secondary: var(--light-on-secondary);
+  --mdc-theme-on-surface: var(--light-on-surface);
+}
+
+@mixin mdc-dark {
+  --mdc-theme-primary: var(--secondary);
+  --mdc-theme-secondary: var(--dark-secondary);
+  --mdc-theme-surface: var(--dark-surface);
+  --mdc-theme-on-primary: var(--primary);
+  --mdc-theme-on-secondary: var(--dark-on-secondary);
+  --mdc-theme-on-surface: var(--dark-on-surface);
+}
+
+body {
+  &.dark {
+    @include mdc-dark;
+  }
+  &.light {
+    @include mdc-light;
+  }
+}
+
+@mixin dark {
+  body {
+    @include mdc-dark;
+  }
+  main {
+    background: var(--dark-background);
+    color: var(--text-primary-on-dark);
+  }
+  a {
+    color: var(--light-primary);
+  }
+  a:visited {
+    color: var(--dark-primary);
+  }
+  footer {
+    background: var(--surface);
+    color: var(--text-primary-on-dark);
+  }
+}
+
+@mixin light {
+  body {
+    @include mdc-light;
+  }
+  main {
+    background: var(--light-background);
+    color: var(--text-secondary-on-light);
+  }
+  a {
+    color: var(--secondary);
+  }
+  a:visited {
+    color: var(--text-primary-on-light);
+  }
+  footer {
+    background: var(--primary);
+    color: var(--text-primary-on-light);
+  }
+}
+
+.dark {
+  @include dark;
+}
+
+.light {
+  @include light;
+}
+
+@media (prefers-color-scheme: dark) {
+  @include dark;
+}
+
+@media (prefers-color-scheme: light) {
+  @include light;
+}
+
+header {
+  box-shadow: var(--light-secondary) 0 1px 2px;
+}
+footer {
+  box-shadow: var(--secondary) 0 -1px 2px;
+}
+
+.mdc-tooltip {
+  @include tooltip.fill-color(var(--light-primary));
+  @include tooltip.label-ink-color(var(--light-on-primary));
+  font-variant: none;
+  white-space: normal;
+  width: 10rem;
+  @include tooltip.word-break(break-word, break-all);
+}

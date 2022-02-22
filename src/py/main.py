@@ -62,7 +62,6 @@ def get_kw_sources(topic, remove=True):
                 return json.loads(res)
 
 
-@retry(ValueError, tries=3)
 def ensure_sources(topic):
     sources = get_kw_sources(topic)
     if not sources:
@@ -74,11 +73,15 @@ def ensure_sources(topic):
     return sources
 
 
-def run_articles_job(topic):
+def run_parse1_job(topic):
     """
-    Run one iteration of the job to find articles from source links.
+    Run one iteration of the job to find articles and feeds from source links.
     """
-    sources = ensure_sources(topic)
+    try:
+        sources = ensure_sources(topic)
+    except ValueError:
+        logger.warning("Couldn't find sources for topic %s.", topic)
+        return None
 
     arts, feeds = cnt.fromsources(sources)
     tp_path = Path(topic)
@@ -93,23 +96,53 @@ def run_articles_job(topic):
 
     if feeds:
         feeds_path = tp_path / "feeds"
-        logger.info("Saving %d articles to %s.", len(feeds), os.path.realpath(feeds_path))
+        logger.info(
+            "Saving %d articles to %s.", len(feeds), os.path.realpath(feeds_path)
+        )
         sf = ut.save_zarr(feeds, k=ut.ZarrKey.feeds, root=cfg.TOPICS_DIR / feeds_path)
     else:
         logger.info("No feeds were found for %s.", topic)
 
     return (sa, sf)
 
+
+def get_feeds(topic, n=3):
+    feeds_path = Path(topic) / "feeds"
+    z = ut.load_zarr(k=ut.ZarrKey.feeds, root=cfg.TOPICS_DIR / feeds_path)
+    if len(z) < n:
+        return z[:]
+    else:
+        f = z[0:n]
+        z.resize(len(z) - n)
+        return f
+
+
+def run_parse2_job(topic):
+    """
+    Run one iteration of the job to find articles from feed links.
+    """
+    feed_links = get_feeds(topic, 3)
+    articles = cnt.fromfeeds(feed_links)
+    a = None
+    if articles:
+        arts_path = Path(topic) / "articles"
+        logger.info(
+            "Saving %d articles to %s.", len(articles), os.path.realpath(arts_path)
+        )
+        a = ut.save_zarr(articles, k=ut.ZarrKey.articles, root=cfg.TOPICS_DIR / arts_path)
+    return a
+
+
 JOBS_MAP = {
     "sources": run_sources_job,
-    "articles": run_articles_job,
-    # "publish": run_publish_job
+    "articles": run_parse1_job,
+    "publish": run_parse2_job,
 }
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-job", help="What kind of job to perform", default="articles")
-    parser.add_argument("-topic", help="The topic to fetch articles for." , default="")
+    parser.add_argument("-topic", help="The topic to fetch articles for.", default="")
     args = parser.parse_args()
     if args.topic:
         JOBS_MAP[args.job](args.topic)

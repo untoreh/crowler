@@ -1,4 +1,3 @@
-from retry import retry
 import config as cfg
 import lassie as la
 import utils as ut
@@ -17,6 +16,13 @@ gs = Goose()
 if not hasattr(nltk, "punkt"):
     nltk.download("punkt")
 
+def isrelevant(title, body):
+    """String BODY is relevant if it contains at least one word from TITLE."""
+    t_words = set(title.split())
+    for w in ut.splitStr(body):
+        if w in t_words:
+            return True
+    return False
 
 def goose(l, data=None):
     if data is None:
@@ -87,6 +93,7 @@ def trafi(url, data=None):
         include_links=False,
     )
 
+
 def fillarticle(url, data):
     """Using `trafilatura`, `goose` and `lassie` machinery to parse article data."""
     final = dict()
@@ -100,9 +107,9 @@ def fillarticle(url, data):
     # first try content
 
     final["content"] = tra["text"] or goo["cleaned_text"]
-    if not final["content"]:
-        return {}
     final["title"] = tra["title"] or goo.get("title")
+    if not final["content"] or not isrelevant(final["title"], final["content"]):
+        return {}
     final["desc"] = tra["description"] or goo.get("meta", {}).get("description")
     final["author"] = (
         tra["author"]

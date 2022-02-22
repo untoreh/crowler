@@ -19,7 +19,8 @@ STATIC_PROXY_EP = "http://127.0.0.1:8082"
 STATIC_PROXY = True
 PROXY_DICT = {"http": STATIC_PROXY_EP, "https": STATIC_PROXY_EP}
 
-CURL_CLASS = copy.deepcopy(pycurl.Curl)
+if "CURL_CLASS" not in globals():
+    CURL_CLASS = copy.deepcopy(pycurl.Curl)
 def curlproxy():
     c = CURL_CLASS()
     ua = generate_user_agent()

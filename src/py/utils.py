@@ -44,21 +44,21 @@ handler.setFormatter(logging.Formatter("%(name)s - %(levelname)s - %(message)s")
 logger.addHandler(handler)
 
 def somekey(d, *keys):
+    v = None
     for k in keys:
         if v := d.get(k):
             break
     return v
 
-
 @retry(ValueError, tries=3, delay=1, backoff=0.3, logger=None)
 def fetch_data(url, *args, **kwargs):
     try:
-        data = LRU_CACHE[url]
+        data = _fetch_url(url)
     except KeyError:
         data = _fetch_url(url)
+        LRU_CACHE[url] = data
         if data is None:
             raise ValueError(f"Failed crawling feed url: {url}.")
-        LRU_CACHE[url] = data
     return data
 
 

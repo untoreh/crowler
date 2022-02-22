@@ -5,14 +5,11 @@ from typing import List
 import articles as art
 import config as cfg
 import utils as ut
+from utils import logger
 
 import feedfinder2 as ff2
 import feedparser as fep
 from retry import retry
-from trafilatura import feeds
-feeds.fetch_url = ut.fetch_data
-
-# import textop as to
 
 warnings.simplefilter("ignore")
 
@@ -24,21 +21,7 @@ FEEDFINDER_DATA = dict()
 # overwrite feedfinder to accept raw data
 setattr(ff2.FeedFinder, "get_feed", lambda _, url: FEEDFINDER_DATA.pop(url, ""))
 
-def isrelevant(title, body):
-    """String BODY is relevant if it contains at least one word from TITLE."""
-    t_words = set(title.split())
-    for w in ut.splitStr(body):
-        if w in t_words:
-            return True
-    return False
 
-def fillurl(data, k, url):
-    """Ensure the DATA dict contains an URL string at key K."""
-    if k not in data or str(data[k]) == "":
-        data[k] = url
-
-
-@retry(ValueError, tries=3, logger=None)
 def parsesource(url):
     global FEEDFINDER_DATA, LAST_SOURCE
     FEEDFINDER_DATA[url] = data = ut.fetch_data(url)
@@ -47,24 +30,26 @@ def parsesource(url):
         if f:
             logger.info("Adding %s feeds.", len(f))
             FEEDS.extend(f)
-        if isrelevant(article.title, article.maintext):
-            article = article.get_dict()
-            fillurl(article, "url", url)
-            ARTICLES.append(article)
-        else:
-            article = art.goose(url, data)
-            fillurl(article.infos, "url", url)
-            if isrelevant(article.title, article.cleaned_text):
-                article = art.g2n(article.infos)
-                ARTICLES.append(article)
-            elif len(f) == 0:
-                logger.info("Url is neither an article nor a feed source. (%s)", url)
-        LAST_SOURCE = (f, article)
+        a = art.fillarticle(url, data)
+        if a:
+            ARTICLES.append(a)
+        elif len(f) == 0:
+            logger.info("Url is neither an article nor a feed source. (%s)", url)
+        LAST_SOURCE = (f, a)
     else:
         LAST_SOURCE = (None, None)
 
 
-@retry(ValueError, tries=3, logger=None)
+def parsearticle(url):
+    data = ut.fetch_data(url)
+    if data:
+        a = art.fillarticle(url, data)
+        if a:
+            ARTICLES.append(a)
+        else:
+            logger.info("Couldn't parse an article from url %s .", url)
+
+
 def parsefeed(f):
     return fep.parse(ut.fetch_data(f))
 
@@ -98,6 +83,34 @@ def fromsources(sources, n=cfg.POOL_SIZE, use_proxies=True):
         len(sources),
     )
     return (ARTICLES, FEEDS)
+
+
+def fromfeeds(sources, n=cfg.POOL_SIZE, use_proxies=True):
+    """Create list of feeds from a subset of links found in the source file, according to SRC_SAMPLE_SIZE."""
+    global ARTICLES
+    ARTICLES = []
+    if use_proxies:
+        cfg.setproxies()
+    jobs = []
+    with ThreadPool(processes=n) as pool:
+        for entry in sources:
+            url = entry["url"]
+            logger.info("Fetching articles from %s", url)
+            j = pool.apply_async(parsearticle, args=(url,))
+            jobs.append(j)
+        for n, j in enumerate(jobs):
+            j.wait()
+            logger.info("Waiting for job: %s.", n)
+
+    if use_proxies:
+        cfg.setproxies("")
+    logger.info("Articles parsing Done")
+    logger.info(
+        "Found %d articles in %d sources.",
+        len(ARTICLES),
+        len(sources),
+    )
+    return ARTICLES
 
 
 def processfeed(f):

@@ -1,21 +1,27 @@
-# general
-pyssl
+# parsing
 feedparser
 feedfinder2
-fake_user_agent
-unidecode
-clean-text
-requests-cache
-requests
-retry
 spacy
-pytrends
-git+https://github.com/searx/searx
 
-# articles
+# requests
+pyssl
+pycurl
+retry
+user_agent
+zict
+
+# data
+zarr
+numcodecs
+clean-text
+unidecode
+
+# sources/articles
 news-please
 newspaper3k
 goose3
+pytrends
+git+https://github.com/searx/searx
 
 # tags
 pyate

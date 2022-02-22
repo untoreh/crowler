@@ -3,6 +3,7 @@
 import json
 import os
 import shutil
+import argparse
 from pathlib import Path
 
 import config as cfg
@@ -81,16 +82,36 @@ def run_articles_job(topic):
 
     arts, feeds = cnt.fromsources(sources)
     tp_path = Path(topic)
-    arts_path = tp_path / "articles"
-    job_id = str(int(datetime.now().timestamp()))
-    logger.info("Saving %d articles to %s.", len(arts), os.path.realpath(arts_path))
-    sa = ut.save_file(arts, arts_path / job_id, root=cfg.TOPICS_DIR, as_json=True)
+    sa = sf = None
 
-    feeds_path = tp_path / "feeds"
-    logger.info("Saving %d articles to %s.", len(feeds), os.path.realpath(feeds_path))
-    sf = ut.save_file(feeds, feeds_path / job_id, root=cfg.TOPICS_DIR, as_json=True)
+    if args:
+        arts_path = tp_path / "articles"
+        logger.info("Saving %d articles to %s.", len(arts), os.path.realpath(arts_path))
+        sa = ut.save_zarr(arts, root=cfg.TOPICS_DIR / arts_path)
+    else:
+        logger.info("No articles were found for %s.", topic)
+
+    if feeds:
+        feeds_path = tp_path / "feeds"
+        logger.info("Saving %d articles to %s.", len(feeds), os.path.realpath(feeds_path))
+        sf = ut.save_zarr(feeds, k=ut.ZarrKey.feeds, root=cfg.TOPICS_DIR / feeds_path)
+    else:
+        logger.info("No feeds were found for %s.", topic)
+
     return (sa, sf)
 
+JOBS_MAP = {
+    "sources": run_sources_job,
+    "articles": run_articles_job,
+    # "publish": run_publish_job
+}
 
-def run(topic):
-    run_articles_job(topic)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-job", help="What kind of job to perform", default="articles")
+    parser.add_argument("-topic", help="The topic to fetch articles for." , default="")
+    args = parser.parse_args()
+    if args.topic:
+        JOBS_MAP[args.job](args.topic)
+    else:
+        raise ValueError("Pass a `-topic` as argument to run a job.")

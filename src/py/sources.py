@@ -44,7 +44,7 @@ ENGINES_PARAMS = [get_engine_params(engine) for engine in ENGINES]
 search.initialize(settings_engines=ENGINES_PARAMS)
 
 
-@retry(tries=cfg.SRC_MAX_TRIES, delay=1, backoff=3.0)
+@retry(tries=cfg.SRC_MAX_TRIES, delay=1, backoff=3.0, logger=None)
 def single_search(kw, engine, pages=1, timeout=cfg.REQ_TIMEOUT, category=""):
     RESULTS[engine] = []
     for p in range(pages):

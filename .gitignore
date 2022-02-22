@@ -11,3 +11,5 @@ data/topics/
 # !site
 # dist/*
 # !dist
+/.log/
+/data/cache/

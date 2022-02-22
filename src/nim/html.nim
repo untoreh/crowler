@@ -9,7 +9,8 @@ import xmlparser
 import xmltree
 import sugar
 import strutils
-import stub
+import types
+import times
 
 const LOGO_HTML = readFile(LOGO_PATH)
 const LOGO_SMALL_HTML = readFile(LOGO_SMALL_PATH)
@@ -104,37 +105,37 @@ proc buildFooter():VNode =
             script(src="bundle.js", async="")
 
 
-proc postTitle(link=""):VNode =
+proc postTitle(title: string, desc="",  link=""):VNode =
     buildHtml(tdiv(class="title-wrap")):
         h1(id="title"):
             a(href=link):
-                text stub_title
+                text title
         blockquote(id="page-description")
 
-proc postContent():VNode =
+proc postContent(article: string):VNode =
     buildHtml(article(class="post-wrapper container max")):
         tdiv(class="post-content"):
-            text stub_article
+            text article
 
-proc postFooter():VNode =
+proc postFooter(pubdate: Time):VNode =
     buildHtml(tdiv(class="post-footer")):
-        text "Post Footer"
+        text $pubdate
 
 
-proc buildBody(website_title: string = WEBSITE_TITLE): VNode =
+proc buildBody(a: Article, website_title: string = WEBSITE_TITLE): VNode =
     buildHtml(body(class="")):
         tdiv(class="menu-wrap"):
             buildMenu()
         main(class="mdc-top-app-bar--fixed-adjust"):
-            postTitle()
-            postContent()
-            postFooter()
+            postTitle(a.title, a.desc, a.url)
+            postContent(a.content)
+            postFooter(a.pubdate)
         buildFooter()
 
-proc buildPage():VNode =
+proc buildPage(a: Article):VNode =
     buildHtml(html):
         buildHead()
-        buildBody()
+        buildBody(a)
 
 when isMainModule:
     var path = joinPath(SITE_PATH, "index.html")

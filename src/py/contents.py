@@ -2,14 +2,15 @@ import warnings
 from multiprocessing.pool import ThreadPool
 from typing import List
 
-import feedfinder2 as ff2
-import feedparser as fep
-from retry import retry
-
 import articles as art
 import config as cfg
 import utils as ut
-from utils import logger
+
+import feedfinder2 as ff2
+import feedparser as fep
+from retry import retry
+from trafilatura import feeds
+feeds.fetch_url = ut.fetch_data
 
 # import textop as to
 
@@ -23,16 +24,21 @@ FEEDFINDER_DATA = dict()
 # overwrite feedfinder to accept raw data
 setattr(ff2.FeedFinder, "get_feed", lambda _, url: FEEDFINDER_DATA.pop(url, ""))
 
-
 def isrelevant(title, body):
+    """String BODY is relevant if it contains at least one word from TITLE."""
     t_words = set(title.split())
     for w in ut.splitStr(body):
         if w in t_words:
             return True
     return False
 
+def fillurl(data, k, url):
+    """Ensure the DATA dict contains an URL string at key K."""
+    if k not in data or str(data[k]) == "":
+        data[k] = url
 
-@retry(ValueError, tries=3)
+
+@retry(ValueError, tries=3, logger=None)
 def parsesource(url):
     global FEEDFINDER_DATA, LAST_SOURCE
     FEEDFINDER_DATA[url] = data = ut.fetch_data(url)
@@ -41,21 +47,24 @@ def parsesource(url):
         if f:
             logger.info("Adding %s feeds.", len(f))
             FEEDS.extend(f)
-        content = art.news(url, data)
-        if isrelevant(content.title, content.maintext):
-            ARTICLES.append(content.get_dict())
+        if isrelevant(article.title, article.maintext):
+            article = article.get_dict()
+            fillurl(article, "url", url)
+            ARTICLES.append(article)
         else:
-            content = art.goose(url, data)
-            if isrelevant(content.title, content.cleaned_text):
-                ARTICLES.append(content.infos)
+            article = art.goose(url, data)
+            fillurl(article.infos, "url", url)
+            if isrelevant(article.title, article.cleaned_text):
+                article = art.g2n(article.infos)
+                ARTICLES.append(article)
             elif len(f) == 0:
-                logger.warning("Url is neither an article nor a feed source. (%s)", url)
-        LAST_SOURCE = (f, content)
+                logger.info("Url is neither an article nor a feed source. (%s)", url)
+        LAST_SOURCE = (f, article)
     else:
         LAST_SOURCE = (None, None)
 
 
-@retry(ValueError, tries=3)
+@retry(ValueError, tries=3, logger=None)
 def parsefeed(f):
     return fep.parse(ut.fetch_data(f))
 

@@ -2,6 +2,8 @@
 feedparser
 feedfinder2
 spacy
+alt-profanity-check
+clean-text
 
 # requests
 pyssl
@@ -13,12 +15,12 @@ zict
 # data
 zarr
 numcodecs
-clean-text
+
+# for nim
 unidecode
 
 # sources/articles
-news-please
-newspaper3k
+trafilatura
 goose3
 pytrends
 git+https://github.com/searx/searx

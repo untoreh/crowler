@@ -5,6 +5,7 @@ from goose3 import Goose
 import nltk
 import spacy
 import trafilatura as _tra
+from profanity_check import predict_prob
 
 if not spacy.util.get_installed_models():
     cfg.setproxies("")
@@ -16,6 +17,7 @@ gs = Goose()
 if not hasattr(nltk, "punkt"):
     nltk.download("punkt")
 
+
 def isrelevant(title, body):
     """String BODY is relevant if it contains at least one word from TITLE."""
     t_words = set(title.split())
@@ -23,6 +25,7 @@ def isrelevant(title, body):
         if w in t_words:
             return True
     return False
+
 
 def goose(l, data=None):
     if data is None:
@@ -108,7 +111,11 @@ def fillarticle(url, data):
 
     final["content"] = tra["text"] or goo["cleaned_text"]
     final["title"] = tra["title"] or goo.get("title")
-    if not final["content"] or not isrelevant(final["title"], final["content"]):
+    if (
+        not final["content"]
+        or not isrelevant(final["title"], final["content"])
+        or predict_prob(final["content"]) > cfg.PROFANITY_THRESHOLD
+    ):
         return {}
     final["desc"] = tra["description"] or goo.get("meta", {}).get("description")
     final["author"] = (

@@ -62,3 +62,5 @@ REQ_CACHE_DIR = DATA_DIR / "cache"
 DEFAULT_LANG = "en"
 SPACY_MODEL = "en_core_web_sm"
 TAGS_MAX_LEN = 4
+
+PROFANITY_THRESHOLD = 0.5

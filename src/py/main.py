@@ -12,7 +12,6 @@ import sources
 import utils as ut
 from utils import logger
 from datetime import datetime
-from retry import retry
 
 
 def get_kw_batch(topic):
@@ -43,8 +42,10 @@ def run_sources_job(topic):
     """
     Run one iteration of the job to find source links from keywords. Sources are used to find articles.
     """
+    logger.info("Getting kw batch...")
     batch = get_kw_batch(topic)
     for kw in batch:
+        logger.info("Finding sources for keyword %s .", kw)
         results = sources.fromkeyword(kw, n_engines=3, save=False)
         ut.save_file(results, ut.slugify(kw), root=cfg.TOPICS_DIR / topic)
 
@@ -110,9 +111,10 @@ def get_feeds(topic, n=3):
     feeds_path = Path(topic) / "feeds"
     z = ut.load_zarr(k=ut.ZarrKey.feeds, root=cfg.TOPICS_DIR / feeds_path)
     if len(z) < n:
+        z.resize(0)
         return z[:]
     else:
-        f = z[0:n]
+        f = z[-n:]
         z.resize(len(z) - n)
         return f
 
@@ -135,13 +137,13 @@ def run_parse2_job(topic):
 
 JOBS_MAP = {
     "sources": run_sources_job,
-    "articles": run_parse1_job,
-    "publish": run_parse2_job,
+    "parse1": run_parse1_job,
+    "parse2": run_parse2_job,
 }
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-job", help="What kind of job to perform", default="articles")
+    parser.add_argument("-job", help="What kind of job to perform", default="parse1")
     parser.add_argument("-topic", help="The topic to fetch articles for.", default="")
     args = parser.parse_args()
     if args.topic:

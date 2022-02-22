@@ -11,6 +11,7 @@ import numpy as np
 from re import finditer
 from enum import Enum
 from retry import retry
+from time import sleep
 
 import numcodecs
 import zarr as za
@@ -50,17 +51,23 @@ def somekey(d, *keys):
             break
     return v
 
-@retry(ValueError, tries=3, delay=1, backoff=0.3, logger=None)
-def fetch_data(url, *args, **kwargs):
-    try:
+def fetch_data(url, *args, delay=0.3, backoff=0.3, depth=0, **kwargs):
+    print("ok")
+    if depth > 0:
         data = _fetch_url(url)
-    except KeyError:
-        data = _fetch_url(url)
+    else:
+        try:
+            data = LRU_CACHE[url]
+        except KeyError:
+            data = _fetch_url(url)
+    if data is None and depth < 4:
+        # try an http request 2 times
+        if depth == 2:
+            url = url.replace("https://", "http://", 1)
+        sleep(delay)
+        data = fetch_data(url, delay=delay+backoff, deph=depth+1)
         LRU_CACHE[url] = data
-        if data is None:
-            raise ValueError(f"Failed crawling feed url: {url}.")
     return data
-
 
 # From a list of keywords
 def read_file(f, ext="txt", delim="\n"):
@@ -179,7 +186,7 @@ def load_zarr(k=ZarrKey.articles, root=cfg.DATA_DIR):
     try:
         return za.open_array(store=store, path=path)
     except:
-        save_zarr([], k, root=root)
+        save_zarr([], k, root=root, reset=True)
         return za.open_array(store=store, path=path)
 
 

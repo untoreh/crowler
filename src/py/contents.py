@@ -9,7 +9,6 @@ from utils import logger
 
 import feedfinder2 as ff2
 import feedparser as fep
-from retry import retry
 
 warnings.simplefilter("ignore")
 

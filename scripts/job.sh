@@ -5,9 +5,9 @@ shift
 
 [ "$(basename $DIR)" != wsl ] && { echo script directory "($DIR)" is not wsl.; exit 1; }
 
-cd $DIR/
+cd $DIR
 
-. .venv/bin/activate
+[ -e .venv/bin/activate ] && . .venv/bin/activate
 
 cd src/py
 

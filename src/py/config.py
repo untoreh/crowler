@@ -2,13 +2,10 @@ import os
 from os.path import isdir, dirname
 from pathlib import Path
 import warnings
-import requests_cache
 import pycurl
 from trafilatura import settings as traset
 from user_agent import generate_user_agent
 import copy
-
-requests_cache.install_cache("cache")
 
 if os.getenv("PYTHON_NO_WARNINGS"):
     warnings.simplefilter("ignore")

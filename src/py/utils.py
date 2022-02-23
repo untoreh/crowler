@@ -10,7 +10,6 @@ import unicodedata
 import numpy as np
 from re import finditer
 from enum import Enum
-from retry import retry
 from time import sleep
 
 import numcodecs
@@ -20,14 +19,12 @@ from trafilatura import fetch_url as _fetch_url
 
 import config as cfg
 
-import pickle
-from zict import File, Func, LRU
+from zict import Func, LRU
 
 # data
 compressor = Blosc(cname="zstd", clevel=2, shuffle=Blosc.BITSHUFFLE)
 codec = numcodecs.Pickle()
 def init_lru(n=1000):
-    # zict_storage = File(cfg.REQ_CACHE_DIR, mode='a')
     zict_storage = za.DirectoryStore(cfg.REQ_CACHE_DIR)
     zict_compressor = Func(compressor.encode, compressor.decode, zict_storage)
     zict_codec = Func(codec.encode, codec.decode, zict_compressor)
@@ -51,21 +48,20 @@ def somekey(d, *keys):
             break
     return v
 
-def fetch_data(url, *args, delay=0.3, backoff=0.3, depth=0, **kwargs):
-    print("ok")
-    if depth > 0:
-        data = _fetch_url(url)
-    else:
+def fetch_data(url, *args, delay=0.3, backoff=0.3, depth=0, fromcache=True, **kwargs):
+    if fromcache:
         try:
             data = LRU_CACHE[url]
         except KeyError:
             data = _fetch_url(url)
+    else:
+        data = _fetch_url(url)
     if data is None and depth < 4:
         # try an http request 2 times
         if depth == 2:
             url = url.replace("https://", "http://", 1)
         sleep(delay)
-        data = fetch_data(url, delay=delay+backoff, deph=depth+1)
+        data = fetch_data(url, delay=delay+backoff, depth=depth+1, fromcache=False)
         LRU_CACHE[url] = data
     return data
 

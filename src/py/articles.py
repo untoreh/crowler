@@ -5,7 +5,11 @@ from goose3 import Goose
 import nltk
 import spacy
 import trafilatura as _tra
-from profanity_check import predict_prob
+import warnings
+# NOTE: Check scikit version from time to time
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    from profanity_check import predict_prob
 
 if not spacy.util.get_installed_models():
     cfg.setproxies("")
@@ -117,6 +121,7 @@ def fillarticle(url, data):
         or predict_prob(final["content"]) > cfg.PROFANITY_THRESHOLD
     ):
         return {}
+    final["slug"] = ut.slugify(final["title"])
     final["desc"] = tra["description"] or goo.get("meta", {}).get("description")
     final["author"] = (
         tra["author"]

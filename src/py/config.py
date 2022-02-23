@@ -3,7 +3,7 @@ from os.path import isdir, dirname
 from pathlib import Path
 import warnings
 import pycurl
-from trafilatura import settings as traset
+from trafilatura import settings as traset, downloads as tradl
 from user_agent import generate_user_agent
 import copy
 
@@ -12,7 +12,7 @@ if os.getenv("PYTHON_NO_WARNINGS"):
 
 PROXIES_ENABLED = False
 PROXIES_EP = "http://127.0.0.1:8080/proxies.json"
-STATIC_PROXY_EP = "http://127.0.0.1:8082"
+STATIC_PROXY_EP = "http://localhost:6688"
 STATIC_PROXY = True
 PROXY_DICT = {"http": STATIC_PROXY_EP, "https": STATIC_PROXY_EP}
 
@@ -25,9 +25,10 @@ def curlproxy():
     c.setopt(pycurl.SSL_VERIFYHOST, 0)
     c.setopt(pycurl.SSL_VERIFYPEER, 0)
     # self.setopt(pycurl.PROXYTYPE, pycurl.PROXYTYPE_SOCKS5_HOSTNAME)
-    c.setopt(pycurl.CONNECTTIMEOUT, REQ_TIMEOUT)
     c.setopt(pycurl.USERAGENT, ua)
     traset.DEFAULT_CONFIG.set("DEFAULT", "USER_AGENTS", ua)
+    traset.TIMEOUT = REQ_TIMEOUT
+    tradl.TIMEOUT = REQ_TIMEOUT
     return c
 
 
@@ -44,7 +45,7 @@ def setproxies(p=STATIC_PROXY_EP):
             pycurl.Curl = CURL_CLASS
 
 
-REQ_TIMEOUT = 15
+REQ_TIMEOUT = 10
 # How many concurrent requests
 POOL_SIZE = 8
 

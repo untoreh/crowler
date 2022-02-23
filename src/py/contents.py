@@ -63,7 +63,9 @@ def fromsources(sources, n=cfg.POOL_SIZE, use_proxies=True):
     jobs = []
     with ThreadPool(processes=n) as pool:
         for entry in sources:
-            url = entry["url"]
+            url = entry.get("url")
+            if not url:
+                continue
             logger.info("Fetching feeds from %s", url)
             j = pool.apply_async(parsesource, args=(url,))
             jobs.append(j)
@@ -93,7 +95,9 @@ def fromfeeds(sources, n=cfg.POOL_SIZE, use_proxies=True):
     jobs = []
     with ThreadPool(processes=n) as pool:
         for entry in sources:
-            url = entry["url"]
+            url = entry.get("url")
+            if not url:
+                continue
             logger.info("Fetching articles from %s", url)
             j = pool.apply_async(parsearticle, args=(url,))
             jobs.append(j)

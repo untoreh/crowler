@@ -2,15 +2,14 @@
 #
 from pathlib import Path
 import json
-import logging
 import os
 import re
-import sys
 import unicodedata
 import numpy as np
 from re import finditer
 from enum import Enum
 from time import sleep
+from typing import Iterable, MutableSequence, Sequence
 
 import numcodecs
 import zarr as za
@@ -24,22 +23,17 @@ from zict import Func, LRU
 # data
 compressor = Blosc(cname="zstd", clevel=2, shuffle=Blosc.BITSHUFFLE)
 codec = numcodecs.Pickle()
+
+
 def init_lru(n=1000):
     zict_storage = za.DirectoryStore(cfg.REQ_CACHE_DIR)
     zict_compressor = Func(compressor.encode, compressor.decode, zict_storage)
     zict_codec = Func(codec.encode, codec.decode, zict_compressor)
     return LRU(n, zict_codec)
+
+
 LRU_CACHE = init_lru()
 
-
-# logging
-logger = logging.getLogger()
-logger.setLevel(getattr(logging, os.getenv("PYTHON_DEBUG", "warning").upper()))
-
-handler = logging.StreamHandler(sys.stdout)
-handler.setLevel(logging.WARNING)
-handler.setFormatter(logging.Formatter("%(name)s - %(levelname)s - %(message)s"))
-logger.addHandler(handler)
 
 def somekey(d, *keys):
     v = None
@@ -47,6 +41,7 @@ def somekey(d, *keys):
         if v := d.get(k):
             break
     return v
+
 
 def fetch_data(url, *args, delay=0.3, backoff=0.3, depth=0, fromcache=True, **kwargs):
     if fromcache:
@@ -61,9 +56,10 @@ def fetch_data(url, *args, delay=0.3, backoff=0.3, depth=0, fromcache=True, **kw
         if depth == 2:
             url = url.replace("https://", "http://", 1)
         sleep(delay)
-        data = fetch_data(url, delay=delay+backoff, depth=depth+1, fromcache=False)
+        data = fetch_data(url, delay=delay + backoff, depth=depth + 1, fromcache=False)
         LRU_CACHE[url] = data
     return data
+
 
 # From a list of keywords
 def read_file(f, ext="txt", delim="\n"):
@@ -85,7 +81,7 @@ def get_file_path(node, root, ext, as_json):
         assert not os.path.isfile(root)
         os.makedirs(root)
     if as_json and ext is None:
-        ext = ".json"
+        ext = "json"
     file_name = f"{node}.{ext}" if ext is not None else node
     file_path = file_name if root is None else (root / file_name)
     return file_path
@@ -147,6 +143,7 @@ def dirsbydate(path):
 class ZarrKey(Enum):
     articles = "articles"
     feeds = "feeds"
+    done = "done"
 
 
 def _wrap_path(root):
@@ -155,6 +152,8 @@ def _wrap_path(root):
 
 def save_zarr(contents, k: ZarrKey = ZarrKey.articles, root=cfg.DATA_DIR, reset=False):
     path = ZarrKey(k).name
+    if len(contents) > cfg.MAX_BACKLOG_SIZE:
+        contents = contents[-cfg.MAX_BACKLOG_SIZE:]
     try:
         data = np.asarray(contents)
     except:
@@ -176,6 +175,15 @@ def save_zarr(contents, k: ZarrKey = ZarrKey.articles, root=cfg.DATA_DIR, reset=
         )
 
 
+def save_topic(topic: str, contents: Sequence):
+    """This function is called from nim, after publishing articles."""
+    topic_path = cfg.TOPICS_DIR / topic
+    saved_articles = load_zarr(k=ZarrKey.articles, root=topic_path)
+    n_saved = saved_articles.shape[0]
+    n_content = len(contents)
+    saved_articles.resize(n_saved - n_content)
+    save_zarr(contents, k=ZarrKey.done, root=topic_path)
+
 def load_zarr(k=ZarrKey.articles, root=cfg.DATA_DIR):
     path = ZarrKey(k).name
     store = za.DirectoryStore(_wrap_path(root))
@@ -187,5 +195,5 @@ def load_zarr(k=ZarrKey.articles, root=cfg.DATA_DIR):
 
 
 def zarr_articles_group(topic, root=cfg.TOPICS_DIR):
-    file_path = get_file_path(Path(topic) / "articles", root, ext=None, as_json=False)
+    file_path = get_file_path(Path(topic), root, ext=None, as_json=False)
     return za.open_group(file_path)

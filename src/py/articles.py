@@ -6,13 +6,16 @@ import nltk
 import spacy
 import trafilatura as _tra
 import warnings
+import re
+import numpy as np
+
 # NOTE: Check scikit version from time to time
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     from profanity_check import predict_prob
 
 if not spacy.util.get_installed_models():
-    cfg.setproxies("")
+    cfg.setproxies(None)
     spacy.cli.download(cfg.SPACY_MODEL)
     cfg.setproxies()
 
@@ -24,6 +27,8 @@ if not hasattr(nltk, "punkt"):
 
 def isrelevant(title, body):
     """String BODY is relevant if it contains at least one word from TITLE."""
+    if not title or not body:
+        return False
     t_words = set(title.split())
     for w in ut.splitStr(body):
         if w in t_words:
@@ -63,31 +68,6 @@ def lassie_img(url, data, final):
     return la
 
 
-def g2n(g):
-    """Normalizes goose3.Article keys to NewsArticle ones."""
-    n = dict()
-    n["authors"] = g["author"]
-    n["date_publish"] = g["publish_date"]
-    n["title"] = g["title"] or g["opengraph"].get("title")
-    n["description"] = g["description"] or g["meta"]["description"]
-    n["maintext"] = g["cleaned_text"]
-    n["language"] = g["meta"].get("lang", "en")
-    n["url"] = g["meta"].get("canonical") or g["opengraph"].get("url")
-    n["image_url"] = g["opengraph"].get("image") or g["meta"].get("image")
-
-
-def fillnews(a, url):
-    """Ensure normalize NewsArticle keys to one."""
-    data = a.get_dict()
-    if not data.get("url"):
-        data["url"] = url
-    if not data.get("title"):
-        data["title"] = data["title_rss"] or data["title_page"]
-    if not data.get("maintext"):
-        data["maintext"] = data.get("text")
-    # data["image_url"] =
-
-
 def trafi(url, data=None):
     if data is None:
         data = ut.fetch_data(url)
@@ -101,10 +81,54 @@ def trafi(url, data=None):
     )
 
 
+profanity_rgx = re.compile("(\n|\s|\.|\?|\!)")
+
+
+def replace_profanity(data):
+    sents = np.asarray(re.split(profanity_rgx, data))
+    probs = predict_prob(sents)
+    match = probs > cfg.PROFANITY_THRESHOLD
+    if len(np.where(match)) / len(sents) > 0.8:
+        return None
+    sents[match] = " [...] "
+    return "".join(sents)
+
+def test_profanity(content):
+    """Test which non token based splitting method is better for profanity checking.
+    RESULT: Splitting by new line seems the most balanced.
+    """
+    print("Testing profanity...")
+    if "np" not in globals():
+        import numpy as np
+
+    ff = np.asarray(content.split("\\."))
+    pp = predict_prob(ff)
+    ff2 = np.asarray(content.split())
+    pp2 = predict_prob(ff2)
+    ff3 = np.asarray(content.split("\n"))
+    pp3 = predict_prob(ff3)
+    ff4 = np.asarray([content])
+    pp4 = predict_prob(ff4)
+    print(
+        "dot:",
+        ff[pp > 0.5],
+        np.max(pp),
+        "def:",
+        ff2[pp2 > 0.5],
+        np.max(pp2),
+        "newline:",
+        ff3[pp3 > 0.5],
+        np.max(pp3),
+        "none:",
+        ff4[pp4 > 0.5],
+        pp4,
+    )
+
 def fillarticle(url, data):
     """Using `trafilatura`, `goose` and `lassie` machinery to parse article data."""
     final = dict()
     tra = trafi(url, data)
+    assert isinstance(tra, dict)
     goo = goose(url, data).infos
     if tra is None:
         tra = {}
@@ -112,13 +136,12 @@ def fillarticle(url, data):
         goo = {}
     la = {}
     # first try content
-
     final["content"] = tra["text"] or goo["cleaned_text"]
+    final["content"] = replace_profanity(final["content"])
     final["title"] = tra["title"] or goo.get("title")
     if (
         not final["content"]
         or not isrelevant(final["title"], final["content"])
-        or predict_prob(final["content"]) > cfg.PROFANITY_THRESHOLD
     ):
         return {}
     final["slug"] = ut.slugify(final["title"])

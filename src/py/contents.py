@@ -5,7 +5,7 @@ from typing import List
 import articles as art
 import config as cfg
 import utils as ut
-from utils import logger
+from log import logger
 
 import feedfinder2 as ff2
 import feedparser as fep
@@ -18,7 +18,7 @@ LAST_SOURCE = None
 FEEDFINDER_DATA = dict()
 
 # overwrite feedfinder to accept raw data
-setattr(ff2.FeedFinder, "get_feed", lambda _, url: FEEDFINDER_DATA.pop(url, ""))
+setattr(ff2.FeedFinder, "get_feed", lambda url: FEEDFINDER_DATA.pop(url, ""))
 
 
 def parsesource(url):
@@ -31,6 +31,7 @@ def parsesource(url):
             FEEDS.extend(f)
         a = art.fillarticle(url, data)
         if a:
+            logger.info("Adding %s articles", len(a))
             ARTICLES.append(a)
         elif len(f) == 0:
             logger.info("Url is neither an article nor a feed source. (%s)", url)
@@ -61,12 +62,13 @@ def fromsources(sources, n=cfg.POOL_SIZE, use_proxies=True):
     if use_proxies:
         cfg.setproxies()
     jobs = []
+    logger.info("Starting to collect articles/feeds from %d sources.", len(sources))
     with ThreadPool(processes=n) as pool:
         for entry in sources:
             url = entry.get("url")
             if not url:
                 continue
-            logger.info("Fetching feeds from %s", url)
+            logger.info("Fetching articles/feeds from %s", url)
             j = pool.apply_async(parsesource, args=(url,))
             jobs.append(j)
         for n, j in enumerate(jobs):
@@ -74,7 +76,7 @@ def fromsources(sources, n=cfg.POOL_SIZE, use_proxies=True):
             logger.info("Waiting for job: %s.", n)
 
     if use_proxies:
-        cfg.setproxies("")
+        cfg.setproxies()
     logger.info("Source parsing Done")
     FEEDS = ut.dedup(FEEDS)
     logger.info(
@@ -106,7 +108,7 @@ def fromfeeds(sources, n=cfg.POOL_SIZE, use_proxies=True):
             logger.info("Waiting for job: %s.", n)
 
     if use_proxies:
-        cfg.setproxies("")
+        cfg.setproxies()
     logger.info("Articles parsing Done")
     logger.info(
         "Found %d articles in %d sources.",

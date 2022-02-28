@@ -1,0 +1,2 @@
+* multiple kw arguments when using proxies
+https://github.com/searx/searx/pull/3165

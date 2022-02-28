@@ -10,7 +10,7 @@ import config as cfg
 import contents as cnt
 import sources
 import utils as ut
-from utils import logger
+from log import logger
 from datetime import datetime
 
 
@@ -41,13 +41,15 @@ def get_kw_batch(topic):
 def run_sources_job(topic):
     """
     Run one iteration of the job to find source links from keywords. Sources are used to find articles.
+    This function should never be called directly, instead `parse1` should use it when it runs out of sources.
     """
     logger.info("Getting kw batch...")
     batch = get_kw_batch(topic)
     for kw in batch:
         logger.info("Finding sources for keyword %s .", kw)
-        results = sources.fromkeyword(kw, n_engines=3, save=False)
-        ut.save_file(results, ut.slugify(kw), root=cfg.TOPICS_DIR / topic)
+        results = sources.fromkeyword(kw, n_engines=3)
+        if results:
+            ut.save_file(results, ut.slugify(kw), root=cfg.TOPICS_DIR / topic)
 
 
 def get_kw_sources(topic, remove=True):
@@ -55,22 +57,29 @@ def get_kw_sources(topic, remove=True):
     for _, _, files in os.walk(root):
         for f in files:
             if f not in ("list.txt", "queue.txt"):
+                if f.startswith("."):
+                    continue
                 results_path = root / f
                 res = ut.read_file(results_path, ext=None)
+                assert type(res) is str
                 if remove:
                     os.remove(results_path)
-                assert type(res) is str
-                return json.loads(res)
+                kws = json.loads(res)
+                if not kws:
+                    logger.debug("Removing empty sources file %s.", os.path.basename(f))
+                    os.remove(results_path)
+                    continue
+                return kws
 
 
 def ensure_sources(topic):
-    sources = get_kw_sources(topic)
+    sources = get_kw_sources(topic, remove=False)
     if not sources:
         logger.info("No sources remaining, fetching new sources...")
         run_sources_job(topic)
         sources = get_kw_sources(topic)
     if not sources:
-        raise ValueError()
+        raise ValueError("Could not ensure sources for topic %s.", topic)
     return sources
 
 
@@ -85,37 +94,34 @@ def run_parse1_job(topic):
         return None
 
     arts, feeds = cnt.fromsources(sources)
-    tp_path = Path(topic)
+    topic_path = cfg.TOPICS_DIR / Path(topic)
     sa = sf = None
 
     if args:
-        arts_path = tp_path / "articles"
-        logger.info("Saving %d articles to %s.", len(arts), os.path.realpath(arts_path))
-        sa = ut.save_zarr(arts, root=cfg.TOPICS_DIR / arts_path)
+        logger.info("%s: Saving %d articles.", topic, len(arts))
+        sa = ut.save_zarr(arts, k=ut.ZarrKey.articles, root=topic_path)
     else:
-        logger.info("No articles were found for %s.", topic)
+        logger.info("%s: No articles found.", topic)
 
     if feeds:
-        feeds_path = tp_path / "feeds"
-        logger.info(
-            "Saving %d articles to %s.", len(feeds), os.path.realpath(feeds_path)
-        )
-        sf = ut.save_zarr(feeds, k=ut.ZarrKey.feeds, root=cfg.TOPICS_DIR / feeds_path)
+        logger.info("%s: Saving %d articles.", topic, len(feeds))
+        sf = ut.save_zarr(feeds, k=ut.ZarrKey.feeds, root=topic_path)
     else:
-        logger.info("No feeds were found for %s.", topic)
+        logger.info("%s: No feeds found.", topic)
 
     return (sa, sf)
 
 
-def get_feeds(topic, n=3):
-    feeds_path = Path(topic) / "feeds"
-    z = ut.load_zarr(k=ut.ZarrKey.feeds, root=cfg.TOPICS_DIR / feeds_path)
+def get_feeds(topic, n=3, resize=True):
+    z = ut.load_zarr(k=ut.ZarrKey.feeds, root=cfg.TOPICS_DIR / topic)
     if len(z) < n:
-        z.resize(0)
+        if resize:
+            z.resize(0)
         return z[:]
     else:
         f = z[-n:]
-        z.resize(len(z) - n)
+        if resize:
+            z.resize(len(z) - n)
         return f
 
 
@@ -124,14 +130,16 @@ def run_parse2_job(topic):
     Run one iteration of the job to find articles from feed links.
     """
     feed_links = get_feeds(topic, 3)
+    logger.info("Search %d feeds for articles...", len(feed_links))
     articles = cnt.fromfeeds(feed_links)
     a = None
     if articles:
-        arts_path = Path(topic) / "articles"
-        logger.info(
-            "Saving %d articles to %s.", len(articles), os.path.realpath(arts_path)
+        logger.info("%s: Saving %d articles.", topic, len(articles))
+        a = ut.save_zarr(
+            articles, k=ut.ZarrKey.articles, root=cfg.TOPICS_DIR / Path(topic)
         )
-        a = ut.save_zarr(articles, k=ut.ZarrKey.articles, root=cfg.TOPICS_DIR / arts_path)
+    else:
+        logger.info("%s: No articles were found queued.", topic)
     return a
 
 
@@ -145,7 +153,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-job", help="What kind of job to perform", default="parse1")
     parser.add_argument("-topic", help="The topic to fetch articles for.", default="")
+    parser.add_argument("-workers", help="How many workers.", default=cfg.POOL_SIZE)
     args = parser.parse_args()
+    cfg.POOL_SIZE = args.workers
     if args.topic:
         JOBS_MAP[args.job](args.topic)
     else:

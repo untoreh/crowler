@@ -10,9 +10,9 @@ import copy
 if os.getenv("PYTHON_NO_WARNINGS"):
     warnings.simplefilter("ignore")
 
-PROXIES_ENABLED = False
+PROXIES_ENABLED = True
 PROXIES_EP = "http://127.0.0.1:8080/proxies.json"
-STATIC_PROXY_EP = "http://localhost:6688"
+STATIC_PROXY_EP = "socks5://localhost:8877"
 STATIC_PROXY = True
 PROXY_DICT = {"http": STATIC_PROXY_EP, "https": STATIC_PROXY_EP}
 
@@ -41,11 +41,12 @@ def setproxies(p=STATIC_PROXY_EP):
         pycurl.Curl = curlproxy
     else:
         for name in PROXY_VARS:
-            del os.environ[name]
+            if name in os.environ:
+                del os.environ[name]
             pycurl.Curl = CURL_CLASS
 
 
-REQ_TIMEOUT = 10
+REQ_TIMEOUT = 20
 # How many concurrent requests
 POOL_SIZE = 8
 
@@ -65,3 +66,6 @@ SPACY_MODEL = "en_core_web_sm"
 TAGS_MAX_LEN = 4
 
 PROFANITY_THRESHOLD = 0.5
+# The maximum number of articles/feeds to store `unprocessed` for each topic
+# When cap is reached queue gets discarded as FIFO.
+MAX_BACKLOG_SIZE = 100

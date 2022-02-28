@@ -1,11 +1,12 @@
 import config as cfg
 
 from retry import retry
-from requests import get
+import sys, os
 from multiprocessing.pool import ThreadPool
 import json
 from random import shuffle
-from utils import logger
+import log
+from log import logger, LoggerLevel
 
 from proxies import set_socket_timeout
 
@@ -13,6 +14,22 @@ set_socket_timeout(100)
 
 from searx.search import SearchQuery, EngineRef
 from searx import search
+
+# the searx.search module has a variable named `processors`
+# import importlib
+
+# proc = importlib.import_module("searx.search.processors", package="searx")
+
+# Path params to disable ssl verification
+# online_req_params = proc.online.default_request_params()
+
+
+# def default_request_params():
+#     online_req_params["verify"] = False
+#     return online_req_params
+
+
+# proc.online.default_request_params = default_request_params
 
 RESULTS = dict()
 ENGINES = [
@@ -36,7 +53,7 @@ def get_engine_params(engine):
         "categories": "general",
     }
     if cfg.PROXIES_ENABLED:
-        params["network"] = {"proxies": cfg.STATIC_PROXY_EP}
+        params["network"] = {"verify": False, "proxies": cfg.STATIC_PROXY_EP}
     return params
 
 
@@ -60,8 +77,10 @@ def single_search(kw, engine, pages=1, timeout=cfg.REQ_TIMEOUT, category=""):
 
 def try_search(*args, **kwargs):
     try:
-        single_search(*args, **kwargs)
-    except:
+        with LoggerLevel():
+            single_search(*args, **kwargs)
+    except Exception as e:
+        logger.info("Caught search exception %s", type(e))
         pass
 
 
@@ -78,7 +97,10 @@ def dedup_results():
 
 
 def fromkeyword(
-    keyword="trending", verbose=False, n_engines=1, n_workers=cfg.POOL_SIZE, save=False
+    keyword="trending",
+    verbose=False,
+    n_engines=1,
+    n_workers=cfg.POOL_SIZE,
 ):
     """
     `n_engines`: How many search engines to query.
@@ -88,14 +110,19 @@ def fromkeyword(
     try:
         engines = ENGINES.copy()
         shuffle(engines)
-        logger.info("Finding sources for keyword: %", keyword)
+        logger.info("Finding sources for keyword: %s", keyword)
         pool.starmap(try_search, [(keyword, engines[n], 1) for n in range(n_workers)])
     except KeyboardInterrupt:
-        pass
+        print("Caught KB interrupt.")
+        pool.close()
+        print("Terminating pool...")
+        pool.terminate()
+        # shut up requests in flight warning
+        sys.stdout = os.devnull
+        sys.stderr = os.devnull
+        with LoggerLevel(level=None):
+            exit()
     res = dedup_results()
-    if save:
-        with open(cfg.SRC_FILE, "w") as f:
-            json.dump(res, f)
     if verbose:
         print(res)
     return res

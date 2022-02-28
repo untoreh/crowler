@@ -7,9 +7,13 @@ import macros,
        karax / [karaxdsl, vdom, vstyles],
        unicode,
        htmlgen,
-       xmlparser
+       xmlparser,
+       logging
 
 const cfg_path = currentSourcePath().splitPath()[0]
+let logger* = newConsoleLogger(fmtStr="[$time] - $levelname: ")
+
+export logging
 
 const
     PROJECT_PATH* = joinPath(cfg_path, "..", "..")

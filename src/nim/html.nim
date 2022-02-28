@@ -132,11 +132,12 @@ proc buildBody(a: Article, website_title: string = WEBSITE_TITLE): VNode =
             postFooter(a.pubdate)
         buildFooter()
 
-proc buildPage(a: Article):VNode =
-    buildHtml(html):
+proc buildPage*(basedir: string, a: Article) =
+    let page = buildHtml(html):
         buildHead()
         buildBody(a)
+    let path = joinpath(basedir, a.slug)
+    writeFile(path, &("<!doctype html>\n{page}"))
 
 when isMainModule:
     var path = joinPath(SITE_PATH, "index.html")
-    writeFile(path, &("<!doctype html>\n{buildPage()}"))

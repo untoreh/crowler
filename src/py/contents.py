@@ -21,7 +21,7 @@ FEEDFINDER_DATA = dict()
 setattr(ff2.FeedFinder, "get_feed", lambda url: FEEDFINDER_DATA.pop(url, ""))
 
 
-def parsesource(url):
+def parsesource(url, topic):
     global FEEDFINDER_DATA, LAST_SOURCE
     FEEDFINDER_DATA[url] = data = ut.fetch_data(url)
     if data:
@@ -29,7 +29,7 @@ def parsesource(url):
         if f:
             logger.info("Adding %s feeds.", len(f))
             FEEDS.extend(f)
-        a = art.fillarticle(url, data)
+        a = art.fillarticle(url, data, topic)
         if a:
             logger.info("Adding %s articles", len(a))
             ARTICLES.append(a)
@@ -40,10 +40,10 @@ def parsesource(url):
         LAST_SOURCE = (None, None)
 
 
-def parsearticle(url):
+def parsearticle(url, topic):
     data = ut.fetch_data(url)
     if data:
-        a = art.fillarticle(url, data)
+        a = art.fillarticle(url, data, topic)
         if a:
             ARTICLES.append(a)
         else:
@@ -66,10 +66,11 @@ def fromsources(sources, n=cfg.POOL_SIZE, use_proxies=True):
     with ThreadPool(processes=n) as pool:
         for entry in sources:
             url = entry.get("url")
+            topic = entry.get("topic")
             if not url:
                 continue
             logger.info("Fetching articles/feeds from %s", url)
-            j = pool.apply_async(parsesource, args=(url,))
+            j = pool.apply_async(parsesource, args=(url, topic))
             jobs.append(j)
         for n, j in enumerate(jobs):
             j.wait()
@@ -98,10 +99,11 @@ def fromfeeds(sources, n=cfg.POOL_SIZE, use_proxies=True):
     with ThreadPool(processes=n) as pool:
         for entry in sources:
             url = entry.get("url")
+            topic = entry.get("topic")
             if not url:
                 continue
             logger.info("Fetching articles from %s", url)
-            j = pool.apply_async(parsearticle, args=(url,))
+            j = pool.apply_async(parsearticle, args=(url, topic))
             jobs.append(j)
         for n, j in enumerate(jobs):
             j.wait()

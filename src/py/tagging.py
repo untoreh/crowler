@@ -7,15 +7,18 @@ import pytextrank as _
 import phrasemachine
 from rake_nltk import Rake
 import nltk
+from textacy import similarity
 
-nltk.download('stopwords')
+nltk.download("stopwords")
 rk = Rake()
 rk.max_length = cfg.TAGS_MAX_LEN
+
 
 def ate(text, n=3):
     tags = combo_basic(text)
     tags.sort_values(inplace=True)
     return tags[-n:].index.tolist()
+
 
 def textrank(text, n=3, rank_n=100, rank_distance=0.05):
     nlp = spacy.load(cfg.SPACY_MODEL)
@@ -30,6 +33,7 @@ def textrank(text, n=3, rank_n=100, rank_distance=0.05):
             tags.append(s.text)
             last_rank = s.rank - rank_distance
     return tags[-n:]
+
 
 def phrasemac(text, n=3, max_len=cfg.TAGS_MAX_LEN):
     phr = phrasemachine.get_phrases(text)
@@ -49,7 +53,20 @@ def phrasemac(text, n=3, max_len=cfg.TAGS_MAX_LEN):
 def rake(text, n=3, n_filter=100):
     rk.extract_keywords_from_text(text)
     kws = rk.get_ranked_phrases()
-    return ut.dedup(kws[:n_filter])[:n]
+    tags = set(ut.dedup(kws[:n_filter])[:n])
+    return sim_filter(tags)
+
+
+def sim_filter(tags, sim_threshold=0.9):
+    final = []
+    for t in tags:
+        sim = False
+        for f in final:
+            if similarity.levenshtein(t, f) > sim_threshold:
+                sim = True
+        if not sim:
+            final.append(t)
+    return final
 
 
 def all(text):

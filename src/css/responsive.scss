@@ -1,13 +1,15 @@
-@media (max-width: 480px) {
+@media (max-width: 768px) {
   @media (prefers-color-scheme: dark) {
     .app-bar-logo .logo-dark-icon-wrap {
-      display: initial;
+      display: inline;
+      vertical-align: middle;
     }
   }
 
   @media (prefers-color-scheme: light) {
     .app-bar-logo .logo-light-icon-wrap {
-      display: initial;
+      display: inline;
+      vertical-align: middle;
     }
   }
   .light .app-bar-logo .logo-light-icon-wrap {
@@ -21,9 +23,12 @@
   text-align: center;
   padding: 0.5rem 0 0.5rem 0;
   }
+  .menu-wrap .page {
+    display: none;
+}
 }
 
-@media (min-width: 481px) {
+@media (min-width: 769px) {
   @media (prefers-color-scheme: dark) {
     .app-bar-logo .logo-dark-wrap {
       display: initial;

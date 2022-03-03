@@ -8,6 +8,7 @@ import trafilatura as _tra
 import warnings
 import re
 import numpy as np
+from tagging import rake
 
 # NOTE: Check scikit version from time to time
 with warnings.catch_warnings():
@@ -124,7 +125,7 @@ def test_profanity(content):
         pp4,
     )
 
-def fillarticle(url, data):
+def fillarticle(url, data, topic):
     """Using `trafilatura`, `goose` and `lassie` machinery to parse article data."""
     final = dict()
     tra = trafi(url, data)
@@ -154,10 +155,12 @@ def fillarticle(url, data):
     )
     final["pubDate"] = tra["date"] or goo.get("publish_date")
     la = lassie_img(url, data, final)
-    if not final["imageUrl"]:
-        final["imageUrl"] = goo["image"] or goo["opengraph"].get("image")
     if not final["icon"]:
         final["icon"] = goo["meta"]["favicon"]
+    if not final["imageUrl"] or final["imageUrl"] == final["icon"]:
+        final["imageUrl"] = goo["image"] or goo["opengraph"].get("image")
+        if final["imageUrl"] == final["icon"]:
+            final["imageUrl"] = ""
     final["url"] = tra["url"] or goo["meta"]["canonical"] or la["url"]
     final["lang"] = goo["meta"]["lang"]
     if not final["lang"]:
@@ -167,4 +170,6 @@ def fillarticle(url, data):
             final["lang"] = l.split("_")[0]
         else:
             final["lang"] = cfg.DEFAULT_LANG
+    final["topic"] = topic
+    final["tags"] = rake(final["content"])
     return final

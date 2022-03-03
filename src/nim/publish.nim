@@ -21,6 +21,7 @@ proc relimport(relpath: string): PyObject =
 
 let pycfg = relimport("../py/config")
 let ut = relimport("../py/utils")
+const emptyseq: seq[string] = @[]
 
 proc getarticles(topic: string, n=3, doresize=false): seq[Article] =
     let grp = ut.zarr_articles_group(topic)
@@ -34,7 +35,7 @@ proc getarticles(topic: string, n=3, doresize=false): seq[Article] =
     let h = arts.shape[0].to(int)
     var msg: string
     let m = min(n, h)
-    if m == 0:
+    if m != 0:
         msg = &"getting {m} articles from {h} available ones for topic {topic}."
     else:
         msg = &"No articles were found for topic {topic}."
@@ -43,15 +44,17 @@ proc getarticles(topic: string, n=3, doresize=false): seq[Article] =
         data = arts[i]
         a = new(Article)
         a.title = pyget(data, "title")
-        a.desc = pyget(data, "description")
-        a.content = pyget(data, "maintext")
-        a.author = pyget(data, "authors", def=(@[""])).join(", ")
-        a.pubDate = pydate(data.get("date_publish"), curtime)
-        a.imageUrl = pyget(data, "image_url")
+        a.desc = pyget(data, "desc")
+        a.content = pyget(data, "content")
+        a.author = pyget(data, "author")
+        a.pubDate = pydate(data.get("pubDate"), curtime)
+        a.imageUrl = pyget(data, "imageUrl")
         a.icon = pyget(data, "icon")
         a.url = pyget(data, "url")
         a.slug = pyget(data, "slug")
         a.lang = pyget(data, "lang")
+        a.topic = pyget(data, "topic")
+        a.tags = pyget(data, "tags", emptyseq)
         parsed.add(a)
         done.add(data)
     if doresize:
@@ -60,14 +63,20 @@ proc getarticles(topic: string, n=3, doresize=false): seq[Article] =
 
 proc publish(topic: string, arts: seq[Article]) =
     # Generates html for a list of `Article` objects and writs to file.
-    let basedir = joinPath(SITE_PATH, topic)
+    # let basedir = joinPath(SITE_PATH, topic)
+    let basedir = SITE_PATH / topic
+    if not dirExists(basedir):
+        if fileExists(basedir):
+            logger.log(lvlinfo, "Deleting file that should be a directory " & basedir)
+            removeFile(basedir)
+        logger.log(lvlInfo, "Creating directory " & basedir)
+        createDir(basedir)
     for a in arts:
         buildPage(basedir, a)
 
 when isMainModule:
     let topic = "vps"
-    let arts = getarticles(topic, doresize=true)
+    let arts = getarticles(topic, doresize=false)
     publish(topic, arts)
-
     # var path = joinPath(SITE_PATH, "index.html")
     # writeFile(path, &("<!doctype html>\n{buildPage()}"))

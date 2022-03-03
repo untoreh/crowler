@@ -29,6 +29,7 @@ git+https://github.com/searx/searx
 pyate
 pytextrank
 phrasemachine
+textacy
 
 # not needed...
 # textacy

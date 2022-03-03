@@ -150,7 +150,7 @@ def _wrap_path(root):
     return os.path.normpath(os.path.sep + str(root) + os.path.sep)
 
 
-def save_zarr(contents, k: ZarrKey = ZarrKey.articles, root=cfg.DATA_DIR, reset=False):
+def save_zarr(contents: MutableSequence, k: ZarrKey = ZarrKey.articles, root=cfg.DATA_DIR, reset=False):
     path = ZarrKey(k).name
     if len(contents) > cfg.MAX_BACKLOG_SIZE:
         contents = contents[-cfg.MAX_BACKLOG_SIZE:]
@@ -163,6 +163,9 @@ def save_zarr(contents, k: ZarrKey = ZarrKey.articles, root=cfg.DATA_DIR, reset=
     if not reset:
         # NOTE: there might be some recursion going on here :)
         z = load_zarr(k, root=root)
+        max_append = cfg.MAX_BACKLOG_SIZE - len(z)
+        if len(data) > max_append:
+            data = data[-max_append:]
         z.append(data)
     else:
         za.save_array(
@@ -175,7 +178,7 @@ def save_zarr(contents, k: ZarrKey = ZarrKey.articles, root=cfg.DATA_DIR, reset=
         )
 
 
-def save_topic(topic: str, contents: Sequence):
+def save_topic(topic: str, contents: MutableSequence):
     """This function is called from nim, after publishing articles."""
     topic_path = cfg.TOPICS_DIR / topic
     saved_articles = load_zarr(k=ZarrKey.articles, root=topic_path)

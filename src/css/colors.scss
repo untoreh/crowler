@@ -45,6 +45,7 @@
   --mdc-theme-on-primary: var(--light-on-primary);
   --mdc-theme-on-secondary: var(--light-on-secondary);
   --mdc-theme-on-surface: var(--light-on-surface);
+  background: var(--light-background);
 }
 
 @mixin mdc-dark {
@@ -54,6 +55,7 @@
   --mdc-theme-on-primary: var(--primary);
   --mdc-theme-on-secondary: var(--dark-on-secondary);
   --mdc-theme-on-surface: var(--dark-on-surface);
+  background: var(--dark-background);
 }
 
 body {
@@ -80,7 +82,7 @@ body {
     color: var(--dark-primary);
   }
   footer {
-    background: var(--surface);
+    background: var(--secondary);
     color: var(--text-primary-on-dark);
   }
 }
@@ -100,7 +102,7 @@ body {
     color: var(--text-primary-on-light);
   }
   footer {
-    background: var(--primary);
+    background: var(--light-primary);
     color: var(--text-primary-on-light);
   }
 }
@@ -125,7 +127,7 @@ header {
   box-shadow: var(--light-secondary) 0 1px 2px;
 }
 footer {
-  box-shadow: var(--secondary) 0 -1px 2px;
+  box-shadow: var(--light-secondary) 0 -1px 2px;
 }
 
 .mdc-tooltip {

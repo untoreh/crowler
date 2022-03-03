@@ -8,7 +8,8 @@ import macros,
        unicode,
        htmlgen,
        xmlparser,
-       logging
+       logging,
+       uri
 
 const cfg_path = currentSourcePath().splitPath()[0]
 let logger* = newConsoleLogger(fmtStr="[$time] - $levelname: ")
@@ -17,7 +18,7 @@ export logging
 
 const
     PROJECT_PATH* = joinPath(cfg_path, "..", "..")
-    WEBSITE_URL* = "http://localhost"
+    WEBSITE_URL* = parseUri("http://localhost")
     WEBSITE_TITLE* = "wsl"
     SITE_PATH* = joinpath(PROJECT_PATH, "site")
     ASSETS_PATH* = os.joinPath(SITE_PATH, "assets")

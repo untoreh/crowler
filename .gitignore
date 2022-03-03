@@ -14,3 +14,5 @@ data/topics/
 # !dist
 /.log/
 /data/cache/
+data/proxies/*
+!data/proxies

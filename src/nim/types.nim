@@ -23,6 +23,8 @@ type
         url*: string
         slug*: string
         lang*: string
+        topic*: string
+        tags*: seq[string]
 
 # proc initArticle()
 
@@ -82,6 +84,55 @@ proc pydate*(py: PyObject, default=getTime()): Time =
     else:
         return default
 
+proc plural(str: string, count: int): string =
+    if count == 1:
+        return str
+    else:
+        return str & "s"
+
+proc agoDateStr*(date: DateTime): string =
+    ## This function can't be used with static file generators :(
+    let ago = " ago"
+    let parts = (now() - date).toParts()
+    var c: int
+    if parts[Weeks] >= 52:
+        c = parts[Weeks].div(52).int()
+        return $c & " year".plural(c) & ago
+    elif parts[Days] >= 30:
+        c = parts[Days].div(30).int()
+        return $c & " month".plural(c) & ago
+    elif parts[Minutes] >= 24 * 60:
+        c = parts[Hours].div(24 * 60).int()
+        return $c & " day".plural(c) & ago
+    elif parts[Minutes] >= 60:
+        c = parts[Hours].div(60).int()
+        return $c & " hour".plural(c) & ago
+    elif parts[Seconds] >= 60:
+        c = parts[Seconds].div(60).int()
+        return $c & " minute".plural(c) & ago
+    elif parts[Seconds] >= 1:
+        c = parts[Seconds].div(60).int()
+        return $c & " second" & ago
+    else:
+        return "just now"
+
+
+    # if c > 0:
+    #     return $c & "year".plural(c) & ago
+    # c = curdate.month - date.months
+    # if c > 0:
+    #     return $c & "month".plural(c)
+    # c = curdate.day - date.day
+    # if c > 0:
+    #     return $c & "day".plural(c)
+    # c = curdate.hour - date.hour
+    # if c > 0:
+    #     return $c & "hour".plural(c)
+    # c = curdate.hour - date.hour
+    # if c > 0:
+    #     return $c & "hour".plural(c)
+
+
 var e: ref ValueError
 new(e)
 e.msg = "All python objects were None."
@@ -100,3 +151,4 @@ proc pyget*[T](py: PyObject, k: string, def: T = ""): T =
         return def
     else:
         return v.to(T)
+

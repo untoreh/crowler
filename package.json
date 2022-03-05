@@ -30,15 +30,11 @@
   "dependencies": {
     "@material/button": "^13.0.0",
     "@material/icon-button": "^13.0.0",
-    "@material/layout-grid": "^13.0.0",
     "@material/ripple": "^13.0.0",
-    "@material/textfield": "^13.0.0",
     "@material/theme": "^13.0.0",
     "@material/tooltip": "^13.0.0",
     "@material/top-app-bar": "^13.0.0",
-    "material-components": "^0.5.0",
-    "side-drawer": "^3.0.0",
-    "web-social-share": "^8.0.1"
+    "material-components": "^0.5.0"
   },
   "keywords": []
 }

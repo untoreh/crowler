@@ -9,12 +9,12 @@
 
 @use "@material/floating-label/mdc-floating-label";
 @use "@material/line-ripple/mdc-line-ripple";
-@use "@material/notched-outline/mdc-notched-outline";
-@use "@material/textfield";
-@use "@material/tooltip";
-@use "@material/tooltip/styles" as tst;
+// @use "@material/notched-outline/mdc-notched-outline";
+// @use "@material/textfield";
+// @use "@material/tooltip";
+// @use "@material/tooltip/styles" as tst;
 
-@include textfield.core-styles;
+// @include textfield.core-styles;
 
 @import "colors.scss";
 @import url("https://fonts.googleapis.com/css2?family=Noto+Serif+Display:ital,wght@0,100;0,300;0,700;1,100;1,300&family=Noto+Serif:ital,wght@0,400;0,700;1,400&family=Petrona:ital,wght@0,400;0,800;1,100;1,400&display=swap");
@@ -28,10 +28,6 @@ header {
   min-width: 360px;
 }
 
-.app-bar-logo > span {
-  display: none;
-}
-
 //////////////////////////
 
 #title {
@@ -42,17 +38,7 @@ header {
   width: 100%;
 }
 
-.logo-dark-wrap {
-  display: none;
-}
-
-.app-bar-logo {
-  width: 7rem;
-  height: 100%;
-  padding: 0 1rem 0 1rem;
-}
-
-.menu-wrap,
+header,
 .title-wrap {
   font-variant: small-caps;
 }
@@ -84,17 +70,22 @@ main {
   font-variant: none;
   text-align: center;
   margin: 0;
+  padding: 0.5rem;
 }
 
 .title-wrap > .image-link {
   text-decoration: none;
+  position: relative;
+  left: calc(50% - 7rem);
   & img {
     margin: auto;
-    text-align: center;
-    display: block;
+    display: inline-block;
     padding: 1rem;
     max-width: 100%;
     font-size: 12rem;
+    box-shadow: var(--mdc-theme-primary) 0 0 2px;
+    border-radius: 4px;
+    margin: 1rem 0 1rem 0;
   }
 }
 
@@ -104,20 +95,30 @@ main {
   flex: auto;
 }
 
-.social-share a {
-  text-decoration: none;
-  text-align: center;
-  & button {
-    display: block;
+.social-share {
+  vertical-align: middle;
+  padding: 0.5rem;
+  background: var(--mdc-theme-primary);
+  border-radius: 4px 0 0 4px;
+  & a {
+    text-decoration: none;
+    text-align: center;
+    & button {
+      display: block;
+    }
   }
 }
 
-.post-source img {
-  max-width: 2rem;
-  max-height: 2rem;
-  padding: 0 1rem 0 1rem;
+.post-source {
+  background: var(--mdc-theme-primary);
+  border-radius: 0 4px 4px 0;
+  padding: 0.5rem;
+  & img {
+    max-width: 2rem;
+    max-height: 2rem;
+    padding: 0 1rem 0 1rem;
+  }
 }
-
 footer {
   padding: 0.25rem 1rem 0.25rem 1rem;
 }
@@ -151,20 +152,74 @@ footer {
   @include iicbs.size(32px);
 }
 
+.search-input {
+  width: 15rem;
+  height: 3rem;
+  line-height: 3rem;
+  font-size: 1rem;
+  border-radius: 0.25rem;
+  margin-right: 0.25rem;
+  text-align: center;
+}
+
+.search-input:focus::placeholder {
+  color: transparent;
+}
+
 .dark .app-bar-logo {
-  .logo-light-icon-wrap,
   .logo-light-wrap {
     display: none;
   }
 }
 .light .app-bar-logo {
-  .logo-dark-icon-wrap,
   .logo-dark-wrap {
     display: none;
   }
 }
 
-.menu-wrap .page {
+.menu-list {
+  display: block;
+  overflow: hidden;
+  position: fixed;
+  z-index: 1;
+  left: -100vh;
+  height: 100vh;
+  background-color: var(--mdc-theme-primary);
+  list-style: none;
+  border-radius: 0px 1rem 1rem 0px;
+  padding: 1rem;
+  & a {
+    text-decoration: none;
+    font-variant: small-caps;
+  }
+  & label {
+    padding: 24px;
+  }
+  box-shadow: var(--mdc-theme-primary) 0 -4px 2px;
+  & .search-input {
+    width: 6rem;
+    padding-left: 2rem;
+  }
+  & .search-field {
+    padding: 0;
+  }
+  & .search-icon {
+    position: relative;
+    top: -2.5rem;
+    left: 0.5rem;
+    color: var(--mdc-theme-on-primary);
+  }
+}
+
+.menu-list-entry {
+  display: flex;
+  & i {
+    padding: 0 0.5rem 0 0;
+  }
+  margin: 0 0 1rem 0;
+}
+
+header .page {
   padding: 0 1rem 0 1rem;
 }
 

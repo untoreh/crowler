@@ -78,5 +78,6 @@ when isMainModule:
     let topic = "vps"
     let arts = getarticles(topic, doresize=false)
     publish(topic, arts)
+
     # var path = joinPath(SITE_PATH, "index.html")
     # writeFile(path, &("<!doctype html>\n{buildPage()}"))

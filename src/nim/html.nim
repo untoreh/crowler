@@ -39,10 +39,6 @@ proc buildHead():VNode =
         meta(name="description", content="")
         # script(src="https://cdn.jsdelivr.net/npm/beercss@2.0.10/dist/cdn/beer.min.js", type="text/javascript")
 
-proc buildSearch():VNode =
-    buildHtml(tdiv):
-        text "search button"
-
 proc buildLang():VNode =
     buildHtml(tdiv):
         text "lang menu"
@@ -68,7 +64,7 @@ proc buildSocialShare(a: Article):VNode =
           "hashtags" : a.tags.join(","),
           "url": url
           })
-    var fb_q = encodeQuery({"u": url,
+    let fb_q = encodeQuery({"u": url,
                  "t": a.title})
     buildHtml:
         tdiv(class="social-share"):
@@ -77,36 +73,77 @@ proc buildSocialShare(a: Article):VNode =
                 a(class="facebook", href=("https://www.facebook.com/sharer.php?" & fb_q), alt="Share with Twitter."):
                     buildButton("thumb_up", aria_label="Facebook", title="Facebook share link.")
 
+proc buildDrawer(a: Article, site: VNode):VNode =
+    buildHtml(tdiv(class="pure-container", data_effect="pure-effect-slide")):
+        input(type="checkbox", id="pure-toggle-left", class="pure-toggle", data-toggle="left")
+        label(class="pure-toggle-label", `for`="pure-toggle-left", data-toggle-label="left"):
+            span(class="pure-toggle-icon")
+        tdiv(class="pure-drawer", data-position="left"):
+            site
+        label(class="pure-overlay", `for`="pure-toggle-left", data_overlay="left")
 
-proc buildMenu(crumbs: string): VNode =
-    buildHtml(header(class="mdc-top-app-bar menu")):
+proc buildImgUrl(url: string): VNode =
+    let cache_url = "/img/" & encodeUrl(url)
+    buildHtml(a(class="image-link", href=url, alt="post image source")):
+        img(class="material-icons", src=cache_url, alt="image", loading="lazy")
+
+proc icon(name: string, txt = "", cls=""):VNode =
+    buildHtml(span(class=("mdc-ripple-surface " & cls))):
+        italic(class="material-icons"):
+            text name
+        text txt
+
+proc buildSearch(withButton=true):VNode =
+    buildHtml(tdiv):
+        label(class="search-field"):
+            input(class="search-input", type="text", placeholder="Search...")
+        if withButton:
+            buildButton("search", "search-btn", aria_label="Search", title="Search across the website.")
+
+proc buildMenuSmall(a:Article, crumbs: string, topic_uri: Uri): VNode =
+    buildHtml():
+        ul(class="menu-list mdc-top-app-bar--fixed-adjust"):
+            li():
+                a(class="dk-toggle", href="#"):
+                    icon("brightness_4", "Colors", "menu-list-entry")
+            li():
+                a(href=($(topic_uri / "trending"))):
+                    icon("trending_up", "Trending", "menu-list-entry")
+            li():
+                a(class="translate", href="#"):
+                    icon("translate", "Language", "menu-list-entry")
+            li(class="search"):
+                buildSearch(withButton=false)
+                icon("search", "", "search-icon")
+
+proc buildLogo(pos: string): VNode =
+    buildHtml():
+        a(class=(pos & " app-bar-logo mdc-icon-button"), href=($WEBSITE_URL), aria-label="Website Logo"):
+            tdiv(class="mdc-icon-button__ripple")
+            span(class="logo-dark-wrap"):
+                verbatim(LOGO_DARK_HTML)
+            span(class="logo-light-wrap"):
+                verbatim(LOGO_HTML)
+
+
+proc buildMenu(a: Article, crumbs: string, topic_uri: Uri): VNode =
+    buildHtml(header(class="mdc-top-app-bar menu", id="app-bar")):
         tdiv(class="mdc-top-app-bar__row"):
             section(class="mdc-top-app-bar__section mdc-top-app-bar__section--align-start"):
-                a(class="app-bar-logo mdc-icon-button", href=($WEBSITE_URL), aria-label="Website Logo"):
-                    tdiv(class="mdc-icon-button__ripple")
-                    span(class="logo-light-wrap"):
-                        verbatim(LOGO_HTML)
-                    span(class="logo-dark-wrap"):
-                        verbatim(LOGO_DARK_HTML)
-                    span(class="logo-light-icon-wrap"):
-                        verbatim(LOGO_ICON_HTML)
-                    span(class="logo-dark-icon-wrap"):
-                        verbatim(LOGO_DARK_ICON_HTML)
+                buildButton("menu", "menu-btn", aria_label="open menu",
+                            title="Menu Drawer")
+                buildLogo("left")
                 buildButton("brightness_4", "dk-toggle", aria_label="toggle dark theme",
                             title="Switch website color between dark and light theme.")
-                a(class="page mdc-top-app-bar__title mdc-ripple-surface", href="/"):
+                a(class="page mdc-top-app-bar__title mdc-ripple-surface", href=($topic_uri)):
                     text crumbs
             section(class="mdc-top-app-bar__section mdc-top-app-bar__section--align-end", role="toolbar"):
-                label(class="mdc-text-field mdc-text-field--filled"):
-                    span(class="mdc-text-field__ripple")
-                    span(class="mdc-floating-label", id="search-label"):
-                        text "Search"
-                    input(class="mdc-text-field__input", type="text", aria-labelledby="search-label")
-                    span(class="mdc-line-ripple")
-                buildButton("search", aria_label="Search", title="Search across the website.")
-                a(href="/trending"):
+                buildSearch(false)
+                buildButton("search", "search-btn", aria_label="Search", title="Search across the website.")
+                a(class="trending", href=($(topic_uri / "trending"))):
                     buildButton("trending_up", aria_label="Trending", title="Recent articles that have been trending up.")
-                buildButton("translate", aria_label="Languages", title="Change the language of the website.")
+                buildButton("translate", "translate", aria_label="Languages", title="Change the language of the website.")
+                buildLogo("right")
 
 proc buildFooter():VNode =
     buildHtml(tdiv(class="site-footer container max border medium no-padding")):
@@ -123,10 +160,6 @@ proc buildFooter():VNode =
                     text "Creative Commons Attribution 3.0 Unported License."
             script(src="/bundle.js", async="")
 
-proc buildImgUrl(url: string): VNode =
-    let cache_url = "/img/" & encodeUrl(url)
-    buildHtml(a(class="image-link", href=url, alt="post image source")):
-        img(class="material-icons", src=cache_url, alt="image", loading="lazy")
 
 proc postTitle(a: Article):VNode =
     buildHtml(tdiv(class="title-wrap")):
@@ -159,9 +192,10 @@ proc postFooter(pubdate: Time):VNode =
 
 proc buildBody(a: Article, website_title: string = WEBSITE_TITLE): VNode =
     let crumbs = toUpper(&"/ {a.topic} > ...")
+    let topic_uri = parseUri("/" & a.topic)
     buildHtml(body(class="")):
-        tdiv(class="menu-wrap"):
-            buildMenu(crumbs)
+        buildMenu(a, crumbs, topic_uri)
+        buildMenuSmall(a, crumbs, topic_uri)
         main(class="mdc-top-app-bar--fixed-adjust"):
             postTitle(a)
             postContent(a.content)

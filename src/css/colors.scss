@@ -45,7 +45,8 @@
   --mdc-theme-on-primary: var(--light-on-primary);
   --mdc-theme-on-secondary: var(--light-on-secondary);
   --mdc-theme-on-surface: var(--light-on-surface);
-  background: var(--light-background);
+  // background: var(--light-background);
+  background: white;
 }
 
 @mixin mdc-dark {
@@ -55,7 +56,8 @@
   --mdc-theme-on-primary: var(--primary);
   --mdc-theme-on-secondary: var(--dark-on-secondary);
   --mdc-theme-on-surface: var(--dark-on-surface);
-  background: var(--dark-background);
+  // background: var(--dark-background);
+  background: black;
 }
 
 body {
@@ -72,7 +74,8 @@ body {
     @include mdc-dark;
   }
   main {
-    background: var(--dark-background);
+    // background: var(--dark-background);
+    background: black;
     color: var(--text-primary-on-dark);
   }
   a {
@@ -85,6 +88,11 @@ body {
     background: var(--secondary);
     color: var(--text-primary-on-dark);
   }
+  .search-input {
+    color: var(--primary);
+    background: var(--surface);
+    border-color: var(--light-secondary);
+  }
 }
 
 @mixin light {
@@ -92,7 +100,8 @@ body {
     @include mdc-light;
   }
   main {
-    background: var(--light-background);
+    // background: var(--light-background);
+    background: white;
     color: var(--text-secondary-on-light);
   }
   a {
@@ -104,6 +113,11 @@ body {
   footer {
     background: var(--light-primary);
     color: var(--text-primary-on-light);
+  }
+  .search-input {
+    color: var(--secondary);
+    background: var(--light-background);
+    border-color: var(--light-background);
   }
 }
 
@@ -130,11 +144,15 @@ footer {
   box-shadow: var(--light-secondary) 0 -1px 2px;
 }
 
-.mdc-tooltip {
-  @include tooltip.fill-color(var(--light-primary));
-  @include tooltip.label-ink-color(var(--light-on-primary));
-  font-variant: none;
-  white-space: normal;
-  width: 10rem;
-  @include tooltip.word-break(break-word, break-all);
-}
+// .mdc-tooltip {
+//   @include tooltip.fill-color(var(--light-primary));
+//   @include tooltip.label-ink-color(var(--light-on-primary));
+//   font-variant: none;
+//   white-space: normal;
+//   width: 10rem;
+//   @include tooltip.word-break(break-word, break-all);
+// }
+
+// .mdc-text-field--label-floating {
+//   @include textfield.label-color(var(--mdc-theme-on-primary));
+// }

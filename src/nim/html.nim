@@ -13,6 +13,9 @@ import types
 import times
 import uri
 import sequtils
+import normalize
+import re
+import unicode
 
 const LOGO_HTML = readFile(LOGO_PATH)
 const LOGO_SMALL_HTML = readFile(LOGO_SMALL_PATH)
@@ -20,10 +23,19 @@ const LOGO_ICON_HTML = readFile(LOGO_ICON_PATH)
 const LOGO_DARK_HTML = readFile(LOGO_DARK_PATH)
 const LOGO_DARK_SMALL_HTML = readFile(LOGO_DARK_SMALL_PATH)
 const LOGO_DARK_ICON_HTML = readFile(LOGO_DARK_ICON_PATH)
+const ROOT = initUri() / "/"
 
-template kxi(): int = 0
-template addEventHandler(n: VNode; k: EventKind; action: string; kxi: int) =
+template kxi*(): int = 0
+template addEventHandler*(n: VNode; k: EventKind; action: string; kxi: int) =
   n.setAttr($k, action)
+
+const stripchars = ["-".runeAt(0), "_".runeAt(0)]
+proc slugify(value: string): string =
+    ## Slugifies an unicode string
+
+    result = toNFKC(value).toLower()
+    result = re.replace(result, re"[^\w\s-]", "")
+    result = re.replace(result, re"[-\s]+", "-").strip(runes=stripchars)
 
 proc buildHead():VNode =
     buildHtml(head):
@@ -100,7 +112,7 @@ proc buildSearch(withButton=true):VNode =
         if withButton:
             buildButton("search", "search-btn", aria_label="Search", title="Search across the website.")
 
-proc buildMenuSmall(a:Article, crumbs: string, topic_uri: Uri): VNode =
+proc buildMenuSmall(crumbs: string, topic_uri: Uri): VNode =
     buildHtml():
         ul(class="menu-list mdc-top-app-bar--fixed-adjust"):
             li():
@@ -126,7 +138,7 @@ proc buildLogo(pos: string): VNode =
                 verbatim(LOGO_HTML)
 
 
-proc buildMenu(a: Article, crumbs: string, topic_uri: Uri): VNode =
+proc buildMenu(crumbs: string, topic_uri: Uri): VNode =
     buildHtml(header(class="mdc-top-app-bar menu", id="app-bar")):
         tdiv(class="mdc-top-app-bar__row"):
             section(class="mdc-top-app-bar__section mdc-top-app-bar__section--align-start"):
@@ -154,6 +166,12 @@ proc buildFooter():VNode =
                 text " - "
                 a(href="/feed.xml"):
                     text("RSS")
+                text " - "
+                a(href="/dmca.html"):
+                    text("DMCA")
+                text " - "
+                a(href="/privacy-policy.html"):
+                    text("Privacy Policy")
             tdiv(class="footer-copyright"):
                 text "Except where otherwise noted, this website is licensed under a "
                 a(rel="license", href="http://creativecommons.org/licenses/by/3.0/deed.en_US"):
@@ -177,9 +195,9 @@ proc postTitle(a: Article):VNode =
         buildImgUrl(a.imageUrl)
 
 proc postContent(article: string):VNode =
-    buildHtml(article(class="post-wrapper container max")):
+    buildHtml(article(class="post-wrapper")):
         tdiv(class="post-content"):
-            text article
+            verbatim(article)
 
 proc postFooter(pubdate: Time):VNode =
     let dt = inZone(pubdate, utc())
@@ -194,20 +212,51 @@ proc buildBody(a: Article, website_title: string = WEBSITE_TITLE): VNode =
     let crumbs = toUpper(&"/ {a.topic} > ...")
     let topic_uri = parseUri("/" & a.topic)
     buildHtml(body(class="")):
-        buildMenu(a, crumbs, topic_uri)
-        buildMenuSmall(a, crumbs, topic_uri)
+        buildMenu(crumbs, topic_uri)
+        buildMenuSmall(crumbs, topic_uri)
         main(class="mdc-top-app-bar--fixed-adjust"):
             postTitle(a)
             postContent(a.content)
             postFooter(a.pubdate)
         buildFooter()
 
-proc buildPage*(basedir: string, a: Article) =
+proc pageTitle(title: string, slug: string): VNode =
+    buildHtml(tdiv(class="title-wrap")):
+        h1(id="title"):
+            a(href=($(ROOT / slug))):
+                text title
+
+const pageContent = postContent
+
+proc writeHtml(basedir: string, slug: string, data: VNode) =
+    let path = basedir / slug & ".html"
+    writeFile(path, &("<!doctype html>\n{data}"))
+
+proc buildPost*(basedir: string, a: Article) =
     let page = buildHtml(html):
         buildHead()
         buildBody(a)
-    let path = basedir / a.slug & ".html"
-    writeFile(path, &("<!doctype html>\n{page}"))
+    writeHtml(basedir, a.slug, page)
+
+proc buildPage*(basedir: string, title: string, content: string, slug: string) =
+    const crumbs = "/ > ..."
+    const topic_uri = parseUri("/")
+    let slug = slugify(title)
+    let page = buildHtml(html):
+        buildHead()
+        body(class=""):
+            buildMenu(crumbs, topic_uri)
+            buildMenuSmall(crumbs, topic_uri)
+            main(class="mdc-top-app-bar--fixed-adjust"):
+                if title != "":
+                    pageTitle(title, slug)
+                pageContent(content)
+            buildFooter()
+    writeHtml(basedir, slug, page)
+
+proc buildPage*(basedir: string, title: string, content: string) =
+    let slug = slugify(title)
+    buildPage(basedir, title, content, slug)
 
 when isMainModule:
     var path = joinPath(SITE_PATH, "index.html")

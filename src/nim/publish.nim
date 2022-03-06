@@ -4,13 +4,14 @@ import os
 # import sequtils
 # import tables
 # import json
-# import sugar
+import sugar
 import html
 import times
 import types
 import strutils
 import timeit
 import strformat
+import algorithm
 
 let machinery = pyImport("importlib.machinery")
 
@@ -61,18 +62,48 @@ proc getarticles(topic: string, n=3, doresize=false): seq[Article] =
         discard ut.save_topic(topic, done, m)
     return parsed
 
-proc publish(topic: string, arts: seq[Article]) =
-    # Generates html for a list of `Article` objects and writs to file.
-    # let basedir = joinPath(SITE_PATH, topic)
-    let basedir = SITE_PATH / topic
-    if not dirExists(basedir):
-        if fileExists(basedir):
-            logger.log(lvlinfo, "Deleting file that should be a directory " & basedir)
-            removeFile(basedir)
-        logger.log(lvlInfo, "Creating directory " & basedir)
-        createDir(basedir)
+proc getSubDirs(path: string): seq[int] =
+    var result = collect(for f in walkDirs(path / "*"):
+                try: parseInt(lastPathPart(f)) except: -1 )
+    sort(result)
+    result
+
+proc countDirFiles(path: string): int =
+    len(collect(for f in walkFiles(path / "*"): f))
+
+proc getSubdirNumber(topic: string, iter: int): int =
+    let topic_path = SITE_PATH / topic
+    if iter == 0:
+        try:
+            var dirs = getSubDirs(topic_path)
+            let topdir = $max(1, dirs.high)
+            var i: int
+            for d in dirs:
+                i = d
+                # NOTE: we don't consider how many articles are in a batch
+                # so this is a soft limit
+                if countDirFiles(topic_path / $d) < MAX_DIR_FILES:
+                   return d
+            return i + 1
+        except ValueError:
+            return 1
+
+proc ensureDir(dir: string) =
+    if not dirExists(dir):
+        if fileExists(dir):
+            logger.log(lvlinfo, "Deleting file that should be a directory " & dir)
+            removeFile(dir)
+        logger.log(lvlInfo, "Creating directory " & dir)
+        createDir(dir)
+
+proc publish(topic: string, arts: seq[Article], iter: int = 0) =
+    ##  Generates html for a list of `Article` objects and writs to file.
+    let subdir = getSubdirNumber(topic, iter)
+    let basedir = SITE_PATH / topic / $subdir
+
+    ensureDir(basedir)
     for a in arts:
-        buildPage(basedir, a)
+        buildPost(basedir, a)
 
 when isMainModule:
     let topic = "vps"
@@ -80,4 +111,4 @@ when isMainModule:
     publish(topic, arts)
 
     # var path = joinPath(SITE_PATH, "index.html")
-    # writeFile(path, &("<!doctype html>\n{buildPage()}"))
+    # writeFile(path, &("<!doctype html>\n{buildPost()}"))

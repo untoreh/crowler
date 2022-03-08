@@ -1,18 +1,10 @@
-import macros,
-       macroutils,
-       os,
-       streams,
-       parsexml,
-       strutils,
-       karax / [karaxdsl, vdom, vstyles],
-       unicode,
-       htmlgen,
-       xmlparser,
+import os,
        logging,
        uri
 
 const cfg_path = currentSourcePath().splitPath()[0]
-let logger* = newConsoleLogger(fmtStr="[$time] - $levelname: ")
+
+let logger* = newConsoleLogger(fmtStr = "[$time] - $levelname: ")
 
 export logging
 
@@ -21,7 +13,8 @@ const
     WEBSITE_DOMAIN* = "localhost"
     WEBSITE_URL* = parseUri("http://" & WEBSITE_DOMAIN)
     WEBSITE_TITLE* = "wsl"
-    SITE_PATH* = joinpath(PROJECT_PATH, "site")
+    SITE_PATH* = joinPath(PROJECT_PATH, "site")
+    DATA_PATH* = PROJECT_PATH / "data"
     ASSETS_PATH* = PROJECT_PATH / "src" / "assets"
     LOGO_DIR = ASSETS_PATH / "logo"
     LOGO_PATH* = os.joinPath(LOGO_DIR, "logo.svg")

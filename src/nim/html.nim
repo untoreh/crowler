@@ -228,21 +228,20 @@ proc pageTitle(title: string, slug: string): VNode =
 
 const pageContent = postContent
 
-proc writeHtml(basedir: string, slug: string, data: VNode) =
+proc writeHtml*(basedir: string, slug: string, data: VNode) =
     let path = basedir / slug & ".html"
     writeFile(path, &("<!doctype html>\n{data}"))
 
-proc buildPost*(basedir: string, a: Article) =
-    let page = buildHtml(html):
+proc buildPost*(a: Article): VNode =
+    buildHtml(html):
         buildHead()
         buildBody(a)
-    writeHtml(basedir, a.slug, page)
 
-proc buildPage*(basedir: string, title: string, content: string, slug: string) =
+proc buildPage*(title: string, content: string, slug: string): VNode =
     const crumbs = "/ > ..."
     const topic_uri = parseUri("/")
     let slug = slugify(title)
-    let page = buildHtml(html):
+    buildHtml(html):
         buildHead()
         body(class=""):
             buildMenu(crumbs, topic_uri)
@@ -252,11 +251,10 @@ proc buildPage*(basedir: string, title: string, content: string, slug: string) =
                     pageTitle(title, slug)
                 pageContent(content)
             buildFooter()
-    writeHtml(basedir, slug, page)
 
-proc buildPage*(basedir: string, title: string, content: string) =
+proc buildPage*(title: string, content: string): VNode =
     let slug = slugify(title)
-    buildPage(basedir, title, content, slug)
+    buildPage(title, content, slug)
 
 when isMainModule:
     var path = joinPath(SITE_PATH, "index.html")

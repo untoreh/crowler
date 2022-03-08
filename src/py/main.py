@@ -45,18 +45,19 @@ def run_sources_job(topic):
     """
     logger.info("Getting kw batch...")
     batch = get_kw_batch(topic)
+    root = cfg.TOPICS_DIR / topic / "sources"
     for kw in batch:
         logger.info("Finding sources for keyword %s .", kw)
         results = sources.fromkeyword(kw, n_engines=3)
         if results:
-            ut.save_file(results, ut.slugify(kw), root=cfg.TOPICS_DIR / topic)
+            ut.save_file(results, ut.slugify(kw), root=root)
 
 
 def get_kw_sources(topic, remove=True):
-    root = cfg.TOPICS_DIR / topic
+    root = cfg.TOPICS_DIR / topic / "sources"
     for _, _, files in os.walk(root):
         for f in files:
-            if f not in ("list.txt", "queue.txt"):
+            if f not in ("list.txt", "queue.txt", "lsh.json"):
                 if f.startswith("."):
                     continue
                 results_path = root / f
@@ -73,7 +74,7 @@ def get_kw_sources(topic, remove=True):
 
 
 def ensure_sources(topic):
-    sources = get_kw_sources(topic, remove=False)
+    sources = get_kw_sources(topic)
     if not sources:
         logger.info("No sources remaining, fetching new sources...")
         run_sources_job(topic)

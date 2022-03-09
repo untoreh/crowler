@@ -18,32 +18,36 @@ import tables
 let machinery = pyImport("importlib.machinery")
 privateAccess(LocalitySensitive)
 
+include "pages"
+
 proc relimport(relpath: string): PyObject =
     let abspath = os.expandFilename(relpath & ".py")
     let loader = machinery.SourceFileLoader("config", abspath)
     return loader.load_module("config")
 
+# we have to load the config before utils, otherwise the module is "partially initialized"
 let pycfg = relimport("../py/config")
 let ut = relimport("../py/utils")
 const emptyseq: seq[string] = @[]
 
-proc getarticles*(topic: string, n = 3, doresize = false): seq[Article] =
-    let grp = ut.zarr_articles_group(topic)
+proc msgArticles(m: int): string =
+    if m != 0:
+        "getting $# articles from $# available ones for topic $#."
+    else:
+        "No articles were found for topic $#."
+
+proc getarticles*(topic: string, n = 3, doresize = false, k = topicData.articles): seq[Article] =
+    let grp = ut.zarr_topic_group(topic)
     var a: Article
-    let arts = grp["articles"]
+    let arts = grp[$k]
     assert pyiszarray(arts)
     var data: PyObject
     let curtime = getTime()
     var parsed: seq[Article]
     var done: seq[PyObject]
     let h = arts.shape[0].to(int)
-    var msg: string
     let m = min(n, h)
-    if m != 0:
-        msg = &"getting {m} articles from {h} available ones for topic {topic}."
-    else:
-        msg = &"No articles were found for topic {topic}."
-    logger.log(lvlInfo, msg)
+    logger.log(lvlInfo, msgArticles(m) % [$m, $h, topic])
     for i in h-m..h-1:
         data = arts[i]
         a = new(Article)
@@ -61,34 +65,10 @@ proc getarticles*(topic: string, n = 3, doresize = false): seq[Article] =
         a.tags = pyget(data, "tags", emptyseq)
         parsed.add(a)
         done.add(data)
-    if doresize:
+    if k == topicData.articles and doresize:
         discard ut.save_topic(topic, done)
     return parsed
 
-proc getSubDirs(path: string): seq[int] =
-    var dirs = collect(for f in walkDirs(path / "*"):
-                try: parseInt(lastPathPart(f)) except: -1)
-    sort(dirs, Descending)
-    dirs
-
-proc countDirFiles(path: string): int =
-    len(collect(for f in walkFiles(path / "*"): f))
-
-proc getSubdirNumber(topic: string, iter: int): int =
-    let topic_path = SITE_PATH / topic
-    if iter == 0:
-        try:
-            var dirs = getSubDirs(topic_path)
-            var i: int
-            for d in dirs:
-                i = d
-                # NOTE: we don't consider how many articles are in a batch
-                # so this is a soft limit
-                if countDirFiles(topic_path / $d) < MAX_DIR_FILES:
-                    return d
-            return i + 1
-        except ValueError:
-            return 1
 
 proc ensureDir(dir: string) =
     if not dirExists(dir):
@@ -98,10 +78,6 @@ proc ensureDir(dir: string) =
         logger.log(lvlInfo, "Creating directory " & dir)
         createDir(dir)
 
-
-proc getLastTopicDir*(topic: string): string =
-    let dirs = getSubDirs(SITE_PATH / topic)
-    return $max(1, dirs.high)
 
 proc initLS(): LocalitySensitive[uint64] =
     let hasher = initMinHasher[uint64](64)
@@ -135,10 +111,63 @@ proc addArticle(lsh: LocalitySensitive[uint64], a: Article): bool =
     false
 
 
-proc publish(topic: string, arts: seq[Article], iter: int = 0) =
-    ##  Generates html for a list of `Article` objects and writs to file.
-    let subdir = getSubdirNumber(topic, iter)
-    let basedir = SITE_PATH / topic / $subdir
+
+
+proc pubPageFromTemplate(tpl: string, title: string, vars: seq[(string, string)] = tplRep) =
+    var txt = readfile(ASSETS_PATH / "templates" / tpl)
+    txt = multiReplace(txt, vars)
+    let slug = slugify(title)
+    let p = buildPage(title = title, content = txt)
+    writeHtml(SITE_PATH, slug, p)
+
+proc pubInfoPages() =
+    ## Build DMCA, TOS, and GPDR pages
+    pubPageFromTemplate("dmca.html", "DMCA")
+    pubPageFromTemplate("tos.html", "Terms of Service")
+    pubPageFromTemplate("privacy-policy.html", "Privacy Policy", ppRep)
+
+
+proc pubPage(topic: string, pagenum: string, pagecount: int, ishome=false, finalize=false) =
+    let arts = getarticles(topic, n = pagecount, k = topicData.done, doresize = false)
+    let content = buildShortPosts(arts)
+    writeHTML(SITE_PATH / topic,
+                slug=(if ishome: "index"
+                      else: pagenum / "index"),
+                content)
+    # if we pass a pagecount we mean to finalize
+    if finalize:
+        discard ut.update_page_size(topic, pagenum.parseInt, pagecount, final=true)
+
+proc pubArchivePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
+    ## Always update both the homepage and the previous page
+    let pages = ut.zarr_topic_group(topic)["pages"]
+    var pagenum = pn.intToStr
+    # current articles count
+    let pn = pagenum.parseInt
+    pubPage(topic, pagenum, pagecount)
+    # Also build the previous page if we switched page
+    if newpage:
+        # make sure the second previous page is finalized
+        let pn = pagenum.parseInt
+        if pn > 1:
+            let pagesize = pages[pn-2]
+            pagecount = pagesize[0].to(int)
+            let final = pagesize[1].to(bool)
+            if not final:
+                pagenum = (pn-2).intToStr
+                pubPage(topic, pagenum, pagecount, finalize=true)
+        # now update the just previous page
+        pagecount = pages[pn-1][0].to(int)
+        pagenum = (pn-1).intToStr
+        pubPage(topic, pagenum, pagecount, finalize=true)
+
+
+
+proc publish(topic: string, num: int = 0) =
+    ##  Generates html for a list of `Article` objects and writes to file.
+    let (pagenum, newpage) = getSubdirNumber(topic, num)
+    var arts = getarticles(topic, doresize = true)
+    let basedir = SITE_PATH / topic / $pagenum
 
     ensureDir(basedir)
     let lsh = loadLS(topic)
@@ -154,11 +183,18 @@ proc publish(topic: string, arts: seq[Article], iter: int = 0) =
     for (tree, slug) in posts:
         writeHtml(basedir, slug, tree)
 
+    let newposts = len(posts)
+    # if its a new page, the page posts count is equivalent to the just published count
+    var pagecount = (if newpage: newposts
+                     else:  ut.get_page_size(topic, pagenum)[0].to(int) + newposts)
+    discard ut.update_page_size(topic, pagenum, pagecount)
+
+    pubArchivePages(topic, pagenum, newpage, pagecount)
 
 when isMainModule:
     let topic = "vps"
-    let arts = getarticles(topic, doresize = true)
-    publish(topic, arts)
+    # ensureHome(topic)
+    publish(topic)
 
-    # var path = joinPath(SITE_PATH, "index.html")
+    # var path = SITE_PATH / "index.html"
     # writeFile(path, &("<!doctype html>\n{buildPost()}"))

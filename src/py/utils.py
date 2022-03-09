@@ -141,24 +141,33 @@ def dirsbydate(path):
 
 
 class ZarrKey(Enum):
+    # articles to be published
     articles = "articles"
+    # feeds to fetch for articles
     feeds = "feeds"
+    # published posts
     done = "done"
+    # keeps the number of posts in each page
+    pages = "pages"
 
 
 def _wrap_path(root):
     return os.path.normpath(os.path.sep + str(root) + os.path.sep)
 
 
-def save_zarr(contents: MutableSequence, k: ZarrKey = ZarrKey.articles, root=cfg.DATA_DIR, reset=False):
+def save_zarr(
+    contents: MutableSequence,
+    k: ZarrKey = ZarrKey.articles,
+    root=cfg.DATA_DIR,
+    reset=False,
+):
     path = ZarrKey(k).name
     if len(contents) > cfg.MAX_BACKLOG_SIZE:
-        contents = contents[-cfg.MAX_BACKLOG_SIZE:]
+        contents = contents[-cfg.MAX_BACKLOG_SIZE :]
     try:
         data = np.asarray(contents)
     except:
         raise ValueError("Contents provided can't be converted to numpy array.")
-    store = za.DirectoryStore(_wrap_path(root))
     # append to existing array or create new one
     if not reset:
         # NOTE: there might be some recursion going on here :)
@@ -168,6 +177,7 @@ def save_zarr(contents: MutableSequence, k: ZarrKey = ZarrKey.articles, root=cfg
             data = data[-max_append:]
         z.append(data)
     else:
+        store = za.DirectoryStore(_wrap_path(root))
         za.save_array(
             store=store,
             arr=data,
@@ -185,7 +195,24 @@ def save_topic(topic: str, contents: MutableSequence):
     n_saved = saved_articles.shape[0]
     n_content = len(contents)
     saved_articles.resize(n_saved - n_content)
-    save_zarr(contents, k=ZarrKey.done, root=topic_path)
+    # save_zarr(contents, k=ZarrKey.done, root=topic_path)
+
+def update_page_size(topic: str, idx: int, val, final=False):
+    assert idx >= 0
+    topic_path = cfg.TOPICS_DIR / topic
+    pages = load_zarr(k=ZarrKey.pages, root=topic_path)
+    if pages.shape[0] <= idx:
+        pages.resize(idx + 1)
+    # pages start at 1
+    pages[idx] = (val, final)
+
+def get_page_size(topic: str, idx: int):
+    assert idx > 0
+    topic_path = cfg.TOPICS_DIR / topic
+    pages = load_zarr(k=ZarrKey.pages, root=topic_path)
+    if pages.shape[0] <= idx:
+        raise IndexError(f"Page number not found for topic {topic}")
+    return pages[idx]
 
 def load_zarr(k=ZarrKey.articles, root=cfg.DATA_DIR):
     path = ZarrKey(k).name
@@ -197,6 +224,6 @@ def load_zarr(k=ZarrKey.articles, root=cfg.DATA_DIR):
         return za.open_array(store=store, path=path)
 
 
-def zarr_articles_group(topic, root=cfg.TOPICS_DIR):
+def zarr_topic_group(topic, root=cfg.TOPICS_DIR):
     file_path = get_file_path(Path(topic), root, ext=None, as_json=False)
     return za.open_group(file_path)

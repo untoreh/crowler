@@ -30,19 +30,19 @@ type
 
 # https://github.com/yglukhov/nimpy/issues/164
 let
-  builtins = pyBuiltinsModule()
-  za = pyimport("zarr")
-  PyBoolClass = builtins.True.getattr("__class__")
-  PyNoneClass = builtins.None.getattr("__class__")
-  PyDateTimeClass = pyimport("datetime").datetime
-  PyStrClass = builtins.str.getattr("__class__")
-  PyZArray = za.getAttr("Array")
+    builtins = pyBuiltinsModule()
+    za = pyimport("zarr")
+    PyBoolClass = builtins.True.getattr("__class__")
+    PyNoneClass = builtins.None.getattr("__class__")
+    PyDateTimeClass = pyimport("datetime").datetime
+    PyStrClass = builtins.str.getattr("__class__")
+    PyZArray = za.getAttr("Array")
 
 proc pyisbool*(py: PyObject): bool {.exportpy.} =
-  return builtins.isinstance(py, PyBoolClass).to(bool)
+    return builtins.isinstance(py, PyBoolClass).to(bool)
 
 proc pyisnone*(py: PyObject): bool {.exportpy.} =
-  return builtins.isinstance(py, PyNoneClass).to(bool)
+    return builtins.isinstance(py, PyNoneClass).to(bool)
 
 proc pyisdatetime*(py: PyObject): bool {.exportpy.} =
     return builtins.isinstance(py, PyDateTimeClass).to(bool)
@@ -58,13 +58,13 @@ proc `$`*(a: Article): string =
         a.title &
         "\pdate: " &
         $a.pubDate &
-        "\purl: "  &
+        "\purl: " &
         a.url
 
 const ymdFormat = "yyyy-MM-dd"
 const isoFormat = "yyyy-MM-dd'T'HH:mm:ss"
 
-proc pydate*(py: PyObject, default=getTime()): Time =
+proc pydate*(py: PyObject, default = getTime()): Time =
     if pyisnone(py):
         return default
     elif pyisstr(py):
@@ -117,27 +117,11 @@ proc agoDateStr*(date: DateTime): string =
         return "just now"
 
 
-    # if c > 0:
-    #     return $c & "year".plural(c) & ago
-    # c = curdate.month - date.months
-    # if c > 0:
-    #     return $c & "month".plural(c)
-    # c = curdate.day - date.day
-    # if c > 0:
-    #     return $c & "day".plural(c)
-    # c = curdate.hour - date.hour
-    # if c > 0:
-    #     return $c & "hour".plural(c)
-    # c = curdate.hour - date.hour
-    # if c > 0:
-    #     return $c & "hour".plural(c)
-
-
 var e: ref ValueError
 new(e)
 e.msg = "All python objects were None."
 
-proc pysome*(pys: varargs[PyObject], default=new(PyObject)): PyObject =
+proc pysome*(pys: varargs[PyObject], default = new(PyObject)): PyObject =
     for py in pys:
         if pyisnone(py):
             continue
@@ -152,3 +136,13 @@ proc pyget*[T](py: PyObject, k: string, def: T = ""): T =
     else:
         return v.to(T)
 
+type
+    topicData* = enum
+        articles = "articles",
+        feeds =  "feeds",
+        done = "done"
+    # topicData = object
+    #     case kind: topicDataType
+    #     of articles: articles: string
+    #     of feeds: feeds: string
+    #     of done: done: string

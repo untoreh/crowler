@@ -8,6 +8,7 @@ import phrasemachine
 from rake_nltk import Rake
 import nltk
 from textacy import similarity
+from re import sub
 
 nltk.download("stopwords")
 rk = Rake()
@@ -50,11 +51,12 @@ def phrasemac(text, n=3, max_len=cfg.TAGS_MAX_LEN):
     return [x[0] for x in phr_set]
 
 
-def rake(text, n=3, n_filter=100):
+def rake(text, n=3, n_filter=100, clean=True):
     rk.extract_keywords_from_text(text)
     kws = rk.get_ranked_phrases()
     tags = set(ut.dedup(kws[:n_filter])[:n])
-    return sim_filter(tags)
+    tags = sim_filter(tags)
+    return clean_tags(tags) if clean else tags
 
 
 def sim_filter(tags, sim_threshold=0.9):
@@ -67,6 +69,19 @@ def sim_filter(tags, sim_threshold=0.9):
         if not sim:
             final.append(t)
     return final
+
+
+def clean_tags(tags):
+    cleaned_tags = []
+    for t in tags:
+        # Replace bad hyphens
+        t = sub("[^a-zA-Z]-[^a-zA-Z]?", "", t)
+        t = sub("[^a-zA-Z]?-[^a-zA-Z]", "", t)
+        # Remove non chars
+        t = sub(r"[^a-zA-Z\-\s]", "", t)
+        if len(t.strip(" -")) > 3:
+            cleaned_tags.append(t)
+    return cleaned_tags
 
 
 def all(text):

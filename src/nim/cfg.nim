@@ -24,3 +24,4 @@ const
     LOGO_DARK_SMALL_PATH* = os.joinPath(LOGO_DIR, "logo-small-dark.svg")
     LOGO_DARK_ICON_PATH* = os.joinPath(LOGO_DIR, "logo-icon-dark.svg")
     MAX_DIR_FILES* = 10
+    ARTICLE_EXCERPT_CHARS* = 300

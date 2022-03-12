@@ -118,8 +118,14 @@ proc pubInfoPages() =
     pubPageFromTemplate("tos.html", "Terms of Service")
     pubPageFromTemplate("privacy-policy.html", "Privacy Policy", ppRep)
 
+proc pageSize(topic: string, pagenum: int): int =
+    let py = ut.get_page_size(topic, pagenum)
+    if pyisnone(py):
+        error:
+            fmt"Page number: {pagenum} not found for topic: {topic} ."
+    py[0].to(int)
 
-proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false) =
+proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, with_arts=false) =
     let
         arts = getDoneArticles(topic, pagenum = pagenum.parseInt)
         content = buildShortPosts(arts)
@@ -128,14 +134,18 @@ proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false) =
         page = buildPage(content = content, pagefooter = footer)
 
     logger.log(lvlInfo, fmt"Updating page:{pagenum} for topic:{topic} with entries:{pagecount}")
-    writeHTML(SITE_PATH / topic,
+    let topic_path = SITE_PATH / topic
+    writeHTML(topic_path,
                 slug = (pagenum / "index"),
                 page)
     # if we pass a pagecount we mean to finalize
     if finalize:
         discard ut.update_page_size(topic, pagenum.parseInt, pagecount, final = true)
+    if with_arts:
+        for a in arts:
+            writeHTML(topic_path / pagenum, a.slug, buildPost(a))
 
-proc pubArchivePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
+proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
     ## Always update both the homepage and the previous page
     let pages = ut.zarr_topic_group(topic)["pages"]
     var pagenum = pn.intToStr
@@ -216,20 +226,20 @@ proc publish(topic: string, num: int = 0) =
             pagecount += pagesize[0].to(int)
     discard ut.update_page_size(topic, pagenum, pagecount)
 
-    pubArchivePages(topic, pagenum, newpage, pagecount)
+    finalizePages(topic, pagenum, newpage, pagecount)
 
 proc pubAllPages(topic: string, reset = true) =
-    ## Starting from the homepage, rebuild all archive pages
+    ## Starting from the homepage, rebuild all archive pages, and their articles
     let grp = ut.zarr_topic_group(topic)
     let topdir = max(grp[$topicData.pages].shape[0].to(int)-1, 0)
     assert topdir == len(grp[$topicData.done]) - 1
     block:
-        let pagecount = len(pageArticles(topic, topdir))
-        pubPage(topic, $topdir, pagecount, finalize = false)
+        let pagecount = pageSize(topic, topdir)
+        pubPage(topic, $topdir, pagecount, finalize = false, with_arts=true)
     for n in 0..topdir - 1:
         let pagenum = n
-        var pagecount = len(pageArticles(topic, pagenum))
-        pubPage(topic, $pagenum, pagecount, finalize = true)
+        var pagecount = pageSize(topic, n)
+        pubPage(topic, $pagenum, pagecount, finalize = true, with_arts=true)
 
 when isMainModule:
     let topic = "vps"

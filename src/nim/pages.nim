@@ -8,6 +8,8 @@ import sequtils
 import types
 import times
 import html
+import unicode
+import algorithm
 
 const tplRep = @{"WEBSITE_DOMAIN": WEBSITE_DOMAIN}
 const ppRep = @{"WEBSITE_URL": $WEBSITE_URL.combine(),
@@ -74,25 +76,36 @@ proc pageArticles*(topic: string): seq[string] =
 proc pageArticles*(topic: string; pagenum: int): seq[string] =
     pageArticles(topic, $pagenum)
 
+proc articleExcerpt(a: Article): string =
+    let alen = len(a.content) - 1
+    let maxlen = min(alen, ARTICLE_EXCERPT_SIZE)
+    if maxlen == alen:
+        return a.content
+    else:
+        let runesize = runeLenAt(a.content, maxlen)
+        return a.content[0..maxlen+runesize] & "..."
+
 proc buildShortPosts*(arts: seq[Article]): string =
     for a in arts:
+        let url = "/" / $a.page / a.slug
         let p = buildHtml(article(class = "entry")):
-            h2(id = "entry-title"):
-                a(href = "" / $a.page / a.slug):
+            h2(class = "entry-title", id = a.slug):
+                a(href = url):
                     text a.title
             tdiv(class = "entry-info"):
                 span(class = "entry-author"):
-                    text a.author
+                    text a.author & ", "
                 time(class = "entry-date", datetime = ($a.pubDate)):
                     italic:
                         text format(a.pubDate, "dd/MMM")
-            buildImgUrl(a.imageUrl, "entry-image")
-            tdiv(class = "entry-content"):
-                verbatim(a.content[0..min(len(a.content) - 1, ARTICLE_EXCERPT_CHARS)])
             tdiv(class = "entry-tags"):
                 for t in a.tags:
                     span(class = "entry-tag-name"):
+                        icon("tag")
                         text t
+            buildImgUrl(a.imageUrl, "entry-image")
+            tdiv(class = "entry-content"):
+                verbatim(articleExcerpt(a))
+                a(class = "entry-more", href = url):
+                    text "[continue]"
         result.add(p)
-
-# proc rebuildArchive()

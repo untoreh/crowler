@@ -102,7 +102,7 @@ proc buildImgUrl*(url: string; cls = "image-link"): VNode =
     buildHtml(a(class = cls, href = url, alt = "post image source")):
         img(class = "material-icons", src = cache_url, alt = "", loading = "lazy")
 
-proc icon(name: string; txt = ""; cls = ""): VNode =
+proc icon*(name: string; txt = ""; cls = ""): VNode =
     buildHtml(span(class = ("mdc-ripple-surface " & cls))):
         italic(class = "material-icons"):
             text name
@@ -190,7 +190,7 @@ proc buildFooter(): VNode =
 
 proc postTitle(a: Article): VNode =
     buildHtml(tdiv(class = "title-wrap")):
-        h1(id = "title"):
+        h1(class = "post-title", id = "1"):
             a(href = a.slug):
                 text a.title
         tdiv(class = "post-info"):
@@ -199,7 +199,7 @@ proc postTitle(a: Article): VNode =
             buildSocialShare(a)
             tdiv(class = "post-source"):
                 a(href = a.url):
-                    img(src = a.icon, loading = "lazy", alt="")
+                    img(src = a.icon, loading = "lazy", alt = "")
                     text $a.author
         buildImgUrl(a.imageUrl)
 
@@ -230,11 +230,11 @@ proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): VNode =
 
 proc pageTitle*(title: string; slug: string): VNode =
     buildHtml(tdiv(class = "title-wrap")):
-        h1(id = "title"):
+        h1(class = "post-title", id = "1"):
             a(href = ($(ROOT / slug))):
                 text title
 
-proc pageFooter*(topic: string, pagenum: string, home: bool): VNode =
+proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
     let
         topic_path = "/" / topic
         pn = pagenum.parseInt
@@ -278,9 +278,9 @@ proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode 
                     pageFooter
             buildFooter()
 
-proc buildPage*(title: string; content: string, pagefooter: VNode = nil): VNode =
+proc buildPage*(title: string; content: string; pagefooter: VNode = nil): VNode =
     let slug = slugify(title)
     buildPage(title = title, content, slug, pagefooter)
 
-proc buildPage*(content: string, pagefooter: VNode = nil): VNode =
+proc buildPage*(content: string; pagefooter: VNode = nil): VNode =
     buildPage(title = "", content, slug = "", pagefooter)

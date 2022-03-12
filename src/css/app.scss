@@ -21,7 +21,7 @@ header {
 
 //////////////////////////
 
-#title {
+.post-title {
   text-align: center;
 }
 
@@ -218,6 +218,35 @@ header .page {
 
 .material-icons {
   font-variant: none;
+}
+
+.entry-title {
+  margin-bottom: 0.5rem;
+}
+.entry-info {
+  font-size: 0.9rem;
+  color: var(--text-secondary-on-dark);
+  text-shadow: black 0 0 0.1px;
+  margin-bottom: 1rem;
+  float: left;
+}
+.entry-image {
+  float: left;
+}
+.entry-tags {
+  font-size: 0.9rem;
+  text-align: right;
+  color: var(--mdc-theme-on-primary);
+  margin-bottom: 1rem;
+  margin-top: 1rem;
+  & .entry-tag-name {
+    border: dotted;
+    border-width: 2px;
+    padding: 5px 10px 5px 10px;
+    border-radius: 5px;
+    display: inline-block;
+    margin-top: 4px;
+  }
 }
 
 @import "responsive.scss";

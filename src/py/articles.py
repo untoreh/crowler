@@ -137,7 +137,12 @@ def fillarticle(url, data, topic):
         goo = {}
     la = {}
     # first try content
-    final["content"] = tra["text"] or goo["cleaned_text"]
+    if tra["text"]:
+        final["content"] = tra["text"]
+        final["source"] = "tra"
+    else:
+        final["content"] = goo["cleaned_text"]
+        final["source"] = "goo"
     final["content"] = replace_profanity(final["content"])
     final["title"] = tra["title"] or goo.get("title")
     if (

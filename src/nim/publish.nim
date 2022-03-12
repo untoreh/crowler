@@ -17,6 +17,7 @@ import tables
 
 let machinery = pyImport("importlib.machinery")
 privateAccess(LocalitySensitive)
+var pageset = Table[string, bool]()
 
 include "pages"
 
@@ -28,46 +29,37 @@ proc relimport(relpath: string): PyObject =
 # we have to load the config before utils, otherwise the module is "partially initialized"
 let pycfg = relimport("../py/config")
 let ut = relimport("../py/utils")
-const emptyseq: seq[string] = @[]
 
-proc msgArticles(m: int): string =
-    if m != 0:
-        "getting $# articles from $# available ones for topic $#."
-    else:
-        "No articles were found for topic $#."
-
-proc getarticles*(topic: string, n = 3, doresize = false, k = topicData.articles): seq[Article] =
-    let grp = ut.zarr_topic_group(topic)
-    var a: Article
-    let arts = grp[$k]
+proc getArticles*(topic: string, n = 3, pagenum: int = -1): seq[Article] =
+    let
+        grp = ut.zarr_topic_group(topic)
+        arts = grp[$topicData.articles]
     assert pyiszarray(arts)
-    var data: PyObject
-    let curtime = getTime()
-    var parsed: seq[Article]
-    var done: seq[PyObject]
-    let h = arts.shape[0].to(int)
-    let m = min(n, h)
-    logger.log(lvlInfo, msgArticles(m) % [$m, $h, topic])
-    for i in h-m..h-1:
+    var
+        parsed: seq[Article]
+        data: PyObject
+    let
+        total = arts.shape[0].to(int)
+        count = min(n, total)
+        start = total - count
+
+    logger.log(lvlInfo, fmt"Fetching {count}(total:{total}) unpublished articles for {topic}/page:{pagenum}")
+    for i in start..total - 1:
         data = arts[i]
-        a = new(Article)
-        a.title = pyget(data, "title")
-        a.desc = pyget(data, "desc")
-        a.content = pyget(data, "content")
-        a.author = pyget(data, "author")
-        a.pubDate = pydate(data.get("pubDate"), curtime)
-        a.imageUrl = pyget(data, "imageUrl")
-        a.icon = pyget(data, "icon")
-        a.url = pyget(data, "url")
-        a.slug = pyget(data, "slug")
-        a.lang = pyget(data, "lang")
-        a.topic = pyget(data, "topic")
-        a.tags = pyget(data, "tags", emptyseq)
-        parsed.add(a)
-        done.add(data)
-    if k == topicData.articles and doresize:
-        discard ut.save_topic(topic, done)
+        parsed.add(initArticle(data, pagenum))
     return parsed
+
+proc getDoneArticles*(topic: string, pagenum: int): seq[Article] =
+    let
+        grp = ut.zarr_topic_group(topic)
+        arts = pyget(grp, $topicData.done / pagenum.intToStr, PyNone)
+
+    assert not pyisnone(arts)
+
+    logger.log(lvlInfo, fmt"Fetching {arts.shape[0]} published articles for {topic}/{pagenum}")
+    for data in arts:
+        result.add(initArticle(data, pagenum))
+
 
 
 proc ensureDir(dir: string) =
@@ -127,16 +119,21 @@ proc pubInfoPages() =
     pubPageFromTemplate("privacy-policy.html", "Privacy Policy", ppRep)
 
 
-proc pubPage(topic: string, pagenum: string, pagecount: int, ishome=false, finalize=false) =
-    let arts = getarticles(topic, n = pagecount, k = topicData.done, doresize = false)
-    let content = buildShortPosts(arts)
+proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false) =
+    let
+        arts = getDoneArticles(topic, pagenum = pagenum.parseInt)
+        content = buildShortPosts(arts)
+        # if the page is not finalized, it is the homepage
+        footer = pageFooter(topic, pagenum, not finalize)
+        page = buildPage(content = content, pagefooter = footer)
+
+    logger.log(lvlInfo, fmt"Updating page:{pagenum} for topic:{topic} with entries:{pagecount}")
     writeHTML(SITE_PATH / topic,
-                slug=(if ishome: "index"
-                      else: pagenum / "index"),
-                content)
+                slug = (pagenum / "index"),
+                page)
     # if we pass a pagecount we mean to finalize
     if finalize:
-        discard ut.update_page_size(topic, pagenum.parseInt, pagecount, final=true)
+        discard ut.update_page_size(topic, pagenum.parseInt, pagecount, final = true)
 
 proc pubArchivePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
     ## Always update both the homepage and the previous page
@@ -144,6 +141,7 @@ proc pubArchivePages(topic: string, pn: int, newpage: bool, pagecount: var int) 
     var pagenum = pn.intToStr
     # current articles count
     let pn = pagenum.parseInt
+    # the current page is the homepage
     pubPage(topic, pagenum, pagecount)
     # Also build the previous page if we switched page
     if newpage:
@@ -155,46 +153,89 @@ proc pubArchivePages(topic: string, pn: int, newpage: bool, pagecount: var int) 
             let final = pagesize[1].to(bool)
             if not final:
                 pagenum = (pn-2).intToStr
-                pubPage(topic, pagenum, pagecount, finalize=true)
+                pubPage(topic, pagenum, pagecount, finalize = true)
         # now update the just previous page
         pagecount = pages[pn-1][0].to(int)
         pagenum = (pn-1).intToStr
-        pubPage(topic, pagenum, pagecount, finalize=true)
-
-
+        pubPage(topic, pagenum, pagecount, finalize = true)
 
 proc publish(topic: string, num: int = 0) =
     ##  Generates html for a list of `Article` objects and writes to file.
     let (pagenum, newpage) = getSubdirNumber(topic, num)
-    var arts = getarticles(topic, doresize = true)
+    # The subdir (at $pagenum) at this point must be already present on storage
+    var arts = getArticles(topic, pagenum = pagenum)
     let basedir = SITE_PATH / topic / $pagenum
 
-    ensureDir(basedir)
     let lsh = loadLS(topic)
-    var posts: seq[(VNode, string)]
+    var posts: seq[(VNode, Article)]
+    clear(pageset)
     for a in arts:
         if addArticle(lsh, a):
-            posts.add((buildPost(a), a.slug))
+            # make sure article titles/slugs are unique
+            var u = 1
+            var uslug = a.slug
+            var utitle = a.title
+            while uslug in pageset:
+                uslug = fmt"{a.slug}-{u}"
+                utitle = fmt"{a.title} ({u})"
+                u += 1
+            a.py["slug"] = uslug
+            a.slug = uslug
+            a.py["title"] = utitle
+            a.title = utitle
+            posts.add((buildPost(a), a))
+    # update done articles after uniqueness checks
+    let done = collect(for (_, a) in posts: a.py)
+    discard ut.save_done(topic, len(arts), done, pagenum)
+    if newpage:
+        ensureDir(basedir)
+    let newposts = len(posts)
+    if newposts == 0:
+        logger.log(lvlInfo, fmt"No new posts written for topic: {topic}")
+        return
     # only write articles after having saved LSH
     # to avoid duplicates. It is fine to add articles to the set
     # even if we don't publish them, but we never want duplicates
     saveLS(topic, lsh)
-    logger.log(lvlInfo, fmt"Writing {len(posts)} articles for topic: {topic}")
-    for (tree, slug) in posts:
-        writeHtml(basedir, slug, tree)
-
-    let newposts = len(posts)
+    logger.log(lvlInfo, fmt"Writing {newposts} articles for topic: {topic}")
+    for (tree, a) in posts:
+        writeHtml(basedir, a.slug, tree)
+    # after writing the new page, ensure home points to the new page
+    if newpage:
+        ensureHome(topic, pagenum)
     # if its a new page, the page posts count is equivalent to the just published count
-    var pagecount = (if newpage: newposts
-                     else:  ut.get_page_size(topic, pagenum)[0].to(int) + newposts)
+    var pagecount: int
+    pagecount = newposts
+    if not newpage:
+        # add previous published articles
+        let pagesize = ut.get_page_size(topic, pagenum)
+        # In case we didn't save the count, re-read from disk
+        if pyisnone(pagesize):
+            pagecount += len(pageArticles(topic, pagenum))
+        else:
+            pagecount += pagesize[0].to(int)
     discard ut.update_page_size(topic, pagenum, pagecount)
 
     pubArchivePages(topic, pagenum, newpage, pagecount)
 
+proc pubAllPages(topic: string, reset = true) =
+    ## Starting from the homepage, rebuild all archive pages
+    let grp = ut.zarr_topic_group(topic)
+    let topdir = max(grp[$topicData.pages].shape[0].to(int)-1, 0)
+    assert topdir == len(grp[$topicData.done]) - 1
+    block:
+        let pagecount = len(pageArticles(topic, topdir))
+        pubPage(topic, $topdir, pagecount, finalize = false)
+    for n in 0..topdir - 1:
+        let pagenum = n
+        var pagecount = len(pageArticles(topic, pagenum))
+        pubPage(topic, $pagenum, pagecount, finalize = true)
+
 when isMainModule:
     let topic = "vps"
-    # ensureHome(topic)
-    publish(topic)
+    # publish(topic)
+    pubAllPages(topic)
+
 
     # var path = SITE_PATH / "index.html"
     # writeFile(path, &("<!doctype html>\n{buildPost()}"))

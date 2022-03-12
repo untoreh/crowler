@@ -53,7 +53,7 @@ def run_sources_job(topic):
             ut.save_file(results, ut.slugify(kw), root=root)
 
 
-def get_kw_sources(topic, remove=True):
+def get_kw_sources(topic, remove=cfg.REMOVE_SOURCES):
     root = cfg.TOPICS_DIR / topic / "sources"
     for _, _, files in os.walk(root):
         for f in files:
@@ -66,7 +66,7 @@ def get_kw_sources(topic, remove=True):
                 if remove:
                     os.remove(results_path)
                 kws = json.loads(res)
-                if not kws:
+                if not kws and not remove:
                     logger.debug("Removing empty sources file %s.", os.path.basename(f))
                     os.remove(results_path)
                     continue
@@ -98,7 +98,7 @@ def run_parse1_job(topic):
     topic_path = cfg.TOPICS_DIR / Path(topic)
     sa = sf = None
 
-    if args:
+    if arts:
         logger.info("%s: Saving %d articles.", topic, len(arts))
         sa = ut.save_zarr(arts, k=ut.ZarrKey.articles, root=topic_path)
     else:

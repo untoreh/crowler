@@ -3,9 +3,7 @@ import config as cfg
 from retry import retry
 import sys, os
 from multiprocessing.pool import ThreadPool
-import json
 from random import shuffle
-import log
 from log import logger, LoggerLevel
 
 from proxies import set_socket_timeout

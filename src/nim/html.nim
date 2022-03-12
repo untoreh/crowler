@@ -37,15 +37,14 @@ proc slugify*(value: string): string =
     result = re.replace(result, re"[^\w\s-]", "")
     result = re.replace(result, re"[-\s]+", "-").strip(runes = stripchars)
 
-proc buildHead(): VNode =
+proc buildHead*(): VNode =
     buildHtml(head):
         meta(charset = "UTF-8")
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
-        link(rel = "preconnect", href = "https://fonts.googleapis.com")
-        link(rel = "preconnect", href = "https://fonts.gstatic.com", crossorigin = "")
-        link(rel = "stylesheet", href = "https://fonts.googleapis.com/icon?family=Material+Icons")
+        # link(rel = "preconnect", href = "https://fonts.googleapis.com")
+        # link(rel = "preconnect", href = "https://fonts.gstatic.com", crossorigin = "")
+        # link(rel = "stylesheet", href = "https://fonts.googleapis.com/icon?family=Material+Icons")
         link(rel = "stylesheet", href = "/bundle.css")
-        # link(rel="stylesheet", href="src/css/main.css")
         title:
             text "hello"
         meta(name = "description", content = "")
@@ -101,7 +100,7 @@ proc buildDrawer(a: Article; site: VNode): VNode =
 proc buildImgUrl*(url: string; cls = "image-link"): VNode =
     let cache_url = "/img/" & encodeUrl(url)
     buildHtml(a(class = cls, href = url, alt = "post image source")):
-        img(class = "material-icons", src = cache_url, alt = "image", loading = "lazy")
+        img(class = "material-icons", src = cache_url, alt = "", loading = "lazy")
 
 proc icon(name: string; txt = ""; cls = ""): VNode =
     buildHtml(span(class = ("mdc-ripple-surface " & cls))):
@@ -117,7 +116,7 @@ proc buildSearch(withButton = true): VNode =
             buildButton("search", "search-btn", aria_label = "Search",
                     title = "Search across the website.")
 
-proc buildMenuSmall(crumbs: string; topic_uri: Uri): VNode =
+proc buildMenuSmall*(crumbs: string; topic_uri: Uri): VNode =
     buildHtml():
         ul(class = "menu-list mdc-top-app-bar--fixed-adjust"):
             li():
@@ -144,7 +143,7 @@ proc buildLogo(pos: string): VNode =
                 verbatim(LOGO_HTML)
 
 
-proc buildMenu(crumbs: string; topic_uri: Uri): VNode =
+proc buildMenu*(crumbs: string; topic_uri: Uri): VNode =
     buildHtml(header(class = "mdc-top-app-bar menu", id = "app-bar")):
         tdiv(class = "mdc-top-app-bar__row"):
             section(class = "mdc-top-app-bar__section mdc-top-app-bar__section--align-start"):
@@ -200,7 +199,7 @@ proc postTitle(a: Article): VNode =
             buildSocialShare(a)
             tdiv(class = "post-source"):
                 a(href = a.url):
-                    img(src = a.icon, loading = "lazy")
+                    img(src = a.icon, loading = "lazy", alt="")
                     text $a.author
         buildImgUrl(a.imageUrl)
 
@@ -229,13 +228,28 @@ proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): VNode =
             postFooter(a.pubdate)
         buildFooter()
 
-proc pageTitle(title: string; slug: string): VNode =
+proc pageTitle*(title: string; slug: string): VNode =
     buildHtml(tdiv(class = "title-wrap")):
         h1(id = "title"):
             a(href = ($(ROOT / slug))):
                 text title
 
-const pageContent = postContent
+proc pageFooter*(topic: string, pagenum: string, home: bool): VNode =
+    let
+        topic_path = "/" / topic
+        pn = pagenum.parseInt
+    buildHtml(tdiv(class = "post-footer")):
+        nav(class = "page-crumbs")
+        if pn > 0:
+            span(class = "prev-page"):
+                a(href = (topic_path / (pn - 1).intToStr)):
+                    text "Previous page"
+        if not home:
+            span(class = "next-page"):
+                a(href = (topic_path / (pn + 1).intToStr)):
+                    text "Next page"
+
+const pageContent* = postContent
 
 proc writeHtml*(basedir: string; slug: string; data: string | VNode) =
     let path = basedir / slug & ".html"
@@ -246,7 +260,9 @@ proc buildPost*(a: Article): VNode =
         buildHead()
         buildBody(a)
 
-proc buildPage*(title: string; content: string; slug: string; ): VNode =
+type Nil = type(nil)
+
+proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode = nil): VNode =
     const crumbs = "/ > ..."
     const topic_uri = parseUri("/")
     buildHtml(html):
@@ -258,14 +274,13 @@ proc buildPage*(title: string; content: string; slug: string; ): VNode =
                 if title != "":
                     pageTitle(title, slug)
                 pageContent(content)
+                if not pagefooter.isNil():
+                    pageFooter
             buildFooter()
 
-proc buildPage*(title: string; content: string): VNode =
+proc buildPage*(title: string; content: string, pagefooter: VNode = nil): VNode =
     let slug = slugify(title)
-    buildPage(title = title, content, slug)
+    buildPage(title = title, content, slug, pagefooter)
 
-proc buildPage*(content: string): VNode =
-    buildPage(title = "", content, slug = "")
-
-when isMainModule:
-    var path = joinPath(SITE_PATH, "index.html")
+proc buildPage*(content: string, pagefooter: VNode = nil): VNode =
+    buildPage(title = "", content, slug = "", pagefooter)

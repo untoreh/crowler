@@ -24,9 +24,11 @@ type
         slug*: string
         lang*: string
         topic*: string
+        page*: int ## what page does this article belong to
         tags*: seq[string]
+        py*: PyObject
 
-# proc initArticle()
+const emptyseq*: seq[string] = @[]
 
 # https://github.com/yglukhov/nimpy/issues/164
 let
@@ -37,6 +39,10 @@ let
     PyDateTimeClass = pyimport("datetime").datetime
     PyStrClass = builtins.str.getattr("__class__")
     PyZArray = za.getAttr("Array")
+    PyNone* = builtins.None
+
+proc pytype*(py: PyObject): string =
+    builtins.type(py).getattr("__name__").to(string)
 
 proc pyisbool*(py: PyObject): bool {.exportpy.} =
     return builtins.isinstance(py, PyBoolClass).to(bool)
@@ -129,6 +135,9 @@ proc pysome*(pys: varargs[PyObject], default = new(PyObject)): PyObject =
             return py
     raise e
 
+proc len*(py: PyObject): int =
+    builtins.len(py).to(int)
+
 proc pyget*[T](py: PyObject, k: string, def: T = ""): T =
     let v = py.get(k)
     if pyisnone(v):
@@ -141,8 +150,22 @@ type
         articles = "articles",
         feeds =  "feeds",
         done = "done"
-    # topicData = object
-    #     case kind: topicDataType
-    #     of articles: articles: string
-    #     of feeds: feeds: string
-    #     of done: done: string
+        pages = "pages"
+
+proc initArticle*(data: PyObject, pagenum: int): Article =
+    let a = new(Article)
+    a.title = pyget(data, "title")
+    a.desc = pyget(data, "desc")
+    a.content = pyget(data, "content")
+    a.author = pyget(data, "author")
+    a.pubDate = pydate(data.get("pubDate"), getTIme())
+    a.imageUrl = pyget(data, "imageUrl")
+    a.icon = pyget(data, "icon")
+    a.url = pyget(data, "url")
+    a.slug = pyget(data, "slug")
+    a.lang = pyget(data, "lang")
+    a.topic = pyget(data, "topic")
+    a.page = pyget(data, "page", pagenum)
+    a.tags = pyget(data, "tags", emptyseq)
+    a.py = data
+    a

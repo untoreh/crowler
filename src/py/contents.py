@@ -18,8 +18,7 @@ LAST_SOURCE = None
 FEEDFINDER_DATA = dict()
 
 # overwrite feedfinder to accept raw data
-setattr(ff2.FeedFinder, "get_feed", lambda url: FEEDFINDER_DATA.pop(url, ""))
-
+setattr(ff2.FeedFinder, "get_feed", lambda _, url: FEEDFINDER_DATA.pop(url, ""))
 
 def parsesource(url, topic):
     global FEEDFINDER_DATA, LAST_SOURCE

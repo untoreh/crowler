@@ -6,6 +6,7 @@ import pycurl
 from trafilatura import settings as traset, downloads as tradl
 from user_agent import generate_user_agent
 import copy
+import json
 
 if os.getenv("PYTHON_NO_WARNINGS"):
     warnings.simplefilter("ignore")
@@ -59,6 +60,7 @@ KW_HISTORY = "history"
 KW_SAMPLE_SIZE = 10
 # how many source links to process for extracting feeds and articles
 SRC_MAX_TRIES = 5
+REMOVE_SOURCES = json.loads(os.getenv("REMOVE_SOURCES", "true").lower())
 REQ_CACHE_DIR = DATA_DIR / "cache"
 
 DEFAULT_LANG = "en"

@@ -114,7 +114,13 @@ def run_parse1_job(topic):
 
 
 def get_feeds(topic, n=3, resize=True):
-    z = ut.load_zarr(k=ut.ZarrKey.feeds, root=cfg.TOPICS_DIR / topic)
+    while True:
+        z = ut.load_zarr(k=ut.ZarrKey.feeds, root=cfg.TOPICS_DIR / topic)
+        if len(z) > 0:
+            break
+        else:
+            logger.info("No feeds found to parse for topic %s, searching new ones", topic)
+            run_parse1_job(topic)
     if len(z) < n:
         if resize:
             z.resize(0)
@@ -131,6 +137,9 @@ def run_parse2_job(topic):
     Run one iteration of the job to find articles from feed links.
     """
     feed_links = get_feeds(topic, 3)
+    if not feed_links:
+        logger.warning("Couldn't find feeds for topic %s", topic)
+        return None
     logger.info("Search %d feeds for articles...", len(feed_links))
     articles = cnt.fromfeeds(feed_links)
     a = None
@@ -143,6 +152,9 @@ def run_parse2_job(topic):
         logger.info("%s: No articles were found queued.", topic)
     return a
 
+def run_server(topics):
+    while True:
+        pass
 
 JOBS_MAP = {
     "sources": run_sources_job,
@@ -153,11 +165,14 @@ JOBS_MAP = {
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-job", help="What kind of job to perform", default="parse1")
-    parser.add_argument("-topic", help="The topic to fetch articles for.", default="")
+    parser.add_argument("-topics", help="The topics to fetch articles for.", default="")
     parser.add_argument("-workers", help="How many workers.", default=cfg.POOL_SIZE)
+    parser.add_argument("-server", help="Start the server.", default=cfg.POOL_SIZE)
     args = parser.parse_args()
     cfg.POOL_SIZE = args.workers
-    if args.topic:
-        JOBS_MAP[args.job](args.topic)
+    topics = args.topics.split(",")
+    if topics:
+        for tp in topics:
+            JOBS_MAP[args.job](tp)
     else:
-        raise ValueError("Pass a `-topic` as argument to run a job.")
+        raise ValueError("Pass a `-topics` as argument to run a job.")

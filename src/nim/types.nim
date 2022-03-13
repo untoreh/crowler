@@ -138,6 +138,9 @@ proc pysome*(pys: varargs[PyObject], default = new(PyObject)): PyObject =
 proc len*(py: PyObject): int =
     builtins.len(py).to(int)
 
+proc isa*(py: PyObject, tp: PyObject): bool =
+    builtins.isinstance(py,tp).to(bool)
+
 proc pyget*[T](py: PyObject, k: string, def: T = ""): T =
     let v = py.get(k)
     if pyisnone(v):

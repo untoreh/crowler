@@ -32,7 +32,7 @@ let ut = relimport("../py/utils")
 
 proc getArticles*(topic: string, n = 3, pagenum: int = -1): seq[Article] =
     let
-        grp = ut.zarr_topic_group(topic)
+        grp = ut.topic_group(topic)
         arts = grp[$topicData.articles]
     assert pyiszarray(arts)
     var
@@ -51,10 +51,11 @@ proc getArticles*(topic: string, n = 3, pagenum: int = -1): seq[Article] =
 
 proc getDoneArticles*(topic: string, pagenum: int): seq[Article] =
     let
-        grp = ut.zarr_topic_group(topic)
+        grp = ut.topic_group(topic)
         arts = pyget(grp, $topicData.done / pagenum.intToStr, PyNone)
 
-    assert not pyisnone(arts)
+    if pyisnone(arts):
+        return @[]
 
     logger.log(lvlInfo, fmt"Fetching {arts.shape[0]} published articles for {topic}/{pagenum}")
     for data in arts:
@@ -121,9 +122,13 @@ proc pubInfoPages() =
 proc pageSize(topic: string, pagenum: int): int =
     let py = ut.get_page_size(topic, pagenum)
     if pyisnone(py):
-        error:
-            fmt"Page number: {pagenum} not found for topic: {topic} ."
+        error fmt"Page number: {pagenum} not found for topic: {topic} ."
+        return 0
     py[0].to(int)
+
+proc curPageNumber(topic: string): int =
+    return ut.get_top_page(topic).to(int)
+    # return getSubdirNumber(topic, curdir)
 
 proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, with_arts=false) =
     let
@@ -147,7 +152,7 @@ proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, w
 
 proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
     ## Always update both the homepage and the previous page
-    let pages = ut.zarr_topic_group(topic)["pages"]
+    let pages = ut.topic_group(topic)["pages"]
     var pagenum = pn.intToStr
     # current articles count
     let pn = pagenum.parseInt
@@ -169,9 +174,26 @@ proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
         pagenum = (pn-1).intToStr
         pubPage(topic, pagenum, pagecount, finalize = true)
 
-proc publish(topic: string, num: int = 0) =
+# proc resetPages(topic: string) =
+#     ## Takes all the published articles in `done`
+#     ## and resets their page numbers
+#     let done = ut.topic_group(topic)[$topicData.done]
+#     assert isa(done, ut.za.Group)
+#     let topdir = len(done)
+#     if topdir == 0:
+#         return
+#     var i = 0
+#     var newdone = newSeq[PyObject]()
+#     for k in done.keys()
+#         let pagedone = done[k]
+#         newdone.add()
+
+proc publish(topic: string) =
     ##  Generates html for a list of `Article` objects and writes to file.
-    let (pagenum, newpage) = getSubdirNumber(topic, num)
+    var pagenum = curPageNumber(topic)
+    let newpage = pageSize(topic, pagenum) > cfg.MAX_DIR_FILES
+    if newpage:
+        pagenum += 1
     # The subdir (at $pagenum) at this point must be already present on storage
     var arts = getArticles(topic, pagenum = pagenum)
     let basedir = SITE_PATH / topic / $pagenum
@@ -220,19 +242,28 @@ proc publish(topic: string, num: int = 0) =
         # add previous published articles
         let pagesize = ut.get_page_size(topic, pagenum)
         # In case we didn't save the count, re-read from disk
-        if pyisnone(pagesize):
-            pagecount += len(pageArticles(topic, pagenum))
-        else:
+        if not pyisnone(pagesize):
             pagecount += pagesize[0].to(int)
     discard ut.update_page_size(topic, pagenum, pagecount)
 
     finalizePages(topic, pagenum, newpage, pagecount)
 
-proc pubAllPages(topic: string, reset = true) =
+proc resetTopic(topic: string) =
+    discard ut.reset_topic(topic)
+    saveLS(topic, initLS())
+
+proc pubAllPages(topic: string, clear = true) =
     ## Starting from the homepage, rebuild all archive pages, and their articles
-    let grp = ut.zarr_topic_group(topic)
+    let grp = ut.topic_group(topic)
     let topdir = max(grp[$topicData.pages].shape[0].to(int)-1, 0)
-    assert topdir == len(grp[$topicData.done]) - 1
+    let numdone = max(len(grp[$topicData.done]) - 1, 0)
+    assert topdir == numdone , fmt"{topdir}, {numdone}"
+    if clear:
+        for d in walkDirs(SITE_PATH / topic / "*"):
+            removeDir(d)
+        let topic_path = SITE_PATH / topic
+        for n in 0..topdir:
+            ensureDir(topic_path / $n)
     block:
         let pagecount = pageSize(topic, topdir)
         pubPage(topic, $topdir, pagecount, finalize = false, with_arts=true)
@@ -240,11 +271,24 @@ proc pubAllPages(topic: string, reset = true) =
         let pagenum = n
         var pagecount = pageSize(topic, n)
         pubPage(topic, $pagenum, pagecount, finalize = true, with_arts=true)
+    ensureHome(topic, topdir)
+
+proc refreshPageSizes(topic: string) =
+    let grp = ut.topic_group(topic)
+    let donearts = grp[$topicData.done]
+    assert isa(donearts, ut.za.Group)
+    assert len(donearts) == len(grp[$topicData.pages])
+    let topdir = len(donearts) - 1
+    for pagenum in countup(0, topdir - 1):
+        discard ut.update_page_size(topic, pagenum, len(donearts[$pagenum]), final = true)
+    discard ut.update_page_size(topic, topdir, len(donearts[$topdir]), final = false)
 
 when isMainModule:
     let topic = "vps"
-    # publish(topic)
-    pubAllPages(topic)
+    # refreshPageSizes(topic)
+    publish(topic)
+    # assert not pyisnone(arts)
+    # pubAllPages(topic, clear=true)
 
 
     # var path = SITE_PATH / "index.html"

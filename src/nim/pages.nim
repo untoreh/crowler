@@ -46,14 +46,18 @@ proc ensureHome(topic: string, pagenum: int) =
     else:
         createSymlink(home_index, target_home_link)
 
-proc getSubdirNumber(topic: string, iter: int): (int, bool) =
+proc getSubdirNumber(topic: string, iter: int = -1): (int, bool) =
     let topic_path = SITE_PATH / topic
-    # we are only interested in the highest numbered directory
-    let dirs = getSubDirs(topic_path)
-    if len(dirs) == 0:
-        ensureHome(topic, 0)
-        return (0, true)
-    let topdir = dirs.high
+    var topdir: int
+    if iter < 0:
+        # we are only interested in the highest numbered directory
+        let dirs = getSubDirs(topic_path)
+        if len(dirs) == 0:
+            ensureHome(topic, 0)
+            return (0, true)
+        topdir = dirs.high
+    else:
+        topdir = iter
     # NOTE: we don't consider how many articles are in a batch
     # so this is a soft limit
     if countDirFiles(topic_path / $topdir) < MAX_DIR_FILES:

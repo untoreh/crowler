@@ -55,6 +55,7 @@ DATA_DIR = Path(os.path.realpath("../../data"))
 assert isdir(Path(dirname(DATA_DIR)) / ".venv")
 
 TOPICS_DIR = DATA_DIR / "topics"
+TOPICS_IDX = TOPICS_DIR / "index"
 KW_HISTORY = "history"
 # how many keywords to try for extracting source links from search engines
 KW_SAMPLE_SIZE = 10

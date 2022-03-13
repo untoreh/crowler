@@ -41,9 +41,9 @@ proc buildHead*(): VNode =
     buildHtml(head):
         meta(charset = "UTF-8")
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
-        # link(rel = "preconnect", href = "https://fonts.googleapis.com")
-        # link(rel = "preconnect", href = "https://fonts.gstatic.com", crossorigin = "")
-        # link(rel = "stylesheet", href = "https://fonts.googleapis.com/icon?family=Material+Icons")
+        link(rel = "preconnect", href = "https://fonts.googleapis.com")
+        link(rel = "preconnect", href = "https://fonts.gstatic.com", crossorigin = "")
+        link(rel = "stylesheet", href = "https://fonts.googleapis.com/icon?family=Material+Icons")
         link(rel = "stylesheet", href = "/bundle.css")
         title:
             text "hello"
@@ -190,7 +190,7 @@ proc buildFooter(): VNode =
 
 proc postTitle(a: Article): VNode =
     buildHtml(tdiv(class = "title-wrap")):
-        h1(class = "post-title", id = "1"):
+        h1(class = "post-title", id = "main"):
             a(href = a.slug):
                 text a.title
         tdiv(class = "post-info"):

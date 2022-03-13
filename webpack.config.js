@@ -7,14 +7,33 @@ module.exports = [
     entry: ["./css/app.scss", "./js/app.js"],
     mode: "production",
     devServer: {
-      static: "site/",
+      static: {
+        directory: "site/",
+        staticOptions: {
+          extensions: ["html"],
+        },
+      },
       // see https://stackoverflow.com/questions/59247647/webpack-dev-server-not-recompiling-js-files-and-scss-files
       hot: true,
+      setupMiddlewares: (middlewares, devServer) => {
+        if (!devServer) {
+          throw new Error("webpack-dev-server is not defined");
+        }
+
+        // middlewares.unshift({
+        //     name: "ok",
+        //     middleware: (req, res) => {
+        //     console.log(req["_parsedUrl"].pathname.split(".").pop())
+        //     res.send("Done")
+        // }});
+
+        return middlewares;
+      },
     },
     watchOptions: {
-        aggregateTimeout: 300,
-        poll: true,
-        ignored: /node_modules/
+      aggregateTimeout: 300,
+      poll: true,
+      ignored: /node_modules/,
     },
     // devtool: false,
     // mode: "development",

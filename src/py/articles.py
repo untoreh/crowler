@@ -9,6 +9,7 @@ import warnings
 import re
 import numpy as np
 from tagging import rake
+from urllib3.util.url import Url, parse_url
 
 # NOTE: Check scikit version from time to time
 with warnings.catch_warnings():
@@ -125,6 +126,18 @@ def test_profanity(content):
         pp4,
     )
 
+def abs_url(url: str, baseurl) -> str:
+    if url and baseurl:
+        u = parse_url(url)._asdict()
+        if not u["host"]:
+            b = parse_url(baseurl)
+            u["scheme"] = b.scheme
+            u["host"] = b.host
+            u["auth"] = b.auth
+            u["port"] = b.port
+            return str(Url(**u))
+    return url
+
 def fillarticle(url, data, topic):
     """Using `trafilatura`, `goose` and `lassie` machinery to parse article data."""
     final = dict()
@@ -160,13 +173,14 @@ def fillarticle(url, data, topic):
     )
     final["pubDate"] = tra["date"] or goo.get("publish_date")
     la = lassie_img(url, data, final)
+
+    url = final["url"] = tra["url"] or goo["meta"]["canonical"] or la["url"]
     if not final["icon"]:
-        final["icon"] = goo["meta"]["favicon"]
+        final["icon"] = abs_url(goo["meta"]["favicon"], url)
     if not final["imageUrl"] or final["imageUrl"] == final["icon"]:
-        final["imageUrl"] = goo["image"] or goo["opengraph"].get("image")
+        final["imageUrl"] = abs_url(goo["image"] or goo["opengraph"].get("image"), url)
         if final["imageUrl"] == final["icon"]:
             final["imageUrl"] = ""
-    final["url"] = tra["url"] or goo["meta"]["canonical"] or la["url"]
     final["lang"] = goo["meta"]["lang"]
     if not final["lang"]:
         l = la.get("locale", "")

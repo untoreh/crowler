@@ -28,7 +28,7 @@ proc relimport(relpath: string): PyObject =
 
 # we have to load the config before utils, otherwise the module is "partially initialized"
 let pycfg = relimport("../py/config")
-let ut = relimport("../py/utils")
+let ut* = relimport("../py/utils")
 
 proc getArticles*(topic: string, n = 3, pagenum: int = -1): seq[Article] =
     let
@@ -141,7 +141,7 @@ proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, w
     logger.log(lvlInfo, fmt"Updating page:{pagenum} for topic:{topic} with entries:{pagecount}")
     let topic_path = SITE_PATH / topic
     writeHTML(topic_path,
-                slug = (pagenum / "index"),
+                slug = pagenum / "index",
                 page)
     # if we pass a pagecount we mean to finalize
     if finalize:
@@ -286,9 +286,9 @@ proc refreshPageSizes(topic: string) =
 when isMainModule:
     let topic = "vps"
     # refreshPageSizes(topic)
-    publish(topic)
+    # publish(topic)
     # assert not pyisnone(arts)
-    # pubAllPages(topic, clear=true)
+    pubAllPages(topic, clear=true)
 
 
     # var path = SITE_PATH / "index.html"

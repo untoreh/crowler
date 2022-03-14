@@ -94,7 +94,7 @@ def run_parse1_job(topic):
         logger.warning("Couldn't find sources for topic %s.", topic)
         return None
 
-    arts, feeds = cnt.fromsources(sources)
+    arts, feeds = cnt.fromsources(sources, topic)
     topic_path = cfg.TOPICS_DIR / Path(topic)
     sa = sf = None
 

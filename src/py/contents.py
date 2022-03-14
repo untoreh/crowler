@@ -53,7 +53,7 @@ def parsefeed(f):
     return fep.parse(ut.fetch_data(f))
 
 
-def fromsources(sources, n=cfg.POOL_SIZE, use_proxies=True):
+def fromsources(sources, topic, n=cfg.POOL_SIZE, use_proxies=True):
     """Create list of feeds from a subset of links found in the source file, according to SRC_SAMPLE_SIZE."""
     global FEEDS, ARTICLES
     FEEDS = []
@@ -65,7 +65,6 @@ def fromsources(sources, n=cfg.POOL_SIZE, use_proxies=True):
     with ThreadPool(processes=n) as pool:
         for entry in sources:
             url = entry.get("url")
-            topic = entry.get("topic")
             if not url:
                 continue
             logger.info("Fetching articles/feeds from %s", url)

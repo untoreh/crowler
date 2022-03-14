@@ -31,6 +31,9 @@ def isrelevant(title, body):
     """String BODY is relevant if it contains at least one word from TITLE."""
     if not title or not body:
         return False
+    # only allow contents that don't start with special chars to avoid spam/code blocks
+    if re.match(r"^[^a-zA-Z]", body):
+        return False
     t_words = set(title.split())
     for w in ut.splitStr(body):
         if w in t_words:
@@ -70,12 +73,13 @@ def lassie_img(url, data, final):
     return la
 
 
-def trafi(url, data=None):
+def trafi(url, data=None, precise=False):
     if data is None:
         data = ut.fetch_data(url)
     return _tra.bare_extraction(
         data,
         url,
+        favor_precision=precise,
         include_comments=False,
         include_images=True,
         include_formatting=True,
@@ -156,13 +160,20 @@ def fillarticle(url, data, topic):
     else:
         final["content"] = goo["cleaned_text"]
         final["source"] = "goo"
-    final["content"] = replace_profanity(final["content"])
     final["title"] = tra["title"] or goo.get("title")
+    final["content"] = replace_profanity(final["content"])
     if (
         not final["content"]
         or not isrelevant(final["title"], final["content"])
     ):
         return {}
+    # double new lines for better formatting
+    final["content"] = final["content"].replace("\n", "\n\n")
+    # clean repeated charaters
+    final["content"] = re.sub(r"[^a-zA-Z0-9\n\s]{3,}|(.\s+)\1{2,}", "", final["content"])
+    # compact whitespace
+    final["content"] = re.sub(r" {2,}", "", final["content"])
+
     final["slug"] = ut.slugify(final["title"])
     final["desc"] = tra["description"] or goo.get("meta", {}).get("description")
     final["author"] = (

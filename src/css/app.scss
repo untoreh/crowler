@@ -12,6 +12,7 @@
 
 body {
   min-height: 100vh;
+  white-space: pre-line;
 }
 
 body,
@@ -27,6 +28,10 @@ header {
 
 .wsl-logo {
   width: 100%;
+}
+
+#app-bar {
+  white-space: normal;
 }
 
 header,
@@ -106,14 +111,25 @@ main {
   border-radius: 0 4px 4px 0;
   padding: 0.5rem;
   height: 100%;
-  & img {
-    max-width: 2rem;
-    max-height: 2rem;
-    padding: 0 1rem 0 1rem;
+  line-height: 2rem;
+  & a {
+    text-decoration: none;
+    text-align: center;
+    display: inline-block;
+    & img {
+      max-width: 2rem;
+      max-height: 2rem;
+      text-decoration: none;
+      text-align: center;
+      display: inline;
+      vertical-align: middle;
+      padding: 0 0.5rem;
+    }
   }
 }
 footer {
   padding: 0.25rem 1rem 0.25rem 1rem;
+  white-space: normal;
 }
 
 .site-footer {

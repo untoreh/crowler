@@ -24,6 +24,8 @@ const LOGO_DARK_HTML = readFile(LOGO_DARK_PATH)
 const LOGO_DARK_SMALL_HTML = readFile(LOGO_DARK_SMALL_PATH)
 const LOGO_DARK_ICON_HTML = readFile(LOGO_DARK_ICON_PATH)
 const ROOT = initUri() / "/"
+const preline = [(white_space, "pre-line")]
+let preline_style = style(preline)
 
 template kxi*(): int = 0
 template addEventHandler*(n: VNode; k: EventKind; action: string; kxi: int) =
@@ -100,7 +102,8 @@ proc buildDrawer(a: Article; site: VNode): VNode =
 proc buildImgUrl*(url: string; cls = "image-link"): VNode =
     let cache_url = "/img/" & encodeUrl(url)
     buildHtml(a(class = cls, href = url, alt = "post image source")):
-        img(class = "material-icons", src = cache_url, alt = "", loading = "lazy")
+            # the `alt="image"` is used to display the material-icons placeholder
+        img(class = "material-icons", src = cache_url, alt = "image", loading = "lazy")
 
 proc icon*(name: string; txt = ""; cls = ""): VNode =
     buildHtml(span(class = ("mdc-ripple-surface " & cls))):
@@ -199,7 +202,7 @@ proc postTitle(a: Article): VNode =
             buildSocialShare(a)
             tdiv(class = "post-source"):
                 a(href = a.url):
-                    img(src = a.icon, loading = "lazy", alt = "")
+                    img(src = a.icon, loading = "lazy", alt = "web", class="material-icons")
                     text $a.author
         buildImgUrl(a.imageUrl)
 
@@ -219,7 +222,7 @@ proc postFooter(pubdate: Time): VNode =
 proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): VNode =
     let crumbs = toUpper(&"/ {a.topic} > ...")
     let topic_uri = parseUri("/" & a.topic)
-    buildHtml(body(class = "")):
+    buildHtml(body(class = "", style=preline_style)):
         buildMenu(crumbs, topic_uri)
         buildMenuSmall(crumbs, topic_uri)
         main(class = "mdc-top-app-bar--fixed-adjust"):
@@ -267,7 +270,7 @@ proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode 
     const topic_uri = parseUri("/")
     buildHtml(html):
         buildHead()
-        body(class = ""):
+        body(class = "", style=preline_style):
             buildMenu(crumbs, topic_uri)
             buildMenuSmall(crumbs, topic_uri)
             main(class = "mdc-top-app-bar--fixed-adjust"):

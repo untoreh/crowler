@@ -89,9 +89,10 @@ proc articleExcerpt(a: Article): string =
         let runesize = runeLenAt(a.content, maxlen)
         return a.content[0..maxlen+runesize] & "..."
 
-proc buildShortPosts*(arts: seq[Article]): string =
+proc buildShortPosts*(arts: seq[Article], homepage=false): string =
+    var url: string
     for a in arts:
-        let url = "/" / $a.page / a.slug
+        url = "/" / $a.topic / $a.page / a.slug
         let p = buildHtml(article(class = "entry")):
             h2(class = "entry-title", id = a.slug):
                 a(href = url):

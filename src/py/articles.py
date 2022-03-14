@@ -26,13 +26,16 @@ gs = Goose()
 if not hasattr(nltk, "punkt"):
     nltk.download("punkt")
 
-
+rx_nojs = r"(avail|enable)?(?i)(javascript|js)\s*(?i)(avail|enable)?"
 def isrelevant(title, body):
     """String BODY is relevant if it contains at least one word from TITLE."""
     if not title or not body:
         return False
     # only allow contents that don't start with special chars to avoid spam/code blocks
     if re.match(r"^[^a-zA-Z]", body):
+        return False
+    # skip error pages
+    if re.match(rx_nojs, title) or re.match(rx_nojs, body):
         return False
     t_words = set(title.split())
     for w in ut.splitStr(body):

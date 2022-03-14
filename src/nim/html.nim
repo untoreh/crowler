@@ -263,11 +263,10 @@ proc buildPost*(a: Article): VNode =
         buildHead()
         buildBody(a)
 
-type Nil = type(nil)
-
-proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode = nil): VNode =
-    const crumbs = "/ > ..."
-    const topic_uri = parseUri("/")
+proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode = nil, topic = ""): VNode =
+    let crumbs = if topic != "": fmt"/ > {topic} / >"
+                 else: "/ > ..."
+    let topic_uri = parseUri("/")
     buildHtml(html):
         buildHead()
         body(class = "", style=preline_style):

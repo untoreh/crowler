@@ -25,3 +25,5 @@ const
     LOGO_DARK_ICON_PATH* = os.joinPath(LOGO_DIR, "logo-icon-dark.svg")
     MAX_DIR_FILES* = 10
     ARTICLE_EXCERPT_SIZE* = 300 ## Size (in bytes) of the excerpt
+    DB_SIZE* = 1024 * 1024 * 1024
+    DB_PATH* = DATA_PATH / "translate.db"

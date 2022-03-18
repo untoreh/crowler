@@ -4,22 +4,65 @@ import strutils
 import strformat
 import os
 import tables
+import sugar
+import sets
+import sequtils
 
-type service = enum
-    deep_translator = "deep_translator"
+import quirks
+import translate_types
+import translate_db
 
-const default_service = deep_translator
 let pybi = pyBuiltinsModule()
+let pytypes = pyImport("types")
 
-type langPair = tuple[src: string, trg: string]
-type tFunc = proc(t: string) : string
-type tTable = Table[string, tFunc]
-type Translator = ref object
-        py: PyObject
-        tr: tTable
-        apis:
-        name: service
 
+proc `$`(t: Translator): string =
+    let langs = collect(for k in keys(t.tr): k)
+    fmt"Translator: {t.name}, to langs ({len(langs)}): {langs}"
+
+proc initLang(name: string, code: string): Lang =
+    result.name = name
+    result.code = code
+
+proc to_tlangs(langs: openArray[(string, string)]): HashSet[Lang] =
+    for (name, code) in langs:
+        result.incl(initLang(name, code))
+
+const SLang = initLang("English", "en")
+const TLangs = to_tlangs [
+    ("German", "de"),
+    ("Italian", "it"),
+    ("Mandarin Chinese", "zh"),
+    ("Spanish", "es"),
+    ("Hindi", "hi"),
+    ("Arabic", "ar"),
+    ("Portuguese", "pt"),
+    ("Bengali", "bn"),
+    ("Russian", "ru"),
+    ("Japanese", "ja"),
+    ("Punjabi", "pa"),
+    ("Javanese", "jw"),
+    ("Vietnamese", "vi"),
+    ("French", "fr"),
+    ("Urdu", "ur"),
+    ("Turkish", "tr"),
+    ("Polish", "pl"),
+    ("Ukranian", "uk"),
+    ("Dutch", "nl"),
+    ("Greek", "el"),
+    ("Swedish", "sv"),
+    ("Zulu", "zu"),
+    ("Romanian", "ro"),
+    ("Malay", "ms"),
+    ("Korean", "ko"),
+    ("Thai", "th"),
+    ("Filipino", "tl")
+    ]
+
+const skip_class = to_hashset []
+let transforms = Table[VNodeKind, proc(VNode, string, string, langPair)]
+const excluded_dirs = to_hashset []
+const included_dirs = to_hashset []
 
 proc ensurePy(srv: service): PyObject =
     try:
@@ -35,13 +78,28 @@ proc ensurePy(srv: service): PyObject =
         else:
             raise e
 
-let tr = ensurePy(default_service)
-
-proc initTranslator(srv: service) =
+proc initTranslator(srv: service = default_service, provider: string = "", source: Lang = SLang,
+        targets: HashSet[Lang] = TLangs): Translator =
+    let py = ensurePy(srv)
+    new(result)
     case srv:
         of deep_translator:
-            for cls in tr.apis:
-
-
+            result.py = py
+            result.apis = toHashSet(["GoogleTranslator", "LingueeTranslator",
+                    "MyMemoryTranslator"]) # "single_detection", "batch_detection"
+            result.name = srv
+            let prov = if provider == "": "GoogleTranslator" else: provider
+            assert prov in result.apis
+            let provFn = py.getattr(prov)
+            let src = source.code
+            let cls = provFn()
+            for l in targets:
+                for suplang in cls.languages.values():
+                    let sl = suplang.to(string)
+                    if l.code in sl:
+                        result.tr[(src, sl)] = provFn(source = src, target = sl)
+    result
 
 when isMainModule:
+    echo initTranslator()
+    # echo r

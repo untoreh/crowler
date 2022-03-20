@@ -9,6 +9,7 @@ import sugar
 import hashes
 import sets
 import frosty/streams
+import utils
 
 {.experimental: "notnil".}
 
@@ -34,7 +35,7 @@ const
 
 let trans = new(LRUTrans)
 
-proc transOpenDB(t=trans) =
+proc transOpenDB(t = trans) =
     t.db = openDatabase(cfg.DB_PATH, maxFileSize = MAX_DB_SIZE, maxcollections = MAX_COLLECTIONS)
 
 transOpenDB()
@@ -141,10 +142,13 @@ proc adjustSize(ct: CollectionTransaction, thisNodeKey: int64, v: string) =
     if newSize != collSize:
         ct[sizeKey] = newSize
 
-proc `[]=`*(c: Collection not nil, k: string, v: string) =
+template `[]=`*(c, k: string, v) =
+        c[hash(k)] = v
+
+proc `[]=`*(c: Collection not nil, k: Hash, v: string) =
     c.inTransaction do (ct: CollectionTransaction):
         let
-            thisKey = hash(k).int64
+            thisKey = k.int64
             headNodeKey = ct[headKey].int64
             headNode = thaw[trNode](ct[headNodeKey])
 
@@ -164,12 +168,15 @@ proc `[]=`*(c: Collection not nil, k: string, v: string) =
             ct[headKey] = thisKey
         ct.commit()
 
-proc `[]`*(c: Collection not nil, k: string): string =
+template `[]`*(c, k: string) =
+    c[hash(k)]
+
+proc `[]`*(c: Collection not nil, k: Hash): string =
     var o: string
     c.inTransaction do (ct: CollectionTransaction):
         var thisNode: trNode
         let
-            thisKey = hash(k).int64
+            thisKey = k.int64
             headNodeKey = ct[headKey]
             thisDataOut = ct[thisKey]
         if thisDataOut.asData.len != 0:
@@ -189,15 +196,21 @@ proc `[]`*(c: Collection not nil, k: string): string =
         ct.commit()
     return o
 
-proc get*(c: CollectionNotNil, k: string, def: string): string =
+template get*(c, k: string, def) =
+    c.get(hash(k))
+
+proc get*(c: CollectionNotNil, k: Hash, def: string): string =
     result = c[k]
     if result == "":
         result = def
 
-proc del(c: CollectionNotNil, k: string) =
+template del*(c, k: string) =
+    c.del(hash(k))
+
+proc del*(c: CollectionNotNil, k: Hash) =
     c.inTransaction do (ct: CollectionTransaction):
         let
-            thisKey = hash(k).int64
+            thisKey = k.int64
             headNodeKey = ct[headKey].asInt64
             tailNodeKey = ct[tailKey].asInt64
             thisDataOut = ct[thisKey.asdata]
@@ -247,14 +260,14 @@ template cursIter(c: Collection, what: untyped): untyped =
                 continue
             yield what
 
-iterator keys(c: Collection not nil): int64 =
+iterator keys*(c: Collection not nil): int64 =
     cursIter(c, curs.key.int64)
 
-iterator values(c: Collection not nil): trNode =
+iterator values*(c: Collection not nil): trNode =
     cursIter(c, thaw[trNode](curs.value))
 
 
-iterator items(c: Collection not nil): (int64, trNode) =
+iterator items*(c: Collection not nil): (int64, trNode) =
     cursIter(c, (curs.key.int64, thaw[trNode](curs.value)))
 
 proc clear*(c: Collection not nil) =
@@ -264,13 +277,13 @@ proc clear*(c: Collection not nil) =
             ct.del(k.int64)
         ct.commit()
 
-proc sizeof(c: Collection not nil): int =
+proc sizeof*(c: Collection not nil): int =
     var size: int
     c.inSnapshot do (cs: CollectionSnapshot):
         size = cs[sizeKey].int
     return size
 
-proc del(t: LRUTrans = trans, pair: langPair) =
+proc del*(t: LRUTrans = trans, pair: langPair) =
     ## NOTE: deleting collections requires DB reopen
     t[pair].inTransaction do (ct: CollectionTransaction):
         ct.deleteCollection()
@@ -279,4 +292,15 @@ proc del(t: LRUTrans = trans, pair: langPair) =
     t.db.close
     transOpenDB(t)
 
+proc setFromDB*(pair: langPair, el: auto): (bool, int) =
+    let
+        txt = getText(el)
+        k = hash(txt)
+    if trans[pair].haskey k:
+        setText(el, trans[pair][k])
+        (true, txt.len)
+    else:
+        (false, txt.len)
 
+# proc setToDB*(tr=trans, force=false, nojson=false) =
+#     if length(tr_)

@@ -1,7 +1,14 @@
-import times
-import nimpy
+import times, nimpy, os, strutils, strformat
 # import parseutils
 # import strutils
+#
+#
+let machinery = pyImport("importlib.machinery")
+proc relpyImport*(relpath: string): PyObject =
+    let abspath = os.expandFilename(relpath & ".py")
+    let name = abspath.splitFile[1]
+    let loader = machinery.SourceFileLoader(name, abspath)
+    return loader.load_module(name)
 
 type
     TS = enum

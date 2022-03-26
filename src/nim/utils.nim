@@ -5,12 +5,32 @@ import sugar
 import deques
 import re
 import strutils
+import strformat
 import xmltree
 import translate_types
 import strtabs
+import macros
+import locks
+import weave
+export weave
 
-template `debug`*(code: untyped): untyped =
-    logger.log lvlDebug, fmt code
+var loggingLock: Lock
+initLock(loggingLock)
+
+macro `debug`*(code: untyped): untyped =
+    if logLevelMacro != lvlNone:
+        quote do:
+            withLock(loggingLock):
+                logger[].log lvlDebug, fmt"{getThreadId(Weave)} - " & fmt `code`
+    else:
+        quote do:
+            discard
+
+macro `warn`*(code: untyped): untyped =
+    quote do:
+        loggingLock.acquire()
+        logger[].log lvlWarn, fmt `code`
+        loggingLock.release()
 
 type StringSet = HashSet[string]
 
@@ -88,7 +108,7 @@ iterator preorder*(tree: XmlNode): XmlNode =
                     of skip_nodes:
                         continue
                     else:
-                        if node.attrs.haskey("class"):
+                        if (not node.attrs.isnil) and node.attrs.haskey("class"):
                             var cls = false
                             let node_classes = node.attrs["class"].split().toHashSet
                             for class in skip_class:

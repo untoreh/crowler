@@ -1,14 +1,39 @@
 import os,
        logging,
-       uri
+       uri,
+       strutils
 
 const cfg_path = currentSourcePath().splitPath()[0]
 
-let logger* = newConsoleLogger(fmtStr = "[$time] - $levelname: ")
+let loggerObj = newConsoleLogger(fmtStr = "[$time] - $levelname: ")
+let logger* = loggerObj.unsafeAddr
+
+proc logLevelFromEnv(): auto =
+    case os.getenv("NIM_DEBUG", "INFO").toUpper:
+    of "ALL":
+        lvlAll
+    of "DEBUG":
+        lvlDebug
+    of "WARNING":
+        lvlWarn
+    of "ERROR":
+        lvlError
+    of "CRITICAL":
+        lvlFatal
+    of "NONE":
+        lvlNone
+    else:
+        lvlInfo
+
+let logLevel = logLevelFromEnv()
+const logLevelMacro* = logLevelFromEnv()
+setLogFilter(logLevel)
 
 export logging
 
 const
+    USE_PROXIES* = true
+    PROXY_EP* = "socks5://localhost:8877"
     PROJECT_PATH* = joinPath(cfg_path, "..", "..")
     WEBSITE_DOMAIN* = "localhost"
     WEBSITE_URL* = parseUri("http://" & WEBSITE_DOMAIN)
@@ -27,3 +52,5 @@ const
     ARTICLE_EXCERPT_SIZE* = 300 ## Size (in bytes) of the excerpt
     DB_SIZE* = 1024 * 1024 * 1024
     DB_PATH* = DATA_PATH / "translate.db"
+    MAX_TRANSLATION_TRIES* = 3
+    TRANSLATION_TIMEOUT* = 0.25

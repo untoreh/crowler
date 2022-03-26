@@ -1,34 +1,30 @@
-import nimpy
-import cfg
-import os
-import sugar
-import html
-import times
-import types
-import strutils
-import timeit
-import strformat
-import algorithm
-import minhash {.all.}
-import marshal
-import karax / vdom
-import std / importutils
-import tables
+import nimpy,
+       os,
+       sugar,
+       html,
+       times,
+       strutils,
+       timeit,
+       strformat,
+       algorithm,
+       minhash {.all.},
+       marshal,
+       karax / vdom,
+       std / importutils,
+       tables
 
-let machinery = pyImport("importlib.machinery")
+import cfg,
+       types
+
 privateAccess(LocalitySensitive)
 var pageset = Table[string, bool]()
 
 include "pages"
 
-proc relimport(relpath: string): PyObject =
-    let abspath = os.expandFilename(relpath & ".py")
-    let loader = machinery.SourceFileLoader("config", abspath)
-    return loader.load_module("config")
 
 # we have to load the config before utils, otherwise the module is "partially initialized"
-let pycfg = relimport("../py/config")
-let ut* = relimport("../py/utils")
+let pycfg = relpyImport("../py/config")
+let ut* = relpyImport("../py/utils")
 
 proc getArticles*(topic: string, n = 3, pagenum: int = -1): seq[Article] =
     let
@@ -130,7 +126,7 @@ proc curPageNumber(topic: string): int =
     return ut.get_top_page(topic).to(int)
     # return getSubdirNumber(topic, curdir)
 
-proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, with_arts=false) =
+proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, with_arts = false) =
     let
         arts = getDoneArticles(topic, pagenum = pagenum.parseInt)
         content = buildShortPosts(arts)
@@ -257,7 +253,7 @@ proc pubAllPages(topic: string, clear = true) =
     let grp = ut.topic_group(topic)
     let topdir = max(grp[$topicData.pages].shape[0].to(int)-1, 0)
     let numdone = max(len(grp[$topicData.done]) - 1, 0)
-    assert topdir == numdone , fmt"{topdir}, {numdone}"
+    assert topdir == numdone, fmt"{topdir}, {numdone}"
     if clear:
         for d in walkDirs(SITE_PATH / topic / "*"):
             removeDir(d)
@@ -266,11 +262,11 @@ proc pubAllPages(topic: string, clear = true) =
             ensureDir(topic_path / $n)
     block:
         let pagecount = pageSize(topic, topdir)
-        pubPage(topic, $topdir, pagecount, finalize = false, with_arts=true)
+        pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true)
     for n in 0..topdir - 1:
         let pagenum = n
         var pagecount = pageSize(topic, n)
-        pubPage(topic, $pagenum, pagecount, finalize = true, with_arts=true)
+        pubPage(topic, $pagenum, pagecount, finalize = true, with_arts = true)
     ensureHome(topic, topdir)
 
 proc refreshPageSizes(topic: string) =
@@ -288,7 +284,7 @@ when isMainModule:
     # refreshPageSizes(topic)
     # publish(topic)
     # assert not pyisnone(arts)
-    pubAllPages(topic, clear=true)
+    pubAllPages(topic, clear = true)
 
 
     # var path = SITE_PATH / "index.html"

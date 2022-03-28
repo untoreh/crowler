@@ -1,0 +1,13 @@
+{
+    "nim.rootConfig": [{
+        "root": "tests/all.nim",
+        "regexps": [
+            "tests/.*\\.nim"
+        ]
+    }, {
+        "root": "translate.nim",
+        "regexps": [
+            ".*\\.nim"
+        ]
+    }]
+}

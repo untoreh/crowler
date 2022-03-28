@@ -47,11 +47,12 @@ let
     pybi = pyBuiltinsModule()
     pytypes = pyImport("types")
 
-var punct_rgx* {.threadvar.}: Regex
+var punct_rgx* {.threadvar.}: ptr Regex
 
 proc initPunctRgx*() =
-    if punct_rgx == default(Regex):
-        punct_rgx = re"^([[:punct:]]|\s)+$"
+    if punct_rgx.isnil:
+        punct_rgx = create(Regex)
+        punct_rgx[] = re"^([[:punct:]]|\s)+$"
 
 proc `$`*(t: Translator): string =
     let langs = collect(for k in keys(t.tr): k)
@@ -107,7 +108,7 @@ proc initQueue*(f: TFunc, pair, slator: auto, kind: QueueKind = Glue): Queue =
                 (" \n[[...]]\n ", re"\s?\n?\[\[?\.\.\.\]\]?\n?"),
                 (" %¶%¶% ", re"%\s¶\s?%\s?¶\s?%")
                 ]
-            q.bufsize = 1600
+            q.bufsize = 4000
             q.call = f
             q.pair = pair
             q.slator = slator

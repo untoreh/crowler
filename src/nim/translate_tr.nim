@@ -8,7 +8,8 @@ import
     nimpy,
     sugar,
     sequtils,
-    hashes
+    hashes,
+    std/sharedtables
 
 import
     quirks,
@@ -17,7 +18,8 @@ import
     types,
     translate_types,
     translate_srv,
-    translate_db
+    translate_db,
+    locks
 
 type splitSent = object
     sents: seq[string]
@@ -36,15 +38,26 @@ proc len(ss: ptr splitSent): int = ss[].size
 var
     sentsIn: ptr splitSent
     transOut: ptr seq[string]
-sentsIn = new(splitSent)[].addr
+    splitCache: ptr Table[string, seq[string]]
+    scLock: Lock
+    elSents {.threadvar.}: seq[string]
 
-proc checkBatchedTranslation(sents: seq[string], query="", tr: auto) =
+sentsIn = new(splitSent)[].addr
+transOut = new(seq[string])[].addr
+splitCache = new(Table[string, seq[string]])[].addr
+# init(splitCache)
+initLock(scLock)
+
+proc checkBatchedTranslation(sents: seq[string], query = "", tr: auto) =
     if len(tr) != len(sents):
-        echo "query: ", query
+        var err = "query: "
+        err.add query
         for t in tr:
-            echo "tr: ", t
-        raise newException(ValueError, "mismatching batched translation query result: " &
-                fmt"{tr.len} - {sents.len}")
+            err.add "tr: "
+            err.add t
+        err.add "mismatching batched translation query result: "
+        err.add fmt"{tr.len} - {sents.len}"
+        raise newException(ValueError, err)
 
 proc doQuery(q: Queue, sents: seq[string]): seq[string] =
     ## Iterate over all the separators pair until a bijective mapping is found
@@ -74,19 +87,23 @@ proc doTrans(q: auto) =
     debug "doTrans: clearing sentences"
     sentsIn.clear()
 
-
 proc setEl(q, el: auto, t: string) =
     # debug "slations: saving translation"
-    slations[hash((q.pair, el.getText)).int] = t
+    discard slations[].hasKeyOrPut(hash((q.pair, el.getText)).int64, t)
     # debug "slations: setting element"
     el.setText(t)
 
 proc elUpdate(q, el, srv: auto) =
     # TODO: sentence splitting should be memoized
     debug "elupdate: splitting sentences"
-    let sents = splitSentences(el.getText)
+    elSents.setLen(0)
+    withLock(scLock):
+        let txt = el.getText
+        if not (txt in splitCache[]):
+            splitCache[][txt] = splitSentences(txt)
+        elSents.add splitCache[][txt]
     debug "elupdate: translating"
-    for s in sents:
+    for s in elSents:
         if sentsIn.len > q.bufsize:
             doTrans(q)
         sentsIn.add(s)
@@ -116,8 +133,8 @@ proc translate*(q: var Queue, el: XmlNode, srv: auto) =
         if length > q.bufsize:
             debug "Translating element singularly since it is big"
             elUpdate(q, el, srv)
-            debug "Saving translations! {slations.len}"
-            saveToDb(force=true)
+            debug "Saving translations! {slations[].len}"
+            saveToDb()
         else:
             if q.sz + length > q.bufsize:
                 elementsUpdate(q)

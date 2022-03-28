@@ -65,7 +65,6 @@ iterator filterFiles*(root: string;
                     p
         files = topfiles.toDeque
         processed: StringSet
-
     while len(files) > 0:
         (kind, path) = files.popFirst
         path = absolutePath(path)

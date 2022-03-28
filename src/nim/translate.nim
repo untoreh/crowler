@@ -16,7 +16,8 @@ import nimpy,
        lrucache,
        weave,
        weave/runtime,
-       locks
+       locks,
+       std/deques
 
 import cfg,
        utils,
@@ -43,7 +44,7 @@ proc link_src_to_dir(dir: string) =
 
 
 
-proc isTranslatable(t: string): bool = not (punct_rgx in t)
+proc isTranslatable(t: string): bool = not (punct_rgx[] in t)
 proc isTranslatable(el: XmlNode): bool = isTranslatable(el.text)
 proc isTranslatable(el: XmlNode, attr: string): bool = isTranslatable(el.attrs[attr])
 
@@ -59,6 +60,7 @@ proc rewriteUrl(el, rewrite_path, hostname: auto) =
 
 proc translateHtml(tree, file_path, url_path, pair, slator: auto,
                    hostname = WEBSITE_DOMAIN, finish = true): auto =
+    debug "html: initializing vars "
     let
         tformsTags = collect(for k in transforms.keys: k).toHashSet()
         rewrite_path = "/" / pair.trg
@@ -69,6 +71,7 @@ proc translateHtml(tree, file_path, url_path, pair, slator: auto,
         otree = deepcopy(tree)
         q = getTfun(pair, slator).initQueue(pair, slator)
 
+    debug "html: setting root node attributes"
     # Set the target lang attribute at the top level
     var a: XmlAttributes
     # NOTE: this will crash if the file doesn't have an html tag (as it should)
@@ -80,7 +83,7 @@ proc translateHtml(tree, file_path, url_path, pair, slator: auto,
     if pair.trg in RTL_LANGS:
         a["dir"] = "rtl"
 
-    debug "recursing html tree..."
+    debug "html: recursing tree..."
     for el in preorder(otree):
         # skip empty nodes
         case el.kind:
@@ -122,7 +125,7 @@ type fileContext = object
     t_path: string
 
 proc initFileContext(html, file_path, url_path, pair, slator, t_path: auto): ptr fileContext =
-    result = new(fileContext)[].addr
+    result = create(fileContext)
     result.html = html
     result.file_path = file_path
     result.url_path = url_path
@@ -130,28 +133,27 @@ proc initFileContext(html, file_path, url_path, pair, slator, t_path: auto): ptr
     result.slator = slator
     result.t_path = t_path
 
-proc initThread() {.inline.} =
-    initPunctRgx()
-    initTrans()
 
 proc tryTranslate(fc: ptr fileContext): bool =
-    initThread()
     var tries = 0
     while tries < cfg.MAX_TRANSLATION_TRIES:
         try:
             let ctx = fc[]
+            debug "trytrans: scheduling translation"
             let (_, ot) = translateHtml(ctx.html, ctx.file_path, ctx.url_path, ctx.pair, ctx.slator)
+            debug "trytrans: returning from translations"
             # debug "writing to path {ctx.t_path}"
             # writeFile(ctx.t_path, $ot)
             return true
         except Exception as e:
             tries += 1
+            debug "trytrans: Caught an exception, ({tries})"
             if tries >= cfg.MAX_TRANSLATION_TRIES:
                 warn "Couldn't translate file {fc[].file_path}, {e.msg}"
                 return false
     return false
 
-proc translateFile(file, rx, langpairs, slator: auto, target_path = "")  =
+proc translateFile(file, rx, langpairs, slator: auto, target_path = "") =
     let
         html = fetchHtml(file)
         (filepath, urlpath) = splitUrlPath(rx, file)
@@ -169,56 +171,66 @@ proc translateFile(file, rx, langpairs, slator: auto, target_path = "")  =
             d_path = parentDir(t_path)
         if not dirExists(d_path):
             createDir(d_path)
-        # tryTranslate(html, file_path, url_path, pair, slator, t_path)
         var fc = initFileContext(html, file_path, url_path, pair, slator, t_path)
         ctxs.add(fc)
-        # saveToDB(force = true)
         let j = spawn tryTranslate(fc)
         jobs.add j
-    for j in jobs:
-        assert sync j
+    syncRoot(Weave)
+    saveToDB(force=true)
 
 
 
 proc fileWise(path, exclusions, rx_file, langpairs, slator: auto) =
     for file in filterFiles(path, excl_dirs = exclusions, top_dirs = included_dirs):
-        debug "translating {file}"
+        debug "file: translating {file}"
         translateFile(file, rx_file, langpairs, slator)
-        debug "translation successful"
+        debug "file: translation successful"
+
+proc initThread() =
+    initPunctRgx()
+    initTrans()
+    initTFuncCache()
+
+proc exitThread() =
+    saveToDB(force = true)
+
+template withWeave(code: untyped): untyped =
+    initThread()
+    init(Weave, initThread)
+    code
+    exitThread()
+    exit(Weave, exitThread)
 
 proc translateDir(path: string, service = deep_translator, tries = 1) =
     assert path.dirExists
-    let
-        dir = normalizePath(path)
-        langpairs = collect(for lang in TLangs: (src: SLang.code, trg: lang.code))
-        slator = initTranslator(service, source = SLang)
-        rx_file = re fmt"(.*{dir}/)(.*$)"
+    withWeave:
+        let
+            dir = normalizePath(path)
+            langpairs = collect(for lang in TLangs: (src: SLang.code, trg: lang.code))
+            slator = initTranslator(service, source = SLang)
+            rx_file = re fmt"(.*{dir}/)(.*$)"
 
-    debug "Regexp is '(.*{dir}/)(.*$)'."
-    link_src_to_dir(dir)
-    fileWise(path, excluded_dirs, rx_file, langpairs, slator)
-    saveToDB(force = true)
+        debug "rgx: Regexp is '(.*{dir}/)(.*$)'."
+        link_src_to_dir(dir)
+        fileWise(path, excluded_dirs, rx_file, langpairs, slator)
+
 
 when isMainModule:
     import timeit
-    init(Weave)
     let
         dir = normalizePath(SITE_PATH)
         langpairs = collect(for lang in TLangs: (src: SLang.code, trg: lang.code))
         slator = initTranslator(default_service, source = SLang)
         rx_file = re fmt"(.*{dir}/)(.*$)"
     let
-        file = "/home/fra/dev/wsl/site/vps/index.html"
+        file = "/home/fra/dev/wsl/site/index.html"
         html = fetchHtml(file)
         (filepath, urlpath) = splitUrlPath(rx_file, file)
         pair = (src: "en", trg: "it")
         t_path = file_path / pair.trg / url_path
-    # translateDir(SITE_PATH)
-    # timeGo(1, 1):
-    # trans.clear
-    # translateDir(SITE_PATH)
+
+    translateDir(SITE_PATH)
     #
-    for i in 0..10:
-        translateFile(file, rx_file, langpairs, slator, target_path = "/home/fra/tmp/out")
-    exit(Weave)
+    # withWeave:
+    #     translateFile(file, rx_file, langpairs, slator, target_path = "/tmp/out")
     # discard translateHtml(html, file_path, url_path, pair, slator)

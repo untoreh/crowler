@@ -21,9 +21,14 @@ import
     utils,
     quirks
 # import translate_db
-#
+
 let pybi = pyBuiltinsModule()
 let pyGlo = pyGlobals()
+var tFuncCache* {.threadvar.}: ptr Table[(service, langpair), TFunc]
+
+proc initTFuncCache*() =
+    if tFuncCache.isnil:
+        tFuncCache = create(Table[(service, langpair), TFunc])
 
 proc ensurePy(srv: service): PyObject =
     try:
@@ -71,40 +76,48 @@ template pySafeCall(code: untyped): untyped =
     code
     slator.lock.release
 
+proc deepTranslatorTfun(lang: langPair, slator: Translator): TFunc =
+    # NOTE: using `slator` inside the closure is fine since it always outlives the closure
+    result = proc(src: string): string =
+        try:
+            var
+                res: PyObject
+                rdy: bool
+            pySafeCall:
+                debug "tfun: applying function with src ({src.len})"
+                let pyf = slator.tr[lang].getattr("translate").trywrapPyFunc
+                let j = pySched.apply(pyf, src)
+                debug "tfun: applied f ({src.len})"
+            while true:
+                pySafeCall:
+                    discard j.wait(cfg.TRANSLATION_TIMEOUT)
+                    rdy = j.ready().to(bool)
+                    debug "tfun: waiting for translation {rdy}, {lang}"
+                if rdy:
+                    debug "tfun: getting translation value"
+                    pySafeCall: res = j.get()
+                    break
+            # # debug "res: {$res}"
+            pySafecall:
+                if not ($res in ["<NULL>", "None"]):
+                    debug "tfun: returning translation"
+                    result = res.to(string)
+                else:
+                    debug "tfun: no translation found"
+                    result = ""
+        except Exception as e:
+            raise newException(ValueError, "Translation failed with error: {e.msg}")
+
+
 proc getTfun*(lang: langPair, slator: Translator): TFunc =
-    case slator.name:
-        of deep_translator:
-            result = proc(src: string): string =
-                try:
-                    var
-                        res: PyObject
-                        rdy: bool
-                    # let pyf = newPyObject(pyFnPtr)
-                    # return ""
-                    pySafeCall:
-                        debug "tfun: applying function with src ({src.len})"
-                        let pyf = slator.tr[lang].getattr("translate").trywrapPyFunc
-                        let j = pySched.apply(pyf, src)
-                        debug "tfun: applied f ({src.len})"
-                    while true:
-                        pySafeCall:
-                            discard j.wait(cfg.TRANSLATION_TIMEOUT)
-                            rdy = j.ready().to(bool)
-                            debug "tfun: waiting for translation {rdy}"
-                        if rdy:
-                            debug "tfun: getting translation value"
-                            pySafeCall: res = j.get()
-                            break
-                    # # debug "res: {$res}"
-                    pySafecall:
-                        if not ($res in ["<NULL>", "None"]):
-                            debug "tfun: returning translation"
-                            result = res.to(string)
-                        else:
-                            debug "tfun: no translation found"
-                            result = ""
-                except Exception as e:
-                    raise newException(ValueError, "Translation failed with error: {e.msg}")
+    try:
+        result = tFuncCache[][(slator.name, lang)]
+    except:
+        result = case slator.name:
+            of deep_translator:
+                deepTranslatorTfun(lang, slator)
+            else: (src: string) => src
+        tFuncCache[][(slator.name, lang)] = result
 
 proc initTranslator*(srv: service = default_service, provider: string = "", source: Lang = SLang,
         targets: HashSet[Lang] = TLangs): Translator =

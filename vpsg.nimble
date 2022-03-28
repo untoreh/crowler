@@ -2,12 +2,12 @@
 
 version       = "0.1.0"
 author        = "untoreh"
-description   = "wsl"
+description   = "nim"
 license       = "MIT"
 srcDir        = "src"
 installExt    = @["nim"]
-bin           = @["wsl"]
-
+bin           = @["nim"]
+skipDirs      = @["nim"]
 
 # Dependencies
 

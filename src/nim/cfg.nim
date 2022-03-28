@@ -54,3 +54,4 @@ const
     DB_PATH* = DATA_PATH / "translate.db"
     MAX_TRANSLATION_TRIES* = 3
     TRANSLATION_TIMEOUT* = 0.25
+    ZSTD_COMPRESSION_LEVEL* = 2

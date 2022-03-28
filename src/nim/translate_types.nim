@@ -104,9 +104,10 @@ proc initQueue*(f: TFunc, pair, slator: auto, kind: QueueKind = Glue): Queue =
         of Glue:
             var q: GlueQueue
             q.glues = @[
-                ("#|#|#", re"\s?#\s?\|\s?#\s?\|\s?#\s?"),
-                (" \n[[...]]\n ", re"\s?\n?\[\[?\.\.\.\]\]?\n?"),
-                (" %¶%¶% ", re"%\s¶\s?%\s?¶\s?%")
+                (" #|#|# ", re"\s?#\s?\|\s?#\s?\|\s?#\s?"),
+                (" <<...>> ", re"\s?<\s?<\s?\.\s?\.\s?\.\s?>\s?>\s?"),
+                (" %¶%¶% ", re"\%\s\¶\s?\%\s?\¶\s?\%\s?"),
+                (" \n[[...]]\n ", re"\s?\n?\[\[?\.\.\.\]\]?\n?")
                 ]
             q.bufsize = 5000
             q.call = f

@@ -147,9 +147,9 @@ proc tryTranslate(fc: ptr fileContext): bool =
             return true
         except Exception as e:
             tries += 1
-            debug "trytrans: Caught an exception, ({tries})"
+            debug "trytrans: Caught an exception, ({tries}, {e.msg})"
             if tries >= cfg.MAX_TRANSLATION_TRIES:
-                warn "Couldn't translate file {fc[].file_path}, {e.msg}"
+                warn "Couldn't translate file {fc[].file_path}, exceeded trials"
                 return false
     return false
 
@@ -158,9 +158,9 @@ proc translateFile(file, rx, langpairs, slator: auto, target_path = "") =
         html = fetchHtml(file)
         (filepath, urlpath) = splitUrlPath(rx, file)
     debug "translating file {file}"
-    var jobs: seq[Flowvar[bool]]
+    # var jobs: seq[Flowvar[bool]]
     # Hold references of variables created inside the loop until all jobs have finished
-    var ctxs: seq[ptr fileContext]
+    # var ctxs: seq[ptr fileContext]
 
     for pair in langpairs:
         let
@@ -172,10 +172,11 @@ proc translateFile(file, rx, langpairs, slator: auto, target_path = "") =
         if not dirExists(d_path):
             createDir(d_path)
         var fc = initFileContext(html, file_path, url_path, pair, slator, t_path)
-        ctxs.add(fc)
-        let j = spawn tryTranslate(fc)
-        jobs.add j
-    syncRoot(Weave)
+        # ctxs.add(fc)
+        # let j = spawn tryTranslate(fc)
+        # jobs.add j
+        discard tryTranslate(fc)
+    # syncRoot(Weave)
     saveToDB(force=true)
 
 
@@ -203,16 +204,17 @@ template withWeave(code: untyped): untyped =
 
 proc translateDir(path: string, service = deep_translator, tries = 1, target_path="") =
     assert path.dirExists
-    withWeave:
-        let
-            dir = normalizePath(path)
-            langpairs = collect(for lang in TLangs: (src: SLang.code, trg: lang.code))
-            slator = initTranslator(service, source = SLang)
-            rx_file = re fmt"(.*{dir}/)(.*$)"
+    # withWeave:
+    initThread()
+    let
+        dir = normalizePath(path)
+        langpairs = collect(for lang in TLangs: (src: SLang.code, trg: lang.code))
+        slator = initTranslator(service, source = SLang)
+        rx_file = re fmt"(.*{dir}/)(.*$)"
 
-        debug "rgx: Regexp is '(.*{dir}/)(.*$)'."
-        link_src_to_dir(dir)
-        fileWise(path, excluded_dirs, rx_file, langpairs, slator, target_path=target_path)
+    debug "rgx: Regexp is '(.*{dir}/)(.*$)'."
+    link_src_to_dir(dir)
+    fileWise(path, excluded_dirs, rx_file, langpairs, slator, target_path=target_path)
 
 when isMainModule:
     import timeit
@@ -222,16 +224,17 @@ when isMainModule:
         slator = initTranslator(default_service, source = SLang)
         rx_file = re fmt"(.*{dir}/)(.*$)"
     let
-        file = "/home/fra/dev/wsl/site/vps/0/rwireguard-free-vps-for-wireguard.html"
+        file = "/home/fra/dev/wsl/site/vps/0/rpresidentialpoll-1844-free-soil-party-convention-vp-balloting.html"
         html = fetchHtml(file)
         (filepath, urlpath) = splitUrlPath(rx_file, file)
         pair = (src: "en", trg: "it")
         t_path = file_path / pair.trg / url_path
 
-    translateDir(SITE_PATH, target_path = "/tmp/out")
+    # translateDir(SITE_PATH, target_path = "/tmp/out")
     #
     # withWeave:
-    #     translateFile(file, rx_file, langpairs, slator, target_path = "/tmp/out")
+    initThread()
+    translateFile(file, rx_file, langpairs, slator, target_path = "/tmp/out")
     # withWeave:
     #     echo timeGo do:
     #         discard translateHtml(html, file_path, url_path, pair, slator)

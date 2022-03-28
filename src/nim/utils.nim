@@ -18,7 +18,8 @@ var loggingLock: Lock
 initLock(loggingLock)
 
 template logstring(code: untyped): untyped =
-    fmt"{getThreadId(Weave)} - " & fmt code
+    # fmt"{getThreadId(Weave)} - " & fmt code
+    fmt code
 
 macro debug*(code: untyped): untyped =
     if not defined(release) and logLevelMacro != lvlNone:

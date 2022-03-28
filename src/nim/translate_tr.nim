@@ -93,6 +93,11 @@ proc setEl(q, el: auto, t: string) =
     # debug "slations: setting element"
     el.setText(t)
 
+const gluePadding = 15
+proc reachedBufSize(s: auto, sz: int, bufsize: int): bool = len(s) * gluePadding + sz > bufsize
+proc reachedBufSize(s: seq, q: Queue): bool = reachedBufSize(s, q.size, q.bufsize)
+proc reachedBufSize(s: int, q: Queue): bool = reachedBufSize(q.bucket, s + q.sz, q.bufsize)
+
 proc elUpdate(q, el, srv: auto) =
     # TODO: sentence splitting should be memoized
     debug "elupdate: splitting sentences"
@@ -104,7 +109,7 @@ proc elUpdate(q, el, srv: auto) =
         elSents.add splitCache[][txt]
     debug "elupdate: translating"
     for s in elSents:
-        if sentsIn.len > q.bufsize:
+        if reachedBufSize(sentsIn.sents, sentsIn.len, q.bufsize):
             doTrans(q)
         sentsIn.add(s)
     if sentsIn.len > 0:
@@ -136,7 +141,7 @@ proc translate*(q: var Queue, el: XmlNode, srv: auto) =
             debug "Saving translations! {slations[].len}"
             saveToDb()
         else:
-            if q.sz + length > q.bufsize:
+            if reachedBufSize(length, q):
                 elementsUpdate(q)
                 saveToDB()
             q.bucket.add(el)

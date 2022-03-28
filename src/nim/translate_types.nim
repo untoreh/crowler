@@ -108,7 +108,7 @@ proc initQueue*(f: TFunc, pair, slator: auto, kind: QueueKind = Glue): Queue =
                 (" \n[[...]]\n ", re"\s?\n?\[\[?\.\.\.\]\]?\n?"),
                 (" %¶%¶% ", re"%\s¶\s?%\s?¶\s?%")
                 ]
-            q.bufsize = 4000
+            q.bufsize = 5000
             q.call = f
             q.pair = pair
             q.slator = slator

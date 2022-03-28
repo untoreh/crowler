@@ -17,20 +17,37 @@ export weave
 var loggingLock: Lock
 initLock(loggingLock)
 
-macro `debug`*(code: untyped): untyped =
-    if logLevelMacro != lvlNone:
+template logstring(code: untyped): untyped =
+    fmt"{getThreadId(Weave)} - " & fmt code
+
+macro debug*(code: untyped): untyped =
+    if not defined(release) and logLevelMacro != lvlNone:
         quote do:
             withLock(loggingLock):
-                logger[].log lvlDebug, fmt"{getThreadId(Weave)} - " & fmt `code`
+                logger[].log lvlDebug, logstring(`code`)
     else:
         quote do:
             discard
 
-macro `warn`*(code: untyped): untyped =
-    quote do:
-        loggingLock.acquire()
-        logger[].log lvlWarn, fmt `code`
-        loggingLock.release()
+macro warn*(code: untyped): untyped =
+    if logLevelMacro >= lvlWarn:
+        quote do:
+            loggingLock.acquire()
+            logger[].log lvlWarn, fmt logstring(`code`)
+            loggingLock.release()
+    else:
+        quote do:
+            discard
+
+macro info*(code: untyped): untyped =
+    if logLevelMacro >= lvlInfo:
+        quote do:
+            loggingLock.acquire()
+            logger[].log lvlInfo, logstring(`code`)
+            loggingLock.release()
+    else:
+        quote do:
+            discard
 
 type StringSet = HashSet[string]
 
@@ -220,3 +237,4 @@ proc splitSentences*(text: string): seq[string] =
     sents = replace(sents, re"(\bMrs\.)\n", "$1 ")
 
     sents.split(re"\n")
+

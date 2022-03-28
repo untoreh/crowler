@@ -143,7 +143,7 @@ proc tryTranslate(fc: ptr fileContext): bool =
             let (_, ot) = translateHtml(ctx.html, ctx.file_path, ctx.url_path, ctx.pair, ctx.slator)
             debug "trytrans: returning from translations"
             # debug "writing to path {ctx.t_path}"
-            # writeFile(ctx.t_path, $ot)
+            writeFile(ctx.t_path, $ot)
             return true
         except Exception as e:
             tries += 1
@@ -180,11 +180,11 @@ proc translateFile(file, rx, langpairs, slator: auto, target_path = "") =
 
 
 
-proc fileWise(path, exclusions, rx_file, langpairs, slator: auto) =
+proc fileWise(path, exclusions, rx_file, langpairs, slator: auto, target_path="") =
     for file in filterFiles(path, excl_dirs = exclusions, top_dirs = included_dirs):
         debug "file: translating {file}"
-        translateFile(file, rx_file, langpairs, slator)
-        debug "file: translation successful"
+        translateFile(file, rx_file, langpairs, slator, target_path=target_path)
+        info "file: translation successful for path: {file}"
 
 proc initThread() =
     initPunctRgx()
@@ -201,7 +201,7 @@ template withWeave(code: untyped): untyped =
     exitThread()
     exit(Weave, exitThread)
 
-proc translateDir(path: string, service = deep_translator, tries = 1) =
+proc translateDir(path: string, service = deep_translator, tries = 1, target_path="") =
     assert path.dirExists
     withWeave:
         let
@@ -212,8 +212,7 @@ proc translateDir(path: string, service = deep_translator, tries = 1) =
 
         debug "rgx: Regexp is '(.*{dir}/)(.*$)'."
         link_src_to_dir(dir)
-        fileWise(path, excluded_dirs, rx_file, langpairs, slator)
-
+        fileWise(path, excluded_dirs, rx_file, langpairs, slator, target_path=target_path)
 
 when isMainModule:
     import timeit
@@ -223,14 +222,16 @@ when isMainModule:
         slator = initTranslator(default_service, source = SLang)
         rx_file = re fmt"(.*{dir}/)(.*$)"
     let
-        file = "/home/fra/dev/wsl/site/index.html"
+        file = "/home/fra/dev/wsl/site/vps/0/rwireguard-free-vps-for-wireguard.html"
         html = fetchHtml(file)
         (filepath, urlpath) = splitUrlPath(rx_file, file)
         pair = (src: "en", trg: "it")
         t_path = file_path / pair.trg / url_path
 
-    translateDir(SITE_PATH)
+    translateDir(SITE_PATH, target_path = "/tmp/out")
     #
     # withWeave:
     #     translateFile(file, rx_file, langpairs, slator, target_path = "/tmp/out")
-    # discard translateHtml(html, file_path, url_path, pair, slator)
+    # withWeave:
+    #     echo timeGo do:
+    #         discard translateHtml(html, file_path, url_path, pair, slator)

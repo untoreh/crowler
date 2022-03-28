@@ -101,7 +101,8 @@ proc deepTranslatorTfun(lang: langPair, slator: Translator): TFunc =
             pySafecall:
                 if not ($res in ["<NULL>", "None"]):
                     debug "tfun: returning translation"
-                    result = res.to(string)
+                    let v = res.to(string)
+                    result = v
                 else:
                     debug "tfun: no translation found"
                     result = ""

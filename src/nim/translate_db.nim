@@ -126,12 +126,19 @@ proc save*[T](t: LRUTrans, c: Table[T, string]) =
 proc setFromDB*(pair: langPair, el: auto): (bool, int) =
     let
         txt = getText(el)
-        t = trans[(pair, txt)]
-    if t != "":
-        setText(el, t)
+        k = hash((pair, txt)).int64
+
+    # try temp cache before db
+    if k in slations[]:
+        setText(el, slations[][k])
         (true, txt.len)
     else:
-        (false, txt.len)
+        let t = trans[k]
+        if t != "":
+            setText(el, t)
+            (true, txt.len)
+        else:
+            (false, txt.len)
 
 proc saveToDB*(tr = trans, slations = slations,
         force = false) =

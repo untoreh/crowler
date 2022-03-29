@@ -16,8 +16,10 @@ import nimpy,
        lrucache,
        weave,
        weave/runtime,
-       locks,
-       std/deques
+       locks
+
+# from karax/vdom import nil
+import karax/vdom
 
 import cfg,
        utils,
@@ -27,11 +29,12 @@ import cfg,
        translate_tr,
        translate_tforms
 
+export sugar, translate_types, translate_srv, sets, nre
 
 const excluded_dirs = to_hashset[string](collect(for lang in TLangs: lang.code))
 const included_dirs = to_hashset[string]([])
 
-let htmlcache = newLRUCache[string, XmlNode](1024)
+let htmlcache = newLRUCache[string, XmlNode](32)
 
 proc link_src_to_dir(dir: string) =
     let link_path = dir / SLang.code
@@ -42,36 +45,39 @@ proc link_src_to_dir(dir: string) =
     createSymlink("./", link_path)
     debug "Created symlink from {dir} to {link_path}"
 
-
-
 proc isTranslatable(t: string): bool = not (punct_rgx[] in t)
-proc isTranslatable(el: XmlNode): bool = isTranslatable(el.text)
+proc isTranslatable(el: XmlNode | vdom.VNode): bool = isTranslatable(el.text)
 proc isTranslatable(el: XmlNode, attr: string): bool = isTranslatable(el.attrs[attr])
+proc isTranslatable(el: vdom.VNode, attr: string): bool = isTranslatable(vdom.getAttr(el, attr))
 
+let dotsRgx = re"\.?\.?"
 proc rewriteUrl(el, rewrite_path, hostname: auto) =
     var uriVar: URI
     parseURI(el.attrs["href"], uriVar)
     # remove initial dots from links
-    uriVar.path = uriVar.path.replace(re"\.?\.?", "")
+    uriVar.path = uriVar.path.replace(dotRgx, "")
     if uriVar.hostname == "" or uriVar.hostname == hostname and
         uriVar.hostname.startsWith("/"):
         uriVar.path = join(rewrite_path, uriVar.path)
     el.attrs["href"] = $uriVar
 
-proc translateHtml(tree, file_path, url_path, pair, slator: auto,
-                   hostname = WEBSITE_DOMAIN, finish = true): auto =
+template translateEnv(kind: static[FcKind] = xml): untyped {.dirty.} =
     debug "html: initializing vars "
     let
-        tformsTags = collect(for k in transforms.keys: k).toHashSet()
+        file_path = fc.file_path
+        url_path = fc.url_path
+        pair = fc.pair
+        tformsTags = collect(for k in getTForms(kind).keys: k).toHashSet()
         rewrite_path = "/" / pair.trg
-        srv = slator.name
-        skip_children = 0
-        #
+        srv = fc.slator.name
     var
-        otree = deepcopy(tree)
-        q = getTfun(pair, slator).initQueue(pair, slator)
-
+        otree: XmlNode | vdom.VNode = deepcopy(fc.getHtml(kind))
+        q = getTfun(fc.pair, fc.slator).getQueue(kind, fc.pair, fc.slator)
     debug "html: setting root node attributes"
+
+proc translateHtml(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true): auto =
+    translateEnv()
+
     # Set the target lang attribute at the top level
     var a: XmlAttributes
     # NOTE: this will crash if the file doesn't have an html tag (as it should)
@@ -79,8 +85,8 @@ proc translateHtml(tree, file_path, url_path, pair, slator: auto,
     if a.isnil:
         a = newStringTable()
         otree.child("html").attrs = a
-    a["lang"] = pair.trg
-    if pair.trg in RTL_LANGS:
+    a["lang"] = fc.pair.trg
+    if fc.pair.trg in RTL_LANGS:
         a["dir"] = "rtl"
 
     debug "html: recursing tree..."
@@ -104,10 +110,11 @@ proc translateHtml(tree, file_path, url_path, pair, slator: auto,
                     translate(q, el, srv)
     debug "html: finishing translations"
     translate(q, srv, finish = finish)
-    return (q, otree)
+    (q, otree)
+    # return otree
     # raise newException(ValueError, "That's all, folks.")
 
-proc splitUrlPath(rx, file: auto): auto =
+proc splitUrlPath*(rx, file: auto): auto =
     let m = find(file, rx).get.captures
     (m[0], m[1])
 
@@ -116,34 +123,54 @@ proc fetchHtml(file: string): XmlNode =
         htmlcache[file] = loadHtml(file)
     return htmlcache[file]
 
-type fileContext = object
-    html: XmlNode
-    file_path: string
-    url_path: string
-    pair: langPair
-    slator: Translator
-    t_path: string
+proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true): auto =
+    translateEnv(dom)
+    for node in otree.preorder():
+        case node.kind:
+            of vdom.VNodeKind.html:
+                node.setAttr("lang", pair.trg)
+                if pair.trg in RTL_LANGS:
+                    node.setAttr("dir", "rtl")
+            else: continue
+    for el in otree.preorder():
+        case el.kind:
+           of vdom.VNodeKind.text:
+               if el.text.isEmptyOrWhitespace:
+                   continue
+               if isTranslatable(el):
+                   translate(q, el, srv)
+           else:
+                let t = el.kind
+                if t in tformsTags:
+                    getTForms(dom)[][t](el, file_path, url_path, pair)
+                if t == VNodeKind.a:
+                    if el.hasattr("href"):
+                        rewriteUrl(el, rewrite_path, hostname)
+                elif ((el.attrs.haskey "alt") and el.isTranslatable("alt")) or
+                     ((el.attrs.haskey "title") and el.isTranslatable("title")):
+                    translate(q, el, srv)
+    (q, otree)
 
-proc initFileContext(html, file_path, url_path, pair, slator, t_path: auto): ptr fileContext =
-    result = create(fileContext)
-    result.html = html
-    result.file_path = file_path
-    result.url_path = url_path
-    result.pair = pair
-    result.slator = slator
-    result.t_path = t_path
+template tryTranslateFunc(kind: FcKind, code: untyped) =
+    var q: Queue
+    case kind:
+        of xml:
+            var ot: XmlNode
+            (q, ot) = translateHtml(code)
+        else:
+            var ot: vdom.VNode
+            (q, ot) = translateDom(code)
 
-
-proc tryTranslate(fc: ptr fileContext): bool =
+proc tryTranslate(fc: ptr FileContext, kind: FcKind): bool =
     var tries = 0
     while tries < cfg.MAX_TRANSLATION_TRIES:
         try:
-            let ctx = fc[]
             debug "trytrans: scheduling translation"
-            let (_, ot) = translateHtml(ctx.html, ctx.file_path, ctx.url_path, ctx.pair, ctx.slator)
+            tryTranslateFunc(kind, fc)
             debug "trytrans: returning from translations"
             # debug "writing to path {ctx.t_path}"
-            writeFile(ctx.t_path, $ot)
+            # toggle(dowrite):
+            # writeFile(fc.t_path, fmt"<!doctype html>\n{ot}")
             return true
         except Exception as e:
             tries += 1
@@ -153,14 +180,15 @@ proc tryTranslate(fc: ptr fileContext): bool =
                 return false
     return false
 
+
 proc translateFile(file, rx, langpairs, slator: auto, target_path = "") =
     let
         html = fetchHtml(file)
         (filepath, urlpath) = splitUrlPath(rx, file)
     debug "translating file {file}"
-    # var jobs: seq[Flowvar[bool]]
+    var jobs: seq[Flowvar[bool]]
     # Hold references of variables created inside the loop until all jobs have finished
-    # var ctxs: seq[ptr fileContext]
+    var ctxs: seq[ptr FileContext]
 
     for pair in langpairs:
         let
@@ -172,19 +200,42 @@ proc translateFile(file, rx, langpairs, slator: auto, target_path = "") =
         if not dirExists(d_path):
             createDir(d_path)
         var fc = initFileContext(html, file_path, url_path, pair, slator, t_path)
-        # ctxs.add(fc)
-        # let j = spawn tryTranslate(fc)
-        # jobs.add j
-        discard tryTranslate(fc)
-    # syncRoot(Weave)
-    saveToDB(force=true)
+        ctxs.add(fc)
+        let j = spawn tryTranslate(fc, xml)
+
+    syncRoot(Weave)
+    saveToDB(force = true)
+
+
+proc translateTree*(tree: vdom.VNode, file, rx, langpairs, slator: auto, targetPath = "") =
+    ## Translate a `VNode` tree to multiple languages
+
+    let (filepath, urlpath) = splitUrlPath(rx, file)
+    var jobs: seq[Flowvar[bool]]
+    # Hold references of variables created inside the loop until all jobs have finished
+    var ctxs: seq[ptr FileContext]
+
+    let getTargetPath = if targetPath == "": (pair: langPair) => file_path / pair.trg / url_path
+                        else: (pair: langPair) => target_path / pair.trg / url_path
+
+    for pair in langpairs:
+        let t_path = getTargetPath(pair)
+        let d_path = parentDir(t_path)
+        if not dirExists(d_path):
+            createDir(d_path)
+        var fc = initFileContext(tree, file_path, url_path, pair, slator, t_path)
+        ctxs.add(fc)
+        let j = spawn tryTranslate(fc, dom)
+
+    syncRoot(Weave)
+    saveToDB(force = true)
 
 
 
-proc fileWise(path, exclusions, rx_file, langpairs, slator: auto, target_path="") =
+proc fileWise(path, exclusions, rx_file, langpairs, slator: auto, target_path = "") =
     for file in filterFiles(path, excl_dirs = exclusions, top_dirs = included_dirs):
         debug "file: translating {file}"
-        translateFile(file, rx_file, langpairs, slator, target_path=target_path)
+        translateFile(file, rx_file, langpairs, slator, target_path = target_path)
         info "file: translation successful for path: {file}"
 
 proc initThread() =
@@ -195,26 +246,27 @@ proc initThread() =
 proc exitThread() =
     saveToDB(force = true)
 
-template withWeave(code: untyped): untyped =
+template withWeave*(code: untyped): untyped =
     initThread()
     init(Weave, initThread)
     code
     exitThread()
     exit(Weave, exitThread)
 
-proc translateDir(path: string, service = deep_translator, tries = 1, target_path="") =
-    assert path.dirExists
-    # withWeave:
-    initThread()
+template setupTranslation*(service_kind = deep_translator) {.dirty.} =
     let
-        dir = normalizePath(path)
+        dir = normalizedPath(path)
         langpairs = collect(for lang in TLangs: (src: SLang.code, trg: lang.code))
-        slator = initTranslator(service, source = SLang)
+        slator = initTranslator(`service_kind`, source = SLang)
         rx_file = re fmt"(.*{dir}/)(.*$)"
 
-    debug "rgx: Regexp is '(.*{dir}/)(.*$)'."
-    link_src_to_dir(dir)
-    fileWise(path, excluded_dirs, rx_file, langpairs, slator, target_path=target_path)
+proc translateDir(path: string, service_kind = deep_translator, tries = 1, target_path = "") =
+    assert path.dirExists
+    withWeave:
+        setupTranslation(service_kind)
+        debug "rgx: Regexp is '(.*{dir}/)(.*$)'."
+        link_src_to_dir(dir)
+        fileWise(path, excluded_dirs, rx_file, langpairs, slator, target_path = target_path)
 
 when isMainModule:
     import timeit
@@ -232,9 +284,9 @@ when isMainModule:
 
     # translateDir(SITE_PATH, target_path = "/tmp/out")
     #
-    # withWeave:
-    initThread()
-    translateFile(file, rx_file, langpairs, slator, target_path = "/tmp/out")
+    withWeave:
+    # initThread()
+        translateFile(file, rx_file, langpairs, slator, target_path = "/tmp/out")
     # withWeave:
     #     echo timeGo do:
     #         discard translateHtml(html, file_path, url_path, pair, slator)

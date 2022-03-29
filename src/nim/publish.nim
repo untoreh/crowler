@@ -39,7 +39,7 @@ proc getArticles*(topic: string, n = 3, pagenum: int = -1): seq[Article] =
         count = min(n, total)
         start = total - count
 
-    logger.log(lvlInfo, fmt"Fetching {count}(total:{total}) unpublished articles for {topic}/page:{pagenum}")
+    info "Fetching {count}(total:{total}) unpublished articles for {topic}/page:{pagenum}"
     for i in start..total - 1:
         data = arts[i]
         parsed.add(initArticle(data, pagenum))
@@ -53,7 +53,7 @@ proc getDoneArticles*(topic: string, pagenum: int): seq[Article] =
     if pyisnone(arts):
         return @[]
 
-    logger.log(lvlInfo, fmt"Fetching {arts.shape[0]} published articles for {topic}/{pagenum}")
+    info "Fetching {arts.shape[0]} published articles for {topic}/{pagenum}"
     for data in arts:
         result.add(initArticle(data, pagenum))
 
@@ -62,9 +62,9 @@ proc getDoneArticles*(topic: string, pagenum: int): seq[Article] =
 proc ensureDir(dir: string) =
     if not dirExists(dir):
         if fileExists(dir):
-            logger.log(lvlinfo, "Deleting file that should be a directory " & dir)
+            info "Deleting file that should be a directory {dir}"
             removeFile(dir)
-        logger.log(lvlInfo, "Creating directory " & dir)
+        info "Creating directory {dir}"
         createDir(dir)
 
 
@@ -99,9 +99,6 @@ proc addArticle(lsh: LocalitySensitive[uint64], a: Article): bool =
         return true
     false
 
-
-
-
 proc pubPageFromTemplate(tpl: string, title: string, vars: seq[(string, string)] = tplRep) =
     var txt = readfile(ASSETS_PATH / "templates" / tpl)
     txt = multiReplace(txt, vars)
@@ -134,7 +131,7 @@ proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, w
         footer = pageFooter(topic, pagenum, not finalize)
         page = buildPage(content = content, pagefooter = footer)
 
-    logger.log(lvlInfo, fmt"Updating page:{pagenum} for topic:{topic} with entries:{pagecount}")
+    info "Updating page:{pagenum} for topic:{topic} with entries:{pagecount}"
     let topic_path = SITE_PATH / topic
     writeHTML(topic_path,
                 slug = pagenum / "index",
@@ -219,13 +216,13 @@ proc publish(topic: string) =
         ensureDir(basedir)
     let newposts = len(posts)
     if newposts == 0:
-        logger.log(lvlInfo, fmt"No new posts written for topic: {topic}")
+        info "No new posts written for topic: {topic}"
         return
     # only write articles after having saved LSH
     # to avoid duplicates. It is fine to add articles to the set
     # even if we don't publish them, but we never want duplicates
     saveLS(topic, lsh)
-    logger.log(lvlInfo, fmt"Writing {newposts} articles for topic: {topic}")
+    info "Writing {newposts} articles for topic: {topic}"
     for (tree, a) in posts:
         writeHtml(basedir, a.slug, tree)
     # after writing the new page, ensure home points to the new page
@@ -284,8 +281,9 @@ when isMainModule:
     # refreshPageSizes(topic)
     # publish(topic)
     # assert not pyisnone(arts)
-    pubAllPages(topic, clear = true)
-
+    # pubAllPages(topic, clear = true)
+    # pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true)
+    pubPageFromTemplate("dmca.html", "DMCA")
 
     # var path = SITE_PATH / "index.html"
     # writeFile(path, &("<!doctype html>\n{buildPost()}"))

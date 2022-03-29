@@ -59,7 +59,7 @@ proc checkBatchedTranslation(sents: seq[string], query = "", tr: auto) =
         err.add fmt"{tr.len} - {sents.len}"
         raise newException(ValueError, err)
 
-proc doQuery(q: Queue, sents: seq[string]): seq[string] =
+proc doQuery[T](q: T, sents: seq[string]): seq[string] =
     ## Iterate over all the separators pair until a bijective mapping is found
     var
         tr: seq[string]
@@ -68,7 +68,7 @@ proc doQuery(q: Queue, sents: seq[string]): seq[string] =
 
     for (sep, splitsep) in q.glues:
         query = join(sents, sep)
-        debug "query: calling translation function, bucket: {q.bucket.len}, query: {query.len}"
+        # debug "query: calling translation function, bucket: {q.bucket.len}, query: {query.len}"
         let res = q.call(query)
         debug "query: response size: {res.len}"
         let tr = res.split(splitsep)
@@ -95,8 +95,8 @@ proc setEl(q, el: auto, t: string) =
 
 const gluePadding = 15
 proc reachedBufSize(s: auto, sz: int, bufsize: int): bool = len(s) * gluePadding + sz > bufsize
-proc reachedBufSize(s: seq, q: Queue): bool = reachedBufSize(s, q.size, q.bufsize)
-proc reachedBufSize(s: int, q: Queue): bool = reachedBufSize(q.bucket, s + q.sz, q.bufsize)
+proc reachedBufSize[T](s: seq, q: T): bool = reachedBufSize(s, q.size, q.bufsize)
+proc reachedBufSize[T](s: int, q: T): bool = reachedBufSize(q.bucket, s + q.sz, q.bufsize)
 
 proc elUpdate(q, el, srv: auto) =
     # TODO: sentence splitting should be memoized
@@ -120,7 +120,7 @@ proc elUpdate(q, el, srv: auto) =
     debug "elupdate: end"
 
 
-proc elementsUpdate(q: var auto) =
+proc elementsUpdate[T](q: var T) =
     ## Update all the elements in the queue
     debug "eleupdate: performing batch translation"
     let tr = doQuery(q, collect(for el in q.bucket: el.getText))
@@ -132,7 +132,7 @@ proc elementsUpdate(q: var auto) =
     q.bucket.setLen(0)
     q.sz = 0
 
-proc translate*(q: var Queue, el: XmlNode, srv: auto) =
+proc translate*[Q, T](q: var Q, el: T, srv: auto) =
     let (success, length) = setFromDB(q.pair, el)
     if not success:
         if length > q.bufsize:
@@ -147,14 +147,14 @@ proc translate*(q: var Queue, el: XmlNode, srv: auto) =
             q.bucket.add(el)
             q.sz += length
 
-proc translate*(q: Queue, el: XmlNode, srv: auto, finish: bool) =
+proc translate*[Q, T](q: T, el: T, srv: auto, finish: bool) =
     if finish:
         let (success, _) = setFromDB(q.pair, el)
         if not success:
             let t = q.translate(el.getText)
             el.setText(t)
 
-proc translate*(q: var Queue, srv: auto, finish: bool) =
+proc translate*[Q](q: var Q, srv: auto, finish: bool) =
     if finish and q.sz > 0:
         elementsUpdate(q)
         saveToDB()

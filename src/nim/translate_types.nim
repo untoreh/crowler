@@ -6,41 +6,82 @@ import xmltree
 import sugar
 import strformat
 import locks
+import karax/vdom
+import macros
 
 type
     service* = enum
         deep_translator = "deep_translator"
+    FcKind* = enum xml, dom
     Lang* = tuple
         name: string
         code: string
     langPair* = tuple[src: string, trg: string]
-    tFunc = PyObject
-    tTable* = Table[langPair, tFunc]
-    Translator* = ref object
+    ServiceTable* = Table[langPair, PyObject] ## Maps the api of the wrapped service
+    Translator* = ref object ## An instance of a translation service
         py*: PyObject
-        tr*: tTable
+        tr*: ServiceTable
         apis*: HashSet[string]
         name*: service
         lock*: Lock
-    Queue* = object of RootObj
+    Queue* = object of RootObj ## An instance of a translation run
         pair*: langPair
         slator*: Translator
         bufsize*: int
         glues*: seq[(string, Regex)]
         sz*: int
-        bucket*: seq[XmlNode]
         call*: TFunc
-    QueueKind = enum
-        Glue
-    TFunc* = proc(src: string): string {.gcsafe.}
-    GlueQueue* = object of Queue
+    QueueXml* = object of Queue
+        bucket*: seq[XmlNode]
+    QueueDom* = object of Queue
+        bucket*: seq[VNode]
+    TFunc* = proc(src: string): string {.gcsafe.} ## the proc that wraps a translation service call
+    FileContextBase = object of RootObj
+        file_path*: string
+        url_path*: string
+        pair*: langPair
+        slator*: Translator
+        t_path*: string
+    FileContext* = object of FileContextBase
+        case kind: FcKind
+        of xml: xhtml*: XmlNode
+        of dom: vhtml*: vdom.VNode
+    TranslateXmlProc* = proc(fc: FileContext, hostname: string, finish: bool): (Queue,
+            XmlNode) {.gcsafe.} ## the proc that is called for each `langPair`
+    TranslateVNodeProc* = proc(fc: FileContext, hostname: string, finish: bool): (Queue,
+            VNode) {.gcsafe.} ## the proc that is called for each `langPair`
 
+macro getHtml*(code: untyped, kind: static[FcKind], ): untyped =
+    case kind:
+        of xml:
+            quote do:
+                `code`.xhtml
+        else:
+            quote do:
+                `code`.vhtml
 
+proc `html=`*(fc: ptr FileContext, data: XmlNode) = fc.xhtml = data
+proc `html=`*(fc: ptr FileContext, data: vdom.VNode) = fc.vhtml = data
+
+proc initFileContext*(data, file_path, url_path, pair, slator, t_path: auto): ptr FileContext =
+    result = create(FileContext)
+
+    if data is XmlNode:
+        result.kind = xml
+    else:
+        result.kind = dom
+    result.html = data
+    result.file_path = file_path
+    result.url_path = url_path
+    result.pair = pair
+    result.slator = slator
+    result.t_path = t_path
 
 const
     default_service* = deep_translator
     skip_nodes* = static(["code", "style", "script", "address", "applet", "audio", "canvas",
             "embed", "time", "video"])
+    skip_vnodes* = static([VNodeKind.code, style, script, address, audio, canvas, embed, time, video])
     skip_class* = ["menu-lang-btn"].static
 
 let
@@ -99,23 +140,30 @@ const
         ]
     RTL_LANGS* = ["yi", "he", "ar", "fa", "ur", "az", "dv", ].toHashSet
 
-proc initQueue*(f: TFunc, pair, slator: auto, kind: QueueKind = Glue): Queue =
-    case kind:
-        of Glue:
-            var q: GlueQueue
-            q.glues = @[
-                (" #|#|# ", re"\s?#\s?\|\s?#\s?\|\s?#\s?"),
-                (" <<...>> ", re"\s?<\s?<\s?\.\s?\.\s?\.\s?>\s?>\s?"),
-                (" %¶%¶% ", re"\%\s\¶\s?\%\s?\¶\s?\%\s?"),
-                (" \n[[...]]\n ", re"\s?\n?\[\[?\.\.\.\]\]?\n?")
-                ]
-            q.bufsize = 5000
-            q.call = f
-            q.pair = pair
-            q.slator = slator
-            return q
-        else:
-            result
+let
+    glue1 = re"\s?#\s?\|\s?#\s?\|\s?#\s?"
+    glue2 = re"\s?<\s?<\s?\.\s?\.\s?\.\s?>\s?>\s?"
+    glue3 = re"\%\s\¶\s?\%\s?\¶\s?\%\s?"
+    glue4 = re"\s?\n?\[\[?\.\.\.\]\]?\n?"
+
+proc initQueue*[T](f: TFunc, pair, slator: auto): T =
+    result.glues = @[
+        (" #|#|# ", glue1),
+        (" <<...>> ", glue2),
+        (" %¶%¶% ", glue3),
+        (" \n[[...]]\n ", glue4)
+        ]
+    result.bufsize = 5000
+    result.call = f
+    result.pair = pair
+    result.slator = slator
+
+macro getQueue*(f: TFunc, kind: static[FcKind], pair, slator: untyped): untyped =
+    let tp = case kind:
+        of xml: QueueXml
+        else: QueueDom
+    quote do:
+        initQueue[`tp`](`f`, `pair`, `slator`)
 
 when isMainModule:
     import sugar

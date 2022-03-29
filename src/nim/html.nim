@@ -2,20 +2,21 @@ import karax / [karaxdsl, vdom, vstyles]
 import cfg
 import os
 import strformat
-import macros
-# import timeit
-import htmlgen
-import xmlparser
+# import htmlgen
+# import xmlparser
 import xmltree
 import sugar
 import strutils
 import types
 import times
 import uri
-import sequtils
+# import sequtils
 import normalize
-import re
 import unicode
+import nre
+# from translate import translateTree, setupTranslation, splitUrlPath
+# from translate_types import TLangs
+import translate
 
 const LOGO_HTML = readFile(LOGO_PATH)
 const LOGO_SMALL_HTML = readFile(LOGO_SMALL_PATH)
@@ -32,12 +33,15 @@ template addEventHandler*(n: VNode; k: EventKind; action: string; kxi: int) =
     n.setAttr($k, action)
 
 const stripchars = ["-".runeAt(0), "_".runeAt(0)]
+let wsRgx = re"[^\w\s-]"
+let hypRgx = re"[-\s]+"
+
 proc slugify*(value: string): string =
     ## Slugifies an unicode string
 
     result = toNFKC(value).toLower()
-    result = re.replace(result, re"[^\w\s-]", "")
-    result = re.replace(result, re"[-\s]+", "-").strip(runes = stripchars)
+    result = result.replace(wsRgx, "")
+    result = result.replace(hypRgx, "-").strip(runes = stripchars)
 
 proc buildHead*(): VNode =
     buildHtml(head):
@@ -254,9 +258,23 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
 
 const pageContent* = postContent
 
-proc writeHtml*(basedir: string; slug: string; data: string | VNode) =
-    let path = basedir / slug & ".html"
-    writeFile(path, &("<!doctype html>\n{data}"))
+proc writeHtmlFile(path: string, data: auto) =
+    writeFile(path, fmt"<!doctype html>\n{data}")
+
+proc writeHtml*(basedir: string; slug: string; data: VNode) =
+    let
+        w_path = basedir / slug & ".html"
+        path = SITE_PATH
+    if cfg.TRANSLATION_ENABLED:
+        setupTranslation()
+        withWeave:
+            translateTree(data, w_path, rx_file, langpairs, slator)
+    writeHtmlFile(w_path, data)
+
+proc writeHtml*(basedir: string; slug: string; data: string) =
+    let w_path = basedir / slug & ".html"
+    writeHtmlFile(w_path, data)
+
 
 proc buildPost*(a: Article): VNode =
     buildHtml(html):
@@ -267,7 +285,7 @@ proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode 
     let crumbs = if topic != "": fmt"/ > {topic} / >"
                  else: "/ > ..."
     let topic_uri = parseUri("/")
-    buildHtml(html):
+    result = buildHtml(html):
         buildHead()
         body(class = "", style=preline_style):
             buildMenu(crumbs, topic_uri)

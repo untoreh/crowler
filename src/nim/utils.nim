@@ -226,8 +226,9 @@ proc hasAttr*(el: VNode, k: string): bool =
             return true
     return false
 
-proc `.attrs[]`*(el: VNode, k: string): string = el.getAttr(k)
-proc `.attrs[]=`*(el: VNode, k: string, v: auto): string = el.setAttr(k, v)
+proc hasAttr*(el: XmlNode, k: string): bool = el.attrs.haskey k
+proc getAttr*(el: XmlNode, k: string): string = el.attrs[k]
+proc setAttr*(el: XmlNode, k: string, v: auto) = el.attrs[k] = v
 
 proc replaceTilNoChange(input: var auto, pattern, repl: auto): string =
     while pattern in input:
@@ -290,70 +291,72 @@ let
     sentsRgx53 = re"(\bMrs\.)\n"
     sentsRgx54 = re"\n"
 
+
 proc splitSentences*(text: string): seq[string] =
-    var sents = text.replace(sentsRgx1, "$1\n")
-    sents = sents.replace(sentsRgx2, "")
-    sents = sents.replace(sentsRgx3, "$1\n$2")
-    sents = sents.replace(sentsRgx4, "$1\n$2")
-    sents = sents.replace(sentsRgx5, "$1\n")
+    {.cast(gcsafe).}:
+        var sents = text.replace(sentsRgx1, "$1\n")
+        sents = sents.replace(sentsRgx2, "")
+        sents = sents.replace(sentsRgx3, "$1\n$2")
+        sents = sents.replace(sentsRgx4, "$1\n$2")
+        sents = sents.replace(sentsRgx5, "$1\n")
 
-    sents = replaceTilNoChange(sents, sentsRgx6, "[$1 $2]")
-    sents = replaceTilNoChange(sents, sentsRgx7, "[$1 $2]")
+        sents = replaceTilNoChange(sents, sentsRgx6, "[$1 $2]")
+        sents = replaceTilNoChange(sents, sentsRgx7, "[$1 $2]")
 
-    sents = replaceTilNoChange(sents, sentsRgx8, "[$1 $2]")
-    sents = replaceTilNoChange(sents, sentsRgx9, "($1 $2)")
+        sents = replaceTilNoChange(sents, sentsRgx8, "[$1 $2]")
+        sents = replaceTilNoChange(sents, sentsRgx9, "($1 $2)")
 
-    sents = replaceTilNoChange(sents, sentsRgx10, "[$1 $2]")
-    sents = replaceTilNoChange(sents, sentsRgx11, "($1 $2)")
+        sents = replaceTilNoChange(sents, sentsRgx10, "[$1 $2]")
+        sents = replaceTilNoChange(sents, sentsRgx11, "($1 $2)")
 
-    sents = replace(sents, sentsRgx12, ". $1")
+        sents = replace(sents, sentsRgx12, ". $1")
 
-    sents = replace(sents, sentsRgx13, "$1 ")
+        sents = replace(sents, sentsRgx13, "$1 ")
 
-    sents = replace(sents, sentsRgx14, " $1")
-    sents = replace(sents, sentsRgx15, " $1")
-    sents = replace(sents, sentsRgx16, " $1")
-    sents = replace(sents, sentsRgx17, " $1")
-    sents = replace(sents, sentsRgx18, " $1")
-    # or IN. (this is nothing like a "complete" list...)
-    sents = replace(sents, sentsRgx19, " $1")
-    sents = replace(sents, sentsRgx20, " $1")
-    sents = replace(sents, sentsRgx21, " $1")
-    sents = replace(sents, sentsRgx22, " $1")
-    sents = replace(sents, sentsRgx23, " $1")
-    sents = replace(sents, sentsRgx24, " $1")
-    sents = replace(sents, sentsRgx25, " $1")
-    sents = replace(sents, sentsRgx26, " $1")
-    sents = replace(sents, sentsRgx27, " $1")
-    sents = replace(sents, sentsRgx28, " $1")
-    sents = replace(sents, sentsRgx29, " $1")
-    sents = replace(sents, sentsRgx30, " $1")
-    sents = replace(sents, sentsRgx31, " $1")
-    sents = replace(sents, sentsRgx32, " $1")
-    sents = replace(sents, sentsRgx33, " $1")
-    sents = replace(sents, sentsRgx34, " $1")
-    sents = replace(sents, sentsRgx35, " $1")
-    sents = replace(sents, sentsRgx36, " $1")
-    sents = replace(sents, sentsRgx37, " $1")
-    sents = replace(sents, sentsRgx38, " $1")
-    sents = replace(sents, sentsRgx39, " $1")
-    sents = replace(sents, sentsRgx40, " $1")
-    sents = replace(sents, sentsRgx41, " $1")
+        sents = replace(sents, sentsRgx14, " $1")
+        sents = replace(sents, sentsRgx15, " $1")
+        sents = replace(sents, sentsRgx16, " $1")
+        sents = replace(sents, sentsRgx17, " $1")
+        sents = replace(sents, sentsRgx18, " $1")
+        # or IN. (this is nothing like a "complete" list...)
+        sents = replace(sents, sentsRgx19, " $1")
+        sents = replace(sents, sentsRgx20, " $1")
+        sents = replace(sents, sentsRgx21, " $1")
+        sents = replace(sents, sentsRgx22, " $1")
+        sents = replace(sents, sentsRgx23, " $1")
+        sents = replace(sents, sentsRgx24, " $1")
+        sents = replace(sents, sentsRgx25, " $1")
+        sents = replace(sents, sentsRgx26, " $1")
+        sents = replace(sents, sentsRgx27, " $1")
+        sents = replace(sents, sentsRgx28, " $1")
+        sents = replace(sents, sentsRgx29, " $1")
+        sents = replace(sents, sentsRgx30, " $1")
+        sents = replace(sents, sentsRgx31, " $1")
+        sents = replace(sents, sentsRgx32, " $1")
+        sents = replace(sents, sentsRgx33, " $1")
+        sents = replace(sents, sentsRgx34, " $1")
+        sents = replace(sents, sentsRgx35, " $1")
+        sents = replace(sents, sentsRgx36, " $1")
+        sents = replace(sents, sentsRgx37, " $1")
+        sents = replace(sents, sentsRgx38, " $1")
+        sents = replace(sents, sentsRgx39, " $1")
+        sents = replace(sents, sentsRgx40, " $1")
+        sents = replace(sents, sentsRgx41, " $1")
 
-    # no sentence breaks in the middle of specific abbreviations
-    sents = replace(sents, sentsRgx42, "$1 $2")
-    sents = replace(sents, sentsRgx43, "$1 $2")
-    sents = replace(sents, sentsRgx44, "$1 $2")
+        # no sentence breaks in the middle of specific abbreviations
+        sents = replace(sents, sentsRgx42, "$1 $2")
+        sents = replace(sents, sentsRgx43, "$1 $2")
+        sents = replace(sents, sentsRgx44, "$1 $2")
 
-    # no sentence break after specific abbreviations
-    sents = replace(sents, sentsRgx45, "$1 ")
-    sents = replace(sents, sentsRgx46, "$1 ")
-    sents = replace(sents, sentsRgx47, "$1 ")
-    sents = replace(sents, sentsRgx48, "$1 ")
-    sents = replace(sents, sentsRgx49, "$1 ")
-    sents = replace(sents, sentsRgx50, "$1 ")
-    sents = replace(sents, sentsRgx51, "$1 ")
-    sents = replace(sents, sentsRgx52, "$1 ")
-    sents = replace(sents, sentsRgx53, "$1 ")
+        # no sentence break after specific abbreviations
+        sents = replace(sents, sentsRgx45, "$1 ")
+        sents = replace(sents, sentsRgx46, "$1 ")
+        sents = replace(sents, sentsRgx47, "$1 ")
+        sents = replace(sents, sentsRgx48, "$1 ")
+        sents = replace(sents, sentsRgx49, "$1 ")
+        sents = replace(sents, sentsRgx50, "$1 ")
+        sents = replace(sents, sentsRgx51, "$1 ")
+        sents = replace(sents, sentsRgx52, "$1 ")
+        sents = replace(sents, sentsRgx53, "$1 ")
 
-    sents.split(sentsRgx54)
+        sents.split(sentsRgx54)

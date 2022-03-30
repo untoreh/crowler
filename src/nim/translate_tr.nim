@@ -42,9 +42,11 @@ var
     scLock: Lock
     elSents {.threadvar.}: seq[string]
 
-sentsIn = new(splitSent)[].addr
-transOut = new(seq[string])[].addr
-splitCache = new(Table[string, seq[string]])[].addr
+# sentsIn = new(splitSent)[].addr
+sentsIn = create(splitSent)
+transOut = create(seq[string])
+# splitCache = new(Table[string, seq[string]])[].addr
+splitCache = create(Table[string, seq[string]])
 # init(splitCache)
 initLock(scLock)
 
@@ -66,7 +68,7 @@ proc doQuery[T](q: T, sents: seq[string]): seq[string] =
         itr = 1
         query = ""
 
-    for (sep, splitsep) in q.glues:
+    for (sep, splitsep) in q.glues[]:
         query = join(sents, sep)
         # debug "query: calling translation function, bucket: {q.bucket.len}, query: {query.len}"
         let res = q.call(query)

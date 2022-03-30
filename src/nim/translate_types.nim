@@ -28,7 +28,7 @@ type
         pair*: langPair
         slator*: Translator
         bufsize*: int
-        glues*: seq[(string, Regex)]
+        glues*: ptr seq[(string, Regex)]
         sz*: int
         call*: TFunc
     QueueXml* = object of Queue
@@ -140,19 +140,16 @@ const
         ]
     RTL_LANGS* = ["yi", "he", "ar", "fa", "ur", "az", "dv", ].toHashSet
 
-let
-    glue1 = re"\s?#\s?\|\s?#\s?\|\s?#\s?"
-    glue2 = re"\s?<\s?<\s?\.\s?\.\s?\.\s?>\s?>\s?"
-    glue3 = re"\%\s\¶\s?\%\s?\¶\s?\%\s?"
-    glue4 = re"\s?\n?\[\[?\.\.\.\]\]?\n?"
+let glues = @[
+        (" #|#|# ", re"\s?#\s?\|\s?#\s?\|\s?#\s?"),
+        (" <<...>> ", re"\s?<\s?<\s?\.\s?\.\s?\.\s?>\s?>\s?"),
+        (" %¶%¶% ", re"\%\s\¶\s?\%\s?\¶\s?\%\s?"),
+        (" \n[[...]]\n ", re"\s?\n?\[\[?\.\.\.\]\]?\n?")
+        ]
 
 proc initQueue*[T](f: TFunc, pair, slator: auto): T =
-    result.glues = @[
-        (" #|#|# ", glue1),
-        (" <<...>> ", glue2),
-        (" %¶%¶% ", glue3),
-        (" \n[[...]]\n ", glue4)
-        ]
+    {.cast(gcsafe).}:
+        result.glues = glues.unsafeAddr
     result.bufsize = 5000
     result.call = f
     result.pair = pair

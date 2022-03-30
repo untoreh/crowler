@@ -258,7 +258,7 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
 
 const pageContent* = postContent
 
-proc writeHtmlFile(path: string, data: auto) =
+proc writeHtmlFile(path: string, data: auto) {.inline.} =
     writeFile(path, fmt"<!doctype html>\n{data}")
 
 proc writeHtml*(basedir: string; slug: string; data: VNode) =
@@ -274,7 +274,6 @@ proc writeHtml*(basedir: string; slug: string; data: VNode) =
 proc writeHtml*(basedir: string; slug: string; data: string) =
     let w_path = basedir / slug & ".html"
     writeHtmlFile(w_path, data)
-
 
 proc buildPost*(a: Article): VNode =
     buildHtml(html):

@@ -53,13 +53,14 @@ proc isTranslatable(el: vdom.VNode, attr: string): bool = isTranslatable(vdom.ge
 let dotsRgx = re"\.?\.?"
 proc rewriteUrl(el, rewrite_path, hostname: auto) =
     var uriVar: URI
-    parseURI(el.attrs["href"], uriVar)
+    parseURI(el.getAttr("href"), uriVar)
     # remove initial dots from links
-    uriVar.path = uriVar.path.replace(dotRgx, "")
+    {.cast(gcsafe)}:
+        uriVar.path = uriVar.path.replace(dotsRgx, "")
     if uriVar.hostname == "" or uriVar.hostname == hostname and
         uriVar.hostname.startsWith("/"):
         uriVar.path = join(rewrite_path, uriVar.path)
-    el.attrs["href"] = $uriVar
+    el.setAttr("href", $uriVar)
 
 template translateEnv(kind: static[FcKind] = xml): untyped {.dirty.} =
     debug "html: initializing vars "
@@ -71,7 +72,7 @@ template translateEnv(kind: static[FcKind] = xml): untyped {.dirty.} =
         rewrite_path = "/" / pair.trg
         srv = fc.slator.name
     var
-        otree: XmlNode | vdom.VNode = deepcopy(fc.getHtml(kind))
+        otree = deepcopy(fc.getHtml(kind))
         q = getTfun(fc.pair, fc.slator).getQueue(kind, fc.pair, fc.slator)
     debug "html: setting root node attributes"
 
@@ -94,6 +95,7 @@ proc translateHtml(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true
         # skip empty nodes
         case el.kind:
             of xnText, xnVerbatimText:
+                discard
                 if el.text.isEmptyOrWhitespace:
                     continue
                 if isTranslatable(el):
@@ -103,15 +105,14 @@ proc translateHtml(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true
                 if t in tformsTags:
                     transforms[][t](el, file_path, url_path, pair)
                 if t == "a":
-                    if el.attrs.haskey("href"):
+                    if el.hasAttr("href"):
                         rewriteUrl(el, rewrite_path, hostname)
-                elif ((el.attrs.haskey "alt") and el.isTranslatable("alt")) or
-                     ((el.attrs.haskey "title") and el.isTranslatable("title")):
+                elif ((el.hasAttr("alt")) and el.isTranslatable("alt")) or
+                     ((el.hasAttr("title")) and el.isTranslatable("title")):
                     translate(q, el, srv)
     debug "html: finishing translations"
     translate(q, srv, finish = finish)
     (q, otree)
-    # return otree
     # raise newException(ValueError, "That's all, folks.")
 
 proc splitUrlPath*(rx, file: auto): auto =
@@ -146,31 +147,35 @@ proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true)
                 if t == VNodeKind.a:
                     if el.hasattr("href"):
                         rewriteUrl(el, rewrite_path, hostname)
-                elif ((el.attrs.haskey "alt") and el.isTranslatable("alt")) or
-                     ((el.attrs.haskey "title") and el.isTranslatable("title")):
+                elif ((el.hasAttr("alt")) and el.isTranslatable("alt")) or
+                     ((el.hasAttr("title")) and el.isTranslatable("title")):
                     translate(q, el, srv)
+    debug "html: finishing translations"
+    translate(q, srv, finish = finish)
     (q, otree)
 
-template tryTranslateFunc(kind: FcKind, code: untyped) =
+template tryTranslateFunc(kind: FcKind, code: untyped, post: untyped) {.dirty.} =
     var q: Queue
     case kind:
         of xml:
             var ot: XmlNode
             (q, ot) = translateHtml(code)
+            post
         else:
             var ot: vdom.VNode
             (q, ot) = translateDom(code)
+            post
+    debug "trytrans: returning from translations"
 
 proc tryTranslate(fc: ptr FileContext, kind: FcKind): bool =
     var tries = 0
     while tries < cfg.MAX_TRANSLATION_TRIES:
         try:
             debug "trytrans: scheduling translation"
-            tryTranslateFunc(kind, fc)
-            debug "trytrans: returning from translations"
-            # debug "writing to path {ctx.t_path}"
-            # toggle(dowrite):
-            # writeFile(fc.t_path, fmt"<!doctype html>\n{ot}")
+            tryTranslateFunc(kind, fc):
+                toggle(WRITE_TO_FILE):
+                    debug "writing to path {fc.t_path}"
+                    writeFile(fc.t_path, fmt"<!doctype html>\n{ot}")
             return true
         except Exception as e:
             tries += 1

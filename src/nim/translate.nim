@@ -16,7 +16,8 @@ import nimpy,
        lrucache,
        weave,
        weave/runtime,
-       locks
+       locks,
+       macros
 
 # from karax/vdom import nil
 import karax/vdom
@@ -35,6 +36,7 @@ const excluded_dirs = to_hashset[string](collect(for lang in TLangs: lang.code))
 const included_dirs = to_hashset[string]([])
 
 let htmlcache = newLRUCache[string, XmlNode](32)
+var vbtmcache {.threadvar.}: LruCache[array[5, byte], XmlNode]
 
 proc link_src_to_dir(dir: string) =
     let link_path = dir / SLang.code
@@ -55,12 +57,23 @@ proc rewriteUrl(el, rewrite_path, hostname: auto) =
     var uriVar: URI
     parseURI(el.getAttr("href"), uriVar)
     # remove initial dots from links
-    {.cast(gcsafe)}:
+    {.cast(gcsafe).}:
         uriVar.path = uriVar.path.replace(dotsRgx, "")
     if uriVar.hostname == "" or uriVar.hostname == hostname and
         uriVar.hostname.startsWith("/"):
         uriVar.path = join(rewrite_path, uriVar.path)
     el.setAttr("href", $uriVar)
+
+macro defIfDom(kind: static[FcKind]): untyped =
+    case kind:
+        of dom:
+            quote do:
+                var
+                    xq {.inject.} = getTfun(fc.pair, fc.slator).getQueue(xml, fc.pair, fc.slator)
+                    xtformsTags {.inject} = collect(for k in getTForms(xml).keys: k).toHashSet()
+        else:
+            quote do:
+                discard
 
 template translateEnv(kind: static[FcKind] = xml): untyped {.dirty.} =
     debug "html: initializing vars "
@@ -74,7 +87,45 @@ template translateEnv(kind: static[FcKind] = xml): untyped {.dirty.} =
     var
         otree = deepcopy(fc.getHtml(kind))
         q = getTfun(fc.pair, fc.slator).getQueue(kind, fc.pair, fc.slator)
+
+    defIfDom(kind)
+
     debug "html: setting root node attributes"
+
+template translateNode(otree: XmlNode, q: QueueXml, tformsTags: auto) =
+    for el in preorder(otree):
+        # skip empty nodes
+        case el.kind:
+            of xnText, xnVerbatimText:
+                discard
+                if el.text.isEmptyOrWhitespace:
+                    continue
+                if isTranslatable(el):
+                    translate(q, el, srv)
+            else:
+                let t = el.tag
+                if t in tformsTags:
+                    getTforms(xml)[][t](el, file_path, url_path, pair)
+                if t == "a":
+                    if el.hasAttr("href"):
+                        rewriteUrl(el, rewrite_path, hostname)
+                elif ((el.hasAttr("alt")) and el.isTranslatable("alt")) or
+                     ((el.hasAttr("title")) and el.isTranslatable("title")):
+                    translate(q, el, srv)
+    translate(q, srv, finish = finish)
+
+template translateNode(node: VNode, q: QueueXml): typed =
+    assert node.kind == VNodeKind.verbatim
+    let
+        s = node.text
+        tree = try:
+                   vbtmcache[s.key]
+               except:
+                   vbtmcache[s.key] = parseHtml(s)
+                   vbtmcache[s.key]
+        otree = deepcopy(tree)
+    translateNode(otree, q, xtformsTags)
+    node.text = $otree
 
 proc translateHtml(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true): auto =
     translateEnv()
@@ -91,27 +142,8 @@ proc translateHtml(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true
         a["dir"] = "rtl"
 
     debug "html: recursing tree..."
-    for el in preorder(otree):
-        # skip empty nodes
-        case el.kind:
-            of xnText, xnVerbatimText:
-                discard
-                if el.text.isEmptyOrWhitespace:
-                    continue
-                if isTranslatable(el):
-                    translate(q, el, srv)
-            else:
-                let t = el.tag
-                if t in tformsTags:
-                    transforms[][t](el, file_path, url_path, pair)
-                if t == "a":
-                    if el.hasAttr("href"):
-                        rewriteUrl(el, rewrite_path, hostname)
-                elif ((el.hasAttr("alt")) and el.isTranslatable("alt")) or
-                     ((el.hasAttr("title")) and el.isTranslatable("title")):
-                    translate(q, el, srv)
-    debug "html: finishing translations"
-    translate(q, srv, finish = finish)
+    translateNode(otree, q, tformsTags)
+    debug "html: finished translations"
     (q, otree)
     # raise newException(ValueError, "That's all, folks.")
 
@@ -132,23 +164,26 @@ proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true)
                 node.setAttr("lang", pair.trg)
                 if pair.trg in RTL_LANGS:
                     node.setAttr("dir", "rtl")
+                break
             else: continue
     for el in otree.preorder():
         case el.kind:
-           of vdom.VNodeKind.text:
-               if el.text.isEmptyOrWhitespace:
-                   continue
-               if isTranslatable(el):
-                   translate(q, el, srv)
-           else:
+            of vdom.VNodeKind.text:
+                if el.text.isEmptyOrWhitespace:
+                    continue
+                if isTranslatable(el):
+                    translate(q, el, srv)
+            else:
                 let t = el.kind
                 if t in tformsTags:
                     getTForms(dom)[][t](el, file_path, url_path, pair)
                 if t == VNodeKind.a:
                     if el.hasattr("href"):
                         rewriteUrl(el, rewrite_path, hostname)
+                elif t == VNodeKind.verbatim:
+                    translateNode(el, xq)
                 elif ((el.hasAttr("alt")) and el.isTranslatable("alt")) or
-                     ((el.hasAttr("title")) and el.isTranslatable("title")):
+                        ((el.hasAttr("title")) and el.isTranslatable("title")):
                     translate(q, el, srv)
     debug "html: finishing translations"
     translate(q, srv, finish = finish)
@@ -247,6 +282,8 @@ proc initThread() =
     initPunctRgx()
     initTrans()
     initTFuncCache()
+    if vbtmcache.isnil:
+        vbtmcache = newLRUCache[array[5, byte], XmlNode](32)
 
 proc exitThread() =
     saveToDB(force = true)

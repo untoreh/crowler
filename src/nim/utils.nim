@@ -148,6 +148,13 @@ iterator preorder*(tree: XmlNode): XmlNode =
             else:
                 yield node
 
+proc key*(s: string): array[5, byte] =
+    case s.len
+         of 0: result = default(array[5, byte])
+         else:
+             let ln = s.len
+             result = cast[array[5, byte]]([s[0], s[ln /% 4], s[ln /% 3], s[ln /% 2], s[ln - 1]])
+
 iterator preorder*(tree: VNode): VNode =
     ## Iterator, skipping tags in `skip_nodes`
     ## also skipping comments, entities, CDATA and zero-length text nodes
@@ -360,3 +367,9 @@ proc splitSentences*(text: string): seq[string] =
         sents = replace(sents, sentsRgx53, "$1 ")
 
         sents.split(sentsRgx54)
+
+import karax/karaxdsl
+when isMainModule:
+    let node = buildHtml(html):
+        text "ciao!!!"
+    echo key("ciaosidoaksdks")

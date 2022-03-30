@@ -80,8 +80,8 @@ proc initFileContext*(data, file_path, url_path, pair, slator, t_path: auto): pt
 const
     default_service* = deep_translator
     skip_nodes* = static(["code", "style", "script", "address", "applet", "audio", "canvas",
-            "embed", "time", "video"])
-    skip_vnodes* = static([VNodeKind.code, style, script, address, audio, canvas, embed, time, video])
+            "embed", "time", "video", "svg"])
+    skip_vnodes* = static([VNodeKind.code, style, script, address, audio, canvas, embed, time, video, svg])
     skip_class* = ["menu-lang-btn"].static
 
 let

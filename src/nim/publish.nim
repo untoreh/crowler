@@ -14,7 +14,8 @@ import nimpy,
        tables
 
 import cfg,
-       types
+       types,
+       utils
 
 privateAccess(LocalitySensitive)
 var pageset = Table[string, bool]()

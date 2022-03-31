@@ -34,9 +34,8 @@ macro debug*(code: untyped): untyped =
 macro warn*(code: untyped): untyped =
     if logLevelMacro >= lvlWarn:
         quote do:
-            loggingLock.acquire()
-            logger[].log lvlWarn, fmt logstring(`code`)
-            loggingLock.release()
+            withLock(loggingLock):
+                logger[].log lvlWarn, fmt logstring(`code`)
     else:
         quote do:
             discard
@@ -44,9 +43,8 @@ macro warn*(code: untyped): untyped =
 macro info*(code: untyped): untyped =
     if logLevelMacro <= lvlInfo:
         quote do:
-            loggingLock.acquire()
-            logger[].log lvlInfo, logstring(`code`)
-            loggingLock.release()
+            withLock(loggingLock):
+                logger[].log lvlInfo, logstring(`code`)
     else:
         quote do:
             discard
@@ -145,15 +143,14 @@ iterator preorder*(tree: XmlNode): XmlNode =
                                 continue
                         for c in mitems(node):
                             stack.add(c)
-            else:
-                yield node
+                        yield node
 
 proc key*(s: string): array[5, byte] =
     case s.len
-         of 0: result = default(array[5, byte])
-         else:
-             let ln = s.len
-             result = cast[array[5, byte]]([s[0], s[ln /% 4], s[ln /% 3], s[ln /% 2], s[ln - 1]])
+        of 0: result = default(array[5, byte])
+        else:
+            let ln = s.len
+            result = cast[array[5, byte]]([s[0], s[ln /% 4], s[ln /% 3], s[ln /% 2], s[ln - 1]])
 
 iterator preorder*(tree: VNode): VNode =
     ## Iterator, skipping tags in `skip_nodes`
@@ -196,7 +193,7 @@ proc getText*(el: XmlNode): string =
         else:
             result = el.attrs.getOrDefault("alt", "")
             if result == "":
-               result = el.attrs.getOrDefault("title", "")
+                result = el.attrs.getOrDefault("title", "")
 
 proc getText*(el: VNode): string =
     case el.kind:
@@ -229,75 +226,98 @@ proc setText*(el: VNode, v: auto) =
 
 proc hasAttr*(el: VNode, k: string): bool =
     for (i, v) in el.attrs:
-        if i == v:
+        if k == i:
             return true
     return false
 
-proc hasAttr*(el: XmlNode, k: string): bool = el.attrs.haskey k
+proc hasAttr*(el: XmlNode, k: string): bool = (not el.attrs.isnil) and el.attrs.haskey k
 proc getAttr*(el: XmlNode, k: string): string = el.attrs[k]
 proc setAttr*(el: XmlNode, k: string, v: auto) = el.attrs[k] = v
+
+macro pragmaVars(tp, pragma: untyped, vars: varargs[untyped]): untyped =
+    ## Apply a pragma to multiple variables
+    let prg = nnkPragma.newTree(pragma)
+    let idefs = nnkIdentDefs.newTree()
+    for varIdent in vars:
+        idefs.add nnkPragmaExpr.newTree(
+            varIdent,
+            prg
+        )
+    idefs.add tp
+    idefs.add newEmptyNode()
+    result = nnkVarSection.newTree(idefs)
+
 
 proc replaceTilNoChange(input: var auto, pattern, repl: auto): string =
     while pattern in input:
         input = input.replace(pattern, repl)
     input
 
-let
-    sentsRgx1 = re"([?!.])\s"
-    sentsRgx2 = re"\r"
-    sentsRgx3 = re"\b([a-z]+\?) ([A-Z][a-z]+)\b"
-    sentsRgx4 = re"\b([a-z]+ \.) ([A-Z][a-z]+)\b"
-    sentsRgx5 = re"\n([.!?]+)\n"
-    sentsRgx6 = re"\[([^\[\]\(\)]*)\n([^\[\]\(\)]*)\]"
-    sentsRgx7 = re"\(([^\[\]\(\)]*)\n([^\[\]\(\)]*)\)"
-    sentsRgx8 = re"\[([^\[\]]{0,250})\n([^\[\]]{0,250})\]"
-    sentsRgx9 = re"\(([^\(\)]{0,250})\n([^\(\)]{0,250})\)"
-    sentsRgx10 = re"\[((?:[^\[\]]|\[[^\[\]]*\]){0,250})\n((?:[^\[\]]|\[[^\[\]]*\]){0,250})\]"
-    sentsRgx11 = re"\(((?:[^\(\)]|\([^\(\)]*\)){0,250})\n((?:[^\(\)]|\([^\(\)]*\)){0,250})\)"
-    sentsRgx12 = re"\.\n([a-z]{3}[a-z-]{0,}[ \.\:\,])"
-    sentsRgx13 = re"(\b[A-HJ-Z]\.)\n"
-    sentsRgx14 = re"\n(and )"
-    sentsRgx15 = re"\n(or )"
-    sentsRgx16 = re"\n(but )"
-    sentsRgx17 = re"\n(nor )"
-    sentsRgx18 = re"\n(yet )"
-    sentsRgx19 = re"\n(of )"
-    sentsRgx20 = re"\n(in )"
-    sentsRgx21 = re"\n(by )"
-    sentsRgx22 = re"\n(as )"
-    sentsRgx23 = re"\n(on )"
-    sentsRgx24 = re"\n(at )"
-    sentsRgx25 = re"\n(to )"
-    sentsRgx26 = re"\n(via )"
-    sentsRgx27 = re"\n(for )"
-    sentsRgx28 = re"\n(with )"
-    sentsRgx29 = re"\n(that )"
-    sentsRgx30 = re"\n(than )"
-    sentsRgx31 = re"\n(from )"
-    sentsRgx32 = re"\n(into )"
-    sentsRgx33 = re"\n(upon )"
-    sentsRgx34 = re"\n(after )"
-    sentsRgx35 = re"\n(while )"
-    sentsRgx36 = re"\n(during )"
-    sentsRgx37 = re"\n(within )"
-    sentsRgx38 = re"\n(through )"
-    sentsRgx39 = re"\n(between )"
-    sentsRgx40 = re"\n(whereas )"
-    sentsRgx41 = re"\n(whether )"
-    sentsRgx42 = re"(\be\.)\n(g\.)"
-    sentsRgx43 = re"(\bi\.)\n(e\.)"
-    sentsRgx44 = re"(\bi\.)\n(v\.)"
-    sentsRgx45 = re"(\be\. ?g\.)\n"
-    sentsRgx46 = re"(\bi\. ?e\.)\n"
-    sentsRgx47 = re"(\bi\. ?v\.)\n"
-    sentsRgx48 = re"(\bvs\.)\n"
-    sentsRgx49 = re"(\bcf\.)\n"
-    sentsRgx50 = re"(\bDr\.)\n"
-    sentsRgx51 = re"(\bMr\.)\n"
-    sentsRgx52 = re"(\bMs\.)\n"
-    sentsRgx53 = re"(\bMrs\.)\n"
-    sentsRgx54 = re"\n"
+pragmaVars(Regex, threadvar, sentsRgx1, sentsRgx2, sentsRgx3, sentsRgx4, sentsRgx5, sentsRgx6,
+        sentsRgx7, sentsRgx8, sentsRgx9, sentsRgx10, sentsRgx11, sentsRgx12, sentsRgx13, sentsRgx14,
+        sentsRgx15, sentsRgx16, sentsRgx17, sentsRgx18, sentsRgx19, sentsRgx20, sentsRgx21,
+        sentsRgx22, sentsRgx23, sentsRgx24, sentsRgx25, sentsRgx26, sentsRgx27, sentsRgx28,
+        sentsRgx29, sentsRgx30, sentsRgx31, sentsRgx32, sentsRgx33, sentsRgx34, sentsRgx35,
+        sentsRgx36, sentsRgx37, sentsRgx38, sentsRgx39, sentsRgx40, sentsRgx41, sentsRgx42,
+        sentsRgx43, sentsRgx44, sentsRgx45, sentsRgx46, sentsRgx47, sentsRgx48, sentsRgx49,
+        sentsRgx50, sentsRgx51, sentsRgx52, sentsRgx53, sentsRgx54)
 
+proc initSentsRgx*() =
+    if sentsRgx1.isnil:
+        sentsRgx1 = re"([?!.])\s"
+        sentsRgx2 = re"\r"
+        sentsRgx3 = re"\b([a-z]+\?) ([A-Z][a-z]+)\b"
+        sentsRgx4 = re"\b([a-z]+ \.) ([A-Z][a-z]+)\b"
+        sentsRgx5 = re"\n([.!?]+)\n"
+        sentsRgx6 = re"\[([^\[\]\(\)]*)\n([^\[\]\(\)]*)\]"
+        sentsRgx7 = re"\(([^\[\]\(\)]*)\n([^\[\]\(\)]*)\)"
+        sentsRgx8 = re"\[([^\[\]]{0,250})\n([^\[\]]{0,250})\]"
+        sentsRgx9 = re"\(([^\(\)]{0,250})\n([^\(\)]{0,250})\)"
+        sentsRgx10 = re"\[((?:[^\[\]]|\[[^\[\]]*\]){0,250})\n((?:[^\[\]]|\[[^\[\]]*\]){0,250})\]"
+        sentsRgx11 = re"\(((?:[^\(\)]|\([^\(\)]*\)){0,250})\n((?:[^\(\)]|\([^\(\)]*\)){0,250})\)"
+        sentsRgx12 = re"\.\n([a-z]{3}[a-z-]{0,}[ \.\:\,])"
+        sentsRgx13 = re"(\b[A-HJ-Z]\.)\n"
+        sentsRgx14 = re"\n(and )"
+        sentsRgx15 = re"\n(or )"
+        sentsRgx16 = re"\n(but )"
+        sentsRgx17 = re"\n(nor )"
+        sentsRgx18 = re"\n(yet )"
+        sentsRgx19 = re"\n(of )"
+        sentsRgx20 = re"\n(in )"
+        sentsRgx21 = re"\n(by )"
+        sentsRgx22 = re"\n(as )"
+        sentsRgx23 = re"\n(on )"
+        sentsRgx24 = re"\n(at )"
+        sentsRgx25 = re"\n(to )"
+        sentsRgx26 = re"\n(via )"
+        sentsRgx27 = re"\n(for )"
+        sentsRgx28 = re"\n(with )"
+        sentsRgx29 = re"\n(that )"
+        sentsRgx30 = re"\n(than )"
+        sentsRgx31 = re"\n(from )"
+        sentsRgx32 = re"\n(into )"
+        sentsRgx33 = re"\n(upon )"
+        sentsRgx34 = re"\n(after )"
+        sentsRgx35 = re"\n(while )"
+        sentsRgx36 = re"\n(during )"
+        sentsRgx37 = re"\n(within )"
+        sentsRgx38 = re"\n(through )"
+        sentsRgx39 = re"\n(between )"
+        sentsRgx40 = re"\n(whereas )"
+        sentsRgx41 = re"\n(whether )"
+        sentsRgx42 = re"(\be\.)\n(g\.)"
+        sentsRgx43 = re"(\bi\.)\n(e\.)"
+        sentsRgx44 = re"(\bi\.)\n(v\.)"
+        sentsRgx45 = re"(\be\. ?g\.)\n"
+        sentsRgx46 = re"(\bi\. ?e\.)\n"
+        sentsRgx47 = re"(\bi\. ?v\.)\n"
+        sentsRgx48 = re"(\bvs\.)\n"
+        sentsRgx49 = re"(\bcf\.)\n"
+        sentsRgx50 = re"(\bDr\.)\n"
+        sentsRgx51 = re"(\bMr\.)\n"
+        sentsRgx52 = re"(\bMs\.)\n"
+        sentsRgx53 = re"(\bMrs\.)\n"
+        sentsRgx54 = re"\n"
 
 proc splitSentences*(text: string): seq[string] =
     {.cast(gcsafe).}:
@@ -368,7 +388,7 @@ proc splitSentences*(text: string): seq[string] =
 
         sents.split(sentsRgx54)
 
-import karax/karaxdsl
+
 when isMainModule:
     let node = buildHtml(html):
         text "ciao!!!"

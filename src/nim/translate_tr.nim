@@ -68,7 +68,7 @@ proc doQuery[T](q: T, sents: seq[string]): seq[string] =
         itr = 1
         query = ""
 
-    for (sep, splitsep) in q.glues[]:
+    for (sep, splitsep) in q.glues:
         query = join(sents, sep)
         # debug "query: calling translation function, bucket: {q.bucket.len}, query: {query.len}"
         let res = q.call(query)

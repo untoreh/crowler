@@ -28,7 +28,7 @@ type
         pair*: langPair
         slator*: Translator
         bufsize*: int
-        glues*: ptr seq[(string, Regex)]
+        glues*: seq[(string, Regex)]
         sz*: int
         call*: TFunc
     QueueXml* = object of Queue
@@ -82,18 +82,17 @@ const
     skip_nodes* = static(["code", "style", "script", "address", "applet", "audio", "canvas",
             "embed", "time", "video", "svg"])
     skip_vnodes* = static([VNodeKind.code, style, script, address, audio, canvas, embed, time, video, svg])
-    skip_class* = ["menu-lang-btn"].static
+    skip_class* = ["menu-lang-btn", "material-icons"].static
 
 let
     pybi = pyBuiltinsModule()
     pytypes = pyImport("types")
 
-var punct_rgx* {.threadvar.}: ptr Regex
+var punct_rgx* {.threadvar.}: Regex
 
 proc initPunctRgx*() =
     if punct_rgx.isnil:
-        punct_rgx = create(Regex)
-        punct_rgx[] = re"^([[:punct:]]|\s)+$"
+        punct_rgx = re"^([[:punct:]]|\s)+$"
 
 proc `$`*(t: Translator): string =
     let langs = collect(for k in keys(t.tr): k)
@@ -140,16 +139,18 @@ const
         ]
     RTL_LANGS* = ["yi", "he", "ar", "fa", "ur", "az", "dv", ].toHashSet
 
-let glues = @[
-        (" #|#|# ", re"\s?#\s?\|\s?#\s?\|\s?#\s?"),
-        (" <<...>> ", re"\s?<\s?<\s?\.\s?\.\s?\.\s?>\s?>\s?"),
-        (" %¶%¶% ", re"\%\s\¶\s?\%\s?\¶\s?\%\s?"),
-        (" \n[[...]]\n ", re"\s?\n?\[\[?\.\.\.\]\]?\n?")
-        ]
+var glues {.threadvar.} : seq[(string, Regex)]
+
+proc initGlues*() =
+    glues = @[
+    (" #|#|# ", re"\s?#\s?\|\s?#\s?\|\s?#\s?"),
+    (" <<...>> ", re"\s?<\s?<\s?\.\s?\.\s?\.\s?>\s?>\s?"),
+    (" %¶%¶% ", re"\%\s\¶\s?\%\s?\¶\s?\%\s?"),
+    (" \n[[...]]\n ", re"\s?\n?\[\[?\.\.\.\]\]?\n?")
+    ]
 
 proc initQueue*[T](f: TFunc, pair, slator: auto): T =
-    {.cast(gcsafe).}:
-        result.glues = glues.unsafeAddr
+    result.glues = glues
     result.bufsize = 5000
     result.call = f
     result.pair = pair

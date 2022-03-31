@@ -47,12 +47,13 @@ proc link_src_to_dir(dir: string) =
     createSymlink("./", link_path)
     debug "Created symlink from {dir} to {link_path}"
 
-proc isTranslatable(t: string): bool = not (punct_rgx[] in t)
+proc isTranslatable(t: string): bool = not (punct_rgx in t)
 proc isTranslatable(el: XmlNode | vdom.VNode): bool = isTranslatable(el.text)
 proc isTranslatable(el: XmlNode, attr: string): bool = isTranslatable(el.attrs[attr])
 proc isTranslatable(el: vdom.VNode, attr: string): bool = isTranslatable(vdom.getAttr(el, attr))
 
-let dotsRgx = re"\.?\.?"
+var dotsRgx {.threadvar.}: Regex
+
 proc rewriteUrl(el, rewrite_path, hostname: auto) =
     var uriVar: URI
     parseURI(el.getAttr("href"), uriVar)
@@ -178,7 +179,7 @@ proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true)
                 if t in tformsTags:
                     getTForms(dom)[][t](el, file_path, url_path, pair)
                 if t == VNodeKind.a:
-                    if el.hasattr("href"):
+                    if el.hasAttr("href"):
                         rewriteUrl(el, rewrite_path, hostname)
                 elif t == VNodeKind.verbatim:
                     translateNode(el, xq)
@@ -210,7 +211,7 @@ proc tryTranslate(fc: ptr FileContext, kind: FcKind): bool =
             tryTranslateFunc(kind, fc):
                 toggle(WRITE_TO_FILE):
                     debug "writing to path {fc.t_path}"
-                    writeFile(fc.t_path, fmt"<!doctype html>\n{ot}")
+                    writeFile(fc.t_path, fmt"<!doctype html>{'\n'}{ot}")
             return true
         except Exception as e:
             tries += 1
@@ -284,6 +285,9 @@ proc initThread() =
     initTFuncCache()
     if vbtmcache.isnil:
         vbtmcache = newLRUCache[array[5, byte], XmlNode](32)
+    initSentsRgx()
+    initGlues()
+    dotsRgx = re"\.?\.?"
 
 proc exitThread() =
     saveToDB(force = true)
@@ -318,7 +322,7 @@ when isMainModule:
         slator = initTranslator(default_service, source = SLang)
         rx_file = re fmt"(.*{dir}/)(.*$)"
     let
-        file = "/home/fra/dev/wsl/site/vps/0/rpresidentialpoll-1844-free-soil-party-convention-vp-balloting.html"
+        file = "/home/fra/dev/wsl/site/vps/2/javascript-is-not-available.html"
         html = fetchHtml(file)
         (filepath, urlpath) = splitUrlPath(rx_file, file)
         pair = (src: "en", trg: "it")
@@ -327,7 +331,7 @@ when isMainModule:
     # translateDir(SITE_PATH, target_path = "/tmp/out")
     #
     withWeave:
-    # initThread()
+        initThread()
         translateFile(file, rx_file, langpairs, slator, target_path = "/tmp/out")
     # withWeave:
     #     echo timeGo do:

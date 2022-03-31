@@ -8,8 +8,6 @@ import locks,
 
 import translate_types
 
-const skip_class = to_hashset[string]([])
-
 type
     TransformFunc* = proc(el: XmlNode, file: string, url: string, pair: langPair) {.gcsafe.}
     VTransformFunc* = proc(el: VNode, file: string, url: string, pair: langPair) {.gcsafe.}

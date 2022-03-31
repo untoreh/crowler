@@ -17,6 +17,7 @@ import nre
 # from translate import translateTree, setupTranslation, splitUrlPath
 # from translate_types import TLangs
 import translate
+import utils
 
 const LOGO_HTML = readFile(LOGO_PATH)
 const LOGO_SMALL_HTML = readFile(LOGO_SMALL_PATH)
@@ -259,7 +260,8 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
 const pageContent* = postContent
 
 proc writeHtmlFile(path: string, data: auto) {.inline.} =
-    writeFile(path, fmt"<!doctype html>\n{data}")
+    debug "writing html file to {path}"
+    writeFile(path, fmt"<!doctype html>{'\n'}{data}")
 
 proc writeHtml*(basedir: string; slug: string; data: VNode) =
     let

@@ -74,8 +74,8 @@ proc `$`*(a: Article): string =
         "\purl: " &
         a.url
 
-const ymdFormat = "yyyy-MM-dd"
-const isoFormat = "yyyy-MM-dd'T'HH:mm:ss"
+const ymdFormat* = "yyyy-MM-dd"
+const isoFormat* = "yyyy-MM-dd'T'HH:mm:ss"
 
 proc pydate*(py: PyObject, default = getTime()): Time =
     if pyisnone(py):

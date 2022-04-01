@@ -5,7 +5,7 @@
 
   --secondary: #0e2837;
   --light-secondary: #385061;
-  --dark-secondary: #000012;
+  --dark-secondary: #02020d;
 
   --on-primary: var(--secondary);
   --on-secondary: var(--primary);
@@ -28,7 +28,7 @@
   --light-background: #ffe7a4;
   --light-on-background: var(--dark-background);
 
-  --dark-background: #000012;
+  --dark-background: #02020d;
   --dark-on-background: var(--light-background);
 
   --light-surface: var(--light-secondary);
@@ -57,7 +57,7 @@
   --mdc-theme-on-secondary: var(--dark-on-secondary);
   --mdc-theme-on-surface: var(--dark-on-surface);
   // background: var(--dark-background);
-  background: black;
+  background: #02020d;
 }
 
 body {
@@ -75,7 +75,7 @@ body {
   }
   main {
     // background: var(--dark-background);
-    background: black;
+    background: #02020d;
     color: var(--text-primary-on-dark);
   }
   a {

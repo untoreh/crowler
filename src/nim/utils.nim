@@ -10,7 +10,10 @@ import xmltree
 import translate_types
 import strtabs
 import macros
+import tables
+import sequtils
 import locks
+import uri
 import weave
 import karax / vdom
 export weave
@@ -151,6 +154,28 @@ proc key*(s: string): array[5, byte] =
         else:
             let ln = s.len
             result = cast[array[5, byte]]([s[0], s[ln /% 4], s[ln /% 3], s[ln /% 2], s[ln - 1]])
+
+
+proc mergeUri*(dst: ref Uri, src: Uri): ref Uri =
+    ## Assign parts of `src` Uri over to `dst` Uri.
+    dst.scheme = src.scheme
+    dst.username = src.username
+    dst.password = src.password
+    dst.hostname = src.hostname
+    dst.port = src.port
+    dst.path = src.path
+    var query = initTable[string, string]()
+    for (k, v) in dst.query.decodeQuery:
+        query[k] = v
+    for (k, v) in src.query.decodeQuery:
+        query[k] = v
+    dst.query = encodeQuery(collect(for k, v in query.pairs(): (k, v)))
+    # dst.query = encodeQuery(convert(seq[(string, string)], query))
+    dst.anchor = src.anchor
+    dst.opaque = src.opaque
+    # FIXME: should this be assigned ?
+    # src.isIpv6 = dst.isIpv6
+    dst
 
 iterator preorder*(tree: VNode): VNode =
     ## Iterator, skipping tags in `skip_nodes`

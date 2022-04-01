@@ -53,17 +53,17 @@ proc isTranslatable(el: XmlNode, attr: string): bool = isTranslatable(el.attrs[a
 proc isTranslatable(el: vdom.VNode, attr: string): bool = isTranslatable(vdom.getAttr(el, attr))
 
 var dotsRgx {.threadvar.}: Regex
+var uriVar {.threadVar.}: URI
 
 proc rewriteUrl(el, rewrite_path, hostname: auto) =
-    var uriVar: URI
     parseURI(el.getAttr("href"), uriVar)
     # remove initial dots from links
-    {.cast(gcsafe).}:
-        uriVar.path = uriVar.path.replace(dotsRgx, "")
-    if uriVar.hostname == "" or uriVar.hostname == hostname and
-        uriVar.hostname.startsWith("/"):
-        uriVar.path = join(rewrite_path, uriVar.path)
+    uriVar.path = uriVar.path.replace(dotsRgx, "")
+    if uriVar.hostname == "" or (uriVar.hostname == hostname and
+        uriVar.hostname.startsWith("/")):
+        uriVar.path = joinpath(rewrite_path, uriVar.path)
     el.setAttr("href", $uriVar)
+    # debug "old: {prev} new: {$uriVar}, {rewrite_path}"
 
 macro defIfDom(kind: static[FcKind]): untyped =
     case kind:
@@ -71,7 +71,7 @@ macro defIfDom(kind: static[FcKind]): untyped =
             quote do:
                 var
                     xq {.inject.} = getTfun(fc.pair, fc.slator).getQueue(xml, fc.pair, fc.slator)
-                    xtformsTags {.inject} = collect(for k in getTForms(xml).keys: k).toHashSet()
+                    xtformsTags {.inject.} = collect(for k in getTForms(xml).keys: k).toHashSet()
         else:
             quote do:
                 discard
@@ -287,7 +287,7 @@ proc initThread() =
         vbtmcache = newLRUCache[array[5, byte], XmlNode](32)
     initSentsRgx()
     initGlues()
-    dotsRgx = re"\.?\.?"
+    dotsRgx = re"^\.?\.?"
 
 proc exitThread() =
     saveToDB(force = true)

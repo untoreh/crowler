@@ -14,7 +14,11 @@ zict
 
 # data
 zarr
-numcodecs
+# ALPINE distro packages
+# py3-numpy
+# py3-curl
+# HAVE TO BE BUILT
+# numcodecs
 
 # for nim
 unidecode

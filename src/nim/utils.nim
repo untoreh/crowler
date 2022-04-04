@@ -1,22 +1,27 @@
-import os
-import sets
-import cfg
-import sugar
-import deques
-import nre
-import strutils
-import strformat
-import xmltree
-import translate_types
-import strtabs
-import macros
-import tables
-import sequtils
-import locks
-import uri
-import weave
-import karax / vdom
+import os,
+       sets,
+       cfg,
+       sugar,
+       deques,
+       nre,
+       strutils,
+       strformat,
+       xmltree,
+       strtabs,
+       macros,
+       tables,
+       sequtils,
+       locks,
+       uri,
+       weave,
+       karax / vdom,
+       std/importutils
+
 export weave
+
+import translate_types
+
+type kstring = string
 
 var loggingLock: Lock
 initLock(loggingLock)
@@ -148,6 +153,7 @@ iterator preorder*(tree: XmlNode): XmlNode =
                             stack.add(c)
                         yield node
 
+
 proc key*(s: string): array[5, byte] =
     case s.len
         of 0: result = default(array[5, byte])
@@ -156,14 +162,18 @@ proc key*(s: string): array[5, byte] =
             result = cast[array[5, byte]]([s[0], s[ln /% 4], s[ln /% 3], s[ln /% 2], s[ln - 1]])
 
 
+
 proc mergeUri*(dst: ref Uri, src: Uri): ref Uri =
     ## Assign parts of `src` Uri over to `dst` Uri.
-    dst.scheme = src.scheme
-    dst.username = src.username
-    dst.password = src.password
-    dst.hostname = src.hostname
-    dst.port = src.port
-    dst.path = src.path
+    type UrifIelds = enum scheme, username, password, hostname, port, path
+    template take(field) =
+        shallowCopy dst.field, src.field
+    take scheme
+    take username
+    take password
+    take hostname
+    take port
+    take path
     var query = initTable[string, string]()
     for (k, v) in dst.query.decodeQuery:
         query[k] = v
@@ -201,6 +211,37 @@ iterator preorder*(tree: VNode): VNode =
                 for c in node.items():
                     stack.add(c)
                 yield node
+
+proc find*(node: VNode, kind: VNodeKind): VNode =
+    for n in node.preorder():
+        if n.kind == kind:
+            return n
+    return node
+
+
+proc clear*(node: VNode) =
+    privateAccess(VNode)
+    node.kids.setlen(0)
+    node.attrs.setlen(0)
+
+proc clearAttrs*(node: VNode) {.inline.} =
+    privateAccess(VNode)
+    node.attrs.setlen(0)
+
+proc clearChildren*(node: VNode) {.inline.} =
+    privateAccess(VNode)
+    node.kids.setlen(0)
+
+proc delAttr*(n: VNode, k: auto) =
+    privateAccess(VNode)
+    for i in countup(0, n.attrs.len-2, 2):
+        if n.attrs[i] == k:
+            n.attrs.del(i)
+            n.attrs.del(i+1)
+
+proc lenAttr*(n: VNode): int =
+    privateAccess(VNode)
+    n.attrs.len /% 2
 
 iterator flatorder*(tree: var XmlNode): XmlNode {.closure.} =
     for el in mitems(tree):
@@ -272,6 +313,12 @@ macro pragmaVars(tp, pragma: untyped, vars: varargs[untyped]): untyped =
     idefs.add newEmptyNode()
     result = nnkVarSection.newTree(idefs)
 
+type Link* = enum canonical, stylesheet, jscript = "script"
+type LDjson* = enum ldjson = "application/ld+json"
+
+proc isLink*(el: VNode, tp: Link): bool {.inline.} = el.getAttr("rel") == $tp
+
+proc isSomething*(s: string): bool {.inline.} = not s.isEmptyOrWhitespace
 
 proc replaceTilNoChange(input: var auto, pattern, repl: auto): string =
     while pattern in input:

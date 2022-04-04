@@ -27,6 +27,8 @@ include "pages"
 let pycfg = relpyImport("../py/config")
 let ut* = relpyImport("../py/utils")
 
+proc getArticleUrl(a: Article): string {.inline.} = $(WEBSITE_URL / a.topic / a.slug)
+
 proc getArticles*(topic: string, n = 3, pagenum: int = -1): seq[Article] =
     let
         grp = ut.topic_group(topic)
@@ -100,7 +102,7 @@ proc addArticle(lsh: LocalitySensitive[uint64], a: Article): bool =
         return true
     false
 
-proc pubPageFromTemplate(tpl: string, title: string, vars: seq[(string, string)] = tplRep) =
+proc pubPageFromTemplate(tpl: string, title: string, vars: seq[(string, string)] = tplRep, desc="") =
     var txt = readfile(ASSETS_PATH / "templates" / tpl)
     txt = multiReplace(txt, vars)
     let slug = slugify(title)
@@ -109,9 +111,9 @@ proc pubPageFromTemplate(tpl: string, title: string, vars: seq[(string, string)]
 
 proc pubInfoPages() =
     ## Build DMCA, TOS, and GPDR pages
-    pubPageFromTemplate("dmca.html", "DMCA")
-    pubPageFromTemplate("tos.html", "Terms of Service")
-    pubPageFromTemplate("privacy-policy.html", "Privacy Policy", ppRep)
+    pubPageFromTemplate("dmca.html", "DMCA", desc=fmt"DMCA compliance for {WEBSITE_DOMAIN}")
+    pubPageFromTemplate("tos.html", "Terms of Service", desc=fmt"Terms of Service for {WEBSITE_DOMAIN}")
+    pubPageFromTemplate("privacy-policy.html", "Privacy Policy", ppRep, desc="Privacy Policy for {WEBSITE_DOMAIN}")
 
 proc pageSize(topic: string, pagenum: int): int =
     let py = ut.get_page_size(topic, pagenum)
@@ -284,7 +286,18 @@ when isMainModule:
     # assert not pyisnone(arts)
     # pubAllPages(topic, clear = true)
     # pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true)
-    pubPageFromTemplate("dmca.html", "DMCA")
+    # pubPageFromTemplate("dmca.html", "DMCA")
+
+    import amp
+    let
+        tpl = "dmca.html"
+        title = "DMCA"
+    var txt = readfile(ASSETS_PATH / "templates" / tpl)
+    let slug = slugify(title)
+    let p = buildPage(title = title, content = txt)
+    let ap = $ampPage(p)
+    writeHtmlFile("/tmp/out", ap)
+    echo ap
 
     # var path = SITE_PATH / "index.html"
     # writeFile(path, &("<!doctype html>\n{buildPost()}"))

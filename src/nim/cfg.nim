@@ -38,6 +38,7 @@ const
     WEBSITE_DOMAIN* = "localhost"
     WEBSITE_URL* = parseUri("http://" & WEBSITE_DOMAIN)
     WEBSITE_TITLE* = "wsl"
+    WEBSITE_DEBUG_PORT* = "8080"
     SITE_PATH* = joinPath(PROJECT_PATH, "site")
     DATA_PATH* = PROJECT_PATH / "data"
     ASSETS_PATH* = PROJECT_PATH / "src" / "assets"
@@ -53,7 +54,10 @@ const
     DB_SIZE* = 1024 * 1024 * 1024
     DB_PATH* = DATA_PATH / "translate.db"
     MAX_TRANSLATION_TRIES* = 3
+    DEFAULT_LANG_CODE* = "en"
+    DEFAULT_LOCALE* = "en_US"
     TRANSLATION_ENABLED* = true
     TRANSLATION_TIMEOUT* = 0.25
     ZSTD_COMPRESSION_LEVEL* = 2
     WRITE_TO_FILE* = true
+    TWITTER_HANDLE = "@VPSG"

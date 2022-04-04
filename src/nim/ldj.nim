@@ -17,9 +17,13 @@ import
 let EMPTY_DATE = dateTime(0, Month(1), 1)
 var ldj_country: string
 var ldj_region: string
-let J = JsonNode()
-let S: seq[string] = @[]
-let ST: seq[(string, string)] = @[]
+let
+    J = JsonNode()
+    S: seq[string] = @[]
+    ST: seq[(string, string)] = @[]
+
+var jsonCache* {.threadvar.}: Table[int, JsonNode]
+jsonCache = initTable[int, JsonNode]()
 
 proc isempty(s: string): bool {.inject.} = s.isEmptyOrWhiteSpace
 

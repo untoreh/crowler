@@ -44,7 +44,7 @@ proc slugify*(value: string): string =
     result = result.replace(wsRgx, "")
     result = result.replace(hypRgx, "-").strip(runes = stripchars)
 
-proc buildHead*(): VNode =
+proc buildHead*(topic: string, slug: string, description: string = ""): VNode =
     buildHtml(head):
         meta(charset = "UTF-8")
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
@@ -52,9 +52,10 @@ proc buildHead*(): VNode =
         link(rel = "preconnect", href = "https://fonts.gstatic.com", crossorigin = "")
         link(rel = "stylesheet", href = "https://fonts.googleapis.com/icon?family=Material+Icons")
         link(rel = "stylesheet", href = "/bundle.css")
+        link(rel = "canonical", href = $(WEBSITE_URL / topic / slug))
         title:
             text "hello"
-        meta(name = "description", content = "")
+        meta(name = "description", content = description)
         # script(src="https://cdn.jsdelivr.net/npm/beercss@2.0.10/dist/cdn/beer.min.js", type="text/javascript")
 
 proc buildLang(): VNode =
@@ -259,7 +260,7 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
 
 const pageContent* = postContent
 
-proc writeHtmlFile(path: string, data: auto) {.inline.} =
+proc writeHtmlFile*(path: string, data: auto) {.inline.} =
     debug "writing html file to {path}"
     writeFile(path, fmt"<!doctype html>{'\n'}{data}")
 
@@ -279,15 +280,15 @@ proc writeHtml*(basedir: string; slug: string; data: string) =
 
 proc buildPost*(a: Article): VNode =
     buildHtml(html):
-        buildHead()
+        buildHead(a.topic, a.slug, a.desc)
         buildBody(a)
 
-proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode = nil, topic = ""): VNode =
+proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode = nil, topic = "", desc: string = ""): VNode =
     let crumbs = if topic != "": fmt"/ > {topic} / >"
                  else: "/ > ..."
     let topic_uri = parseUri("/")
     result = buildHtml(html):
-        buildHead()
+        buildHead(topic, slug, desc)
         body(class = "", style=preline_style):
             buildMenu(crumbs, topic_uri)
             buildMenuSmall(crumbs, topic_uri)

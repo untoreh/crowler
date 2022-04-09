@@ -21,6 +21,8 @@ export weave
 
 import translate_types
 
+static: echo "loading utils..."
+
 type kstring = string
 
 var loggingLock: Lock

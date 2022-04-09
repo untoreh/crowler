@@ -1,23 +1,30 @@
-import karax / [karaxdsl, vdom, vstyles]
-import cfg
-import os
-import strformat
-# import htmlgen
-# import xmlparser
-import xmltree
-import sugar
-import strutils
-import types
-import times
-import uri
-# import sequtils
-import normalize
-import unicode
-import nre
-# from translate import translateTree, setupTranslation, splitUrlPath
-# from translate_types import TLangs
-import translate
-import utils
+import
+    karax / [karaxdsl, vdom, vstyles],
+    os,
+    strformat,
+    htmlgen,
+    xmlparser,
+    xmltree,
+    sugar,
+    strutils,
+    times,
+    uri,
+    sequtils,
+    normalize,
+    unicode,
+    nre
+
+import cfg,
+       types,
+       utils,
+       translate,
+       translate_misc,
+       html_misc,
+       html_minify_c,
+       amp,
+       opg
+
+static: echo "loading html..."
 
 const LOGO_HTML = readFile(LOGO_PATH)
 const LOGO_SMALL_HTML = readFile(LOGO_SMALL_PATH)
@@ -44,15 +51,19 @@ proc slugify*(value: string): string =
     result = result.replace(wsRgx, "")
     result = result.replace(hypRgx, "-").strip(runes = stripchars)
 
-proc buildHead*(topic: string, slug: string, description: string = ""): VNode =
+proc buildHead*(path: string, description: string = ""): VNode =
+    let canon = $(WEBSITE_URL / path)
     buildHtml(head):
         meta(charset = "UTF-8")
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
+        link(rel = "canonical", href = canon)
+        for n in langLinksNodes(canon):
+            n
+        # styles
         link(rel = "preconnect", href = "https://fonts.googleapis.com")
         link(rel = "preconnect", href = "https://fonts.gstatic.com", crossorigin = "")
         link(rel = "stylesheet", href = "https://fonts.googleapis.com/icon?family=Material+Icons")
-        link(rel = "stylesheet", href = "/bundle.css")
-        link(rel = "canonical", href = $(WEBSITE_URL / topic / slug))
+        link(rel = "stylesheet", href = CSS_REL_URL)
         title:
             text "hello"
         meta(name = "description", content = description)
@@ -260,35 +271,53 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
 
 const pageContent* = postContent
 
-proc writeHtmlFile*(path: string, data: auto) {.inline.} =
+proc writeHtml*(data: auto, path: string) {.inline.} =
     debug "writing html file to {path}"
     writeFile(path, fmt"<!doctype html>{'\n'}{data}")
 
-proc writeHtml*(basedir: string; slug: string; data: VNode) =
+proc processHtml*(relpath: string; slug: string; data: VNode) =
+    # outputs (slug, data)
+    var o: seq[(string, VNode)]
     let
-        w_path = basedir / slug & ".html"
+        basepath = relpath / slug & ".html"
         path = SITE_PATH
     if cfg.TRANSLATION_ENABLED:
         setupTranslation()
-        withWeave:
-            translateTree(data, w_path, rx_file, langpairs, slator)
-    writeHtmlFile(w_path, data)
-
-proc writeHtml*(basedir: string; slug: string; data: string) =
-    let w_path = basedir / slug & ".html"
-    writeHtmlFile(w_path, data)
+        withWeave(false):
+            translateTree(data, basepath, rx_file, langpairs, slator)
+        for (code, n) in trOut:
+            o.add (code, n)
+        trOut.clear()
+    else:
+        o.add (slug, data)
+    # Search goes here
+    #
+    # NOTE: after the amp process we copy the page HTML because
+    # amp uses a global tree
+    var phtml: string
+    for (pslug, page) in o:
+        when cfg.AMP:
+            phtml = $page.ampPage
+        else:
+            phtml = $page
+        when cfg.MINIFY:
+            phtml.minifyHtml.writeHtml(basepath)
+        else:
+            phtml.writeHtml(basepath)
 
 proc buildPost*(a: Article): VNode =
-    buildHtml(html):
-        buildHead(a.topic, a.slug, a.desc)
+    buildHtml(html(lang=DEFAULT_LANG_CODE,
+                   prefix=opgPrefix(@[Opg.article, website]))
+    ):
+        buildHead(getArticlePath(a), a.desc)
         buildBody(a)
 
 proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode = nil, topic = "", desc: string = ""): VNode =
     let crumbs = if topic != "": fmt"/ > {topic} / >"
                  else: "/ > ..."
     let topic_uri = parseUri("/")
-    result = buildHtml(html):
-        buildHead(topic, slug, desc)
+    result = buildHtml(html(lang=DEFAULT_LANG_CODE, prefix=opgPrefix(@[Opg.article, website]))):
+        buildHead(topic / slug, desc)
         body(class = "", style=preline_style):
             buildMenu(crumbs, topic_uri)
             buildMenuSmall(crumbs, topic_uri)

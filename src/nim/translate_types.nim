@@ -1,13 +1,19 @@
-import nimpy
-import tables
-import sets
-import nre
-import xmltree
-import sugar
-import strformat
-import locks
-import karax/vdom
-import macros
+import
+    nimpy,
+    tables,
+    sets,
+    nre,
+    xmltree,
+    sugar,
+    strformat,
+    locks,
+    karax/vdom,
+    macros
+
+export sets
+
+static:
+    echo "loading translate types..."
 
 type
     service* = enum

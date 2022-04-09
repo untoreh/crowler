@@ -1,0 +1,10 @@
+[build]
+# rustflags = "-C target-feature=-crt-static"
+
+[env]
+GO111MODULE = "on"
+# PATH = "/usr/glibc-compat/bin/:$PATH"
+LIBRARY_PATH = "/usr/glibc-compat/lib"
+LD_LIBRARY_PATH = "/usr/glibc-compat/lib"
+#GOROOT = "/usr/lib/go"
+#GOPATH = "/usr/lib/go/bin"

@@ -48,10 +48,13 @@ charset.setAttr("charset", "utf-8")
 viewport.setAttr("name", "viewport")
 viewport.setAttr("content", "width=device-width,minimum-scale=1,initial-scale=1")
 
-styleEl1.text = "body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}"
 styleEl1.setAttr("amp-boilerplate", "")
-styleEl2.text = "body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}"
+styleEl1.add newVNode(VNodeKind.text)
+styleEl1[0].text = "body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}"
 styleEl2.setAttr("amp-boilerplate", "")
+styleEl2.add newVNode(VNodeKind.text)
+styleEl2[0].text =  "body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}"
+
 styleEl2Wrapper.add styleEl2
 styleElCustom.setAttr("amp-custom", "")
 styleElCustom.setAttr("type", "text/css")
@@ -65,11 +68,13 @@ proc asLocalUrl(path: string): string {.inline.} =
 var fileUri {.threadvar.}: Uri
 var url {.threadvar.}: string
 proc getFile(path: string): string =
+    debug "amp: getting style file from path {path}"
     try:
         result = filesCache[path]
     except:
         let filePath = DATA_PATH / "cache" / $hash(path) & splitFile(path).ext
         if fileExists(filePath):
+            debug "amp: reading style file from path {filePath}"
             filesCache[path] = readFile(filePath)
         else:
             parseUri(path, fileUri)
@@ -80,7 +85,7 @@ proc getFile(path: string): string =
             debug "getfile: getting file content from {url}"
             filesCache[path] = client.getContent(url)
             writeFile(filePath, filesCache[path])
-            result = filesCache[path]
+        result = filesCache[path]
 
 
 proc ampTemplate(): (VNode, VNode, VNode) =
@@ -261,7 +266,7 @@ proc ampPage*(tree: VNode): VNode =
 
     ampDoc
 
-proc ampDir(target: string) =
+proc ampDir(target: string) {.error: "not implemented".} =
     if not dirExists(target):
         raise newException(OSError, fmt"Supplied target directory {target} does not exists.")
 

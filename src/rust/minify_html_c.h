@@ -1,0 +1,11 @@
+proc minify*(code: ptr char,
+             do_not_minify_doctype: bool,
+             ensure_spec_compliant_unquoted_attribute_values: bool,
+             keep_closing_tags: bool,
+             keep_comments: bool,
+             keep_html_and_head_opening_tags: bool,
+             keep_spaces_between_attributes: bool,
+             minify_css: bool,
+             minify_js: bool,
+             remove_bangs: bool,
+             remove_processing_instructions: bool): (ptr char) {.importc: "minify".}

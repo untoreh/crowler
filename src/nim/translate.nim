@@ -15,20 +15,24 @@ import nimpy,
        std/wrapnils,
        lrucache,
        weave,
-       weave/runtime,
+       weave/[runtime, contexts],
        locks,
-       macros
+       macros,
+       std/sharedtables
 
 # from karax/vdom import nil
 import karax/vdom
 
 import cfg,
+       types,
        utils,
        translate_types,
        translate_db,
        translate_srv,
        translate_tr,
        translate_tforms
+
+static: echo "loading translate..."
 
 export sugar, translate_types, translate_srv, sets, nre
 
@@ -37,6 +41,7 @@ const included_dirs = to_hashset[string]([])
 
 let htmlcache = newLRUCache[string, XmlNode](32)
 var vbtmcache {.threadvar.}: LruCache[array[5, byte], XmlNode]
+let trOut* = newLockTable[string, VNode]()
 
 proc link_src_to_dir(dir: string) =
     let link_path = dir / SLang.code
@@ -115,7 +120,7 @@ template translateNode(otree: XmlNode, q: QueueXml, tformsTags: auto) =
                     translate(q, el, srv)
     translate(q, srv, finish = finish)
 
-template translateNode(node: VNode, q: QueueXml): typed =
+template translateNode(node: VNode, q: QueueXml) =
     assert node.kind == VNodeKind.verbatim
     let
         s = node.text
@@ -190,16 +195,18 @@ proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true)
     translate(q, srv, finish = finish)
     (q, otree)
 
-template tryTranslateFunc(kind: FcKind, code: untyped, post: untyped) {.dirty.} =
+template tryTranslateFunc(kind: FcKind, args: untyped, post: untyped) {.dirty.} =
     var q: Queue
     case kind:
         of xml:
             var ot: XmlNode
-            (q, ot) = translateHtml(code)
+            (q, ot) = translateHtml(args)
             post
         else:
             var ot: vdom.VNode
-            (q, ot) = translateDom(code)
+            (q, ot) = translateDom(args)
+            echo typeof(trOut)
+            # trOut[fc.pair.trg] = ot
             post
     debug "trytrans: returning from translations"
 
@@ -209,7 +216,7 @@ proc tryTranslate(fc: ptr FileContext, kind: FcKind): bool =
         try:
             debug "trytrans: scheduling translation"
             tryTranslateFunc(kind, fc):
-                toggle(WRITE_TO_FILE):
+                toggle(TRANSLATION_TO_FILE):
                     debug "writing to path {fc.t_path}"
                     writeFile(fc.t_path, fmt"<!doctype html>{'\n'}{ot}")
             return true
@@ -220,7 +227,6 @@ proc tryTranslate(fc: ptr FileContext, kind: FcKind): bool =
                 warn "Couldn't translate file {fc[].file_path}, exceeded trials"
                 return false
     return false
-
 
 proc translateFile(file, rx, langpairs, slator: auto, target_path = "") =
     let
@@ -259,6 +265,9 @@ proc translateTree*(tree: vdom.VNode, file, rx, langpairs, slator: auto, targetP
     let getTargetPath = if targetPath == "": (pair: langPair) => file_path / pair.trg / url_path
                         else: (pair: langPair) => target_path / pair.trg / url_path
 
+    # empty output translations before a new pass
+    trOut.clear()
+
     for pair in langpairs:
         let t_path = getTargetPath(pair)
         let d_path = parentDir(t_path)
@@ -292,23 +301,27 @@ proc initThread() =
 proc exitThread() =
     saveToDB(force = true)
 
-template withWeave*(code: untyped): untyped =
-    initThread()
-    init(Weave, initThread)
-    code
-    exitThread()
-    exit(Weave, exitThread)
+proc isWeave(): bool {.inline.} = globalCtx.numWorkers == 0 or workerContext.signaledTerminate
+
+template withWeave*(doexit=false, args: untyped): untyped =
+    if isWeave():
+        initThread()
+        init(Weave, initThread)
+    args
+    if doexit:
+        exitThread()
+        exit(Weave, exitThread)
 
 template setupTranslation*(service_kind = deep_translator) {.dirty.} =
     let
         dir = normalizedPath(path)
-        langpairs = collect(for lang in TLangs: (src: SLang.code, trg: lang.code))
+        langpairs = collect(for lang in TLangs: (src: SLang.code, trg: lang.code)).static
         slator = initTranslator(`service_kind`, source = SLang)
         rx_file = re fmt"(.*{dir}/)(.*$)"
 
 proc translateDir(path: string, service_kind = deep_translator, tries = 1, target_path = "") =
     assert path.dirExists
-    withWeave:
+    withWeave(doexit=true):
         setupTranslation(service_kind)
         debug "rgx: Regexp is '(.*{dir}/)(.*$)'."
         link_src_to_dir(dir)
@@ -330,7 +343,7 @@ when isMainModule:
 
     # translateDir(SITE_PATH, target_path = "/tmp/out")
     #
-    withWeave:
+    withWeave(true):
         initThread()
         translateFile(file, rx_file, langpairs, slator, target_path = "/tmp/out")
     # withWeave:

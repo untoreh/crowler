@@ -2,32 +2,32 @@ import
     strutils,
     strformat,
     tables,
-    xmltree
+    xmltree,
+    uri,
+    macros,
+    sugar
 
 import cfg,
        types,
-       utils
+       utils,
+       html_misc
 
 const basePrefix = "og: https://ogp.me/ns#"
 
 
-type Opg = enum
+type Opg* = enum
     article, website, book, profile, video, music
 
-let prefixCache = initTable[seq[Opg], string]()
+let prefixCache = initTable[static seq[Opg], static string]()
 var opgTags = newSeq[XmlNode]()
 
 proc asPrefix(opgKind: Opg): string =
     fmt" {opgKind}: http://ogp.me/ns/{opgKind}#"
 
-proc opgPrefix(opgKinds: seq[Opg]): string =
-    try:
-        result = prefixCache[opgKinds]
-    except:
-        var result = basePrefix
-        for kind in opgKinds:
-            result.add kind.asPrefix
-        prefixCache[opgKinds] = result
+proc opgPrefix*(opgKinds: static seq[Opg]): string =
+    var res {.global.}: string
+    for kind in opgKinds:
+        res.add kind.asPrefix
 
 proc addMetaTag(prop, content: string, base: static[string] = "og") =
     let tag = newXmlTree("meta", @[])
@@ -35,7 +35,7 @@ proc addMetaTag(prop, content: string, base: static[string] = "og") =
                        "content": content}.toXmlAttributes()
     opgTags.add(tag)
 
-proc opgBasic(title, tp, url, image: string, prefix="") =
+proc opgBasic(title, tp, url, image: string, prefix = "") =
     if prefix != "":
         addMetaTag(fmt"{prefix}:title", title)
         addMetaTag(fmt"{prefix}:type", tp)
@@ -55,15 +55,16 @@ proc opgOptional(description, siteName, locale, audio, video, determiner: string
     if video.isSomething: addMetaTag("video", video)
     if determiner.isSomething: addMetaTag("determiner", determiner)
 
-proc fillOpgTags(title, tp, url, image, description="", siteName="", locale="", audio="", video="", determiner="") =
+proc fillOpgTags(title, tp, url, image: string, description = "", siteName = "", locale = "", audio = "",
+        video = "", determiner = "") =
     ## Generates an HTML String containing opengraph meta tags for one item.
     opgBasic(title, tp, url, image)
     opgOptional(description, siteName, locale, audio, video, determiner)
 
-template getOpgTags(args: untyped): string =
-    fillOpgTags(args)
-    for t in opgTags:
-        result.add $t
+macro getOpgTags(code: varargs[untyped]): untyped =
+    quote do:
+        fillOpgTags(`code`)
+        collect(for t in opgTags: $t).join
 
 proc opgStructure(prop, url, secureUrl, mime, width, height, alt: string) =
     ## Writes the additional metadata structures to the specified PROP.
@@ -75,9 +76,10 @@ proc opgStructure(prop, url, secureUrl, mime, width, height, alt: string) =
     if height.isSomething: addMetaTag(fmt"{prop}:height", height)
     if alt.isSomething: addMetaTag(fmt"{prop}:alt", alt)
 
-proc opgArticle(title, tp, url, image, author: string, tag: seq[string] = @[], section="", ctime, mtime, etime ="") =
+proc opgArticle(title, tp, url, image, author: string, tag: seq[string] = @[], section = "", ctime,
+        mtime, etime = "") =
     ## Write meta tags for an article object type.
-    opgBasic(title, tp, url, image, prefix="article")
+    opgBasic(title, tp, url, image, prefix = "article")
     addMetaTag("article:author", author)
     addMetaTag("article:published_time", ctime)
     addMetaTag("article:modiefied_time", mtime)
@@ -86,7 +88,7 @@ proc opgArticle(title, tp, url, image, author: string, tag: seq[string] = @[], s
     for t in tag:
         addMetaTag("article:tag", t)
 
-proc twitterMeta() =
+proc twitterMeta(prop, content: string) =
     let tag = newXmlTree("meta", @[])
     tag.attrs = {"property": fmt"twitter:{prop}",
                        "content": content}.toXmlAttributes()
@@ -94,24 +96,22 @@ proc twitterMeta() =
 
 proc opgTwitter(prop, content: string) =
     ## Twitter card meta tags
-    addMetaTag(prop, content, base="twitter")
+    addMetaTag(prop, content, base = "twitter")
 
 proc opgPage(a: Article): string =
     let locale = static(DEFAULT_LOCALE)
     let
-        title = a.title
-        description = a.description
         tp = static("article")
         url = getArticleUrl(a)
         siteName = static(WEBSITE_TITLE)
     twitterMeta("card", "summary")
     twitterMeta("creator", TWITTER_HANDLE)
-    getOpgTags(title, tp, url, imageUrl, description, siteName, locale)
+    getOpgTags(a.title, tp, url, a.imageUrl, a.desc, siteName, locale)
 
 proc opgPage(title: string, description: string, path: string): string =
     let locale = static(DEFAULT_LOCALE)
     let
-        title = a.title
+        title = title
         tp = static("website")
         url = $(WEBSITE_URL / path)
     twitterMeta("card", "summary")

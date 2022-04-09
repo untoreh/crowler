@@ -1,7 +1,6 @@
 import nimpy,
        os,
        sugar,
-       html,
        times,
        strutils,
        timeit,
@@ -15,13 +14,13 @@ import nimpy,
 
 import cfg,
        types,
-       utils
+       utils,
+       html
 
 privateAccess(LocalitySensitive)
 var pageset = Table[string, bool]()
 
 include "pages"
-
 
 # we have to load the config before utils, otherwise the module is "partially initialized"
 let pycfg = relpyImport("../py/config")
@@ -107,7 +106,7 @@ proc pubPageFromTemplate(tpl: string, title: string, vars: seq[(string, string)]
     txt = multiReplace(txt, vars)
     let slug = slugify(title)
     let p = buildPage(title = title, content = txt)
-    writeHtml(SITE_PATH, slug, p)
+    processHtml(SITE_PATH, slug, p)
 
 proc pubInfoPages() =
     ## Build DMCA, TOS, and GPDR pages
@@ -136,15 +135,15 @@ proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, w
 
     info "Updating page:{pagenum} for topic:{topic} with entries:{pagecount}"
     let topic_path = SITE_PATH / topic
-    writeHTML(topic_path,
-                slug = pagenum / "index",
+    processHTML(topic,
+                pagenum / "index",
                 page)
     # if we pass a pagecount we mean to finalize
     if finalize:
         discard ut.update_page_size(topic, pagenum.parseInt, pagecount, final = true)
     if with_arts:
         for a in arts:
-            writeHTML(topic_path / pagenum, a.slug, buildPost(a))
+            processHtml(topic_path / pagenum, a.slug, buildPost(a))
 
 proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
     ## Always update both the homepage and the previous page
@@ -192,7 +191,7 @@ proc publish(topic: string) =
         pagenum += 1
     # The subdir (at $pagenum) at this point must be already present on storage
     var arts = getArticles(topic, pagenum = pagenum)
-    let basedir = SITE_PATH / topic / $pagenum
+    let pagedir = topic / $pagenum
 
     let lsh = loadLS(topic)
     var posts: seq[(VNode, Article)]
@@ -216,7 +215,7 @@ proc publish(topic: string) =
     let done = collect(for (_, a) in posts: a.py)
     discard ut.save_done(topic, len(arts), done, pagenum)
     if newpage:
-        ensureDir(basedir)
+        ensureDir(SITE_PATH / pagedir)
     let newposts = len(posts)
     if newposts == 0:
         info "No new posts written for topic: {topic}"
@@ -226,8 +225,9 @@ proc publish(topic: string) =
     # even if we don't publish them, but we never want duplicates
     saveLS(topic, lsh)
     info "Writing {newposts} articles for topic: {topic}"
+    # FIXME: should this be here?
     for (tree, a) in posts:
-        writeHtml(basedir, a.slug, tree)
+        processHtml(pagedir, a.slug, tree)
     # after writing the new page, ensure home points to the new page
     if newpage:
         ensureHome(topic, pagenum)
@@ -289,15 +289,20 @@ when isMainModule:
     # pubPageFromTemplate("dmca.html", "DMCA")
 
     import amp
+    import html_minify_c
     let
         tpl = "dmca.html"
         title = "DMCA"
     var txt = readfile(ASSETS_PATH / "templates" / tpl)
     let slug = slugify(title)
     let p = buildPage(title = title, content = txt)
+    # let mn = minifyHtml(p)
+    # echo $mn
     let ap = $ampPage(p)
-    writeHtmlFile("/tmp/out", ap)
-    echo ap
+
+    echo $ap
+    # writeHtmlFile("/tmp/out", ap)
+    # echo mn
 
     # var path = SITE_PATH / "index.html"
     # writeFile(path, &("<!doctype html>\n{buildPost()}"))

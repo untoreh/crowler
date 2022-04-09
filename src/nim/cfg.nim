@@ -28,6 +28,7 @@ proc logLevelFromEnv(): auto =
 let logLevel = logLevelFromEnv()
 const logLevelMacro* = logLevelFromEnv()
 setLogFilter(logLevel)
+static: echo "cfg: debug level set to: " & $logLevelMacro
 
 export logging
 
@@ -43,6 +44,7 @@ const
     DATA_PATH* = PROJECT_PATH / "data"
     ASSETS_PATH* = PROJECT_PATH / "src" / "assets"
     LOGO_DIR = ASSETS_PATH / "logo"
+    CSS_REL_URL * = "/bundle.css"
     LOGO_PATH* = os.joinPath(LOGO_DIR, "logo.svg")
     LOGO_SMALL_PATH* = os.joinPath(LOGO_DIR, "logo-small.svg")
     LOGO_ICON_PATH* = os.joinPath(LOGO_DIR, "logo-icon.svg")
@@ -59,5 +61,8 @@ const
     TRANSLATION_ENABLED* = true
     TRANSLATION_TIMEOUT* = 0.25
     ZSTD_COMPRESSION_LEVEL* = 2
-    WRITE_TO_FILE* = true
-    TWITTER_HANDLE = "@VPSG"
+    TRANSLATION_TO_FILE* = true
+    AMP* = true
+    YDX* = true
+    MINIFY* = true
+    TWITTER_HANDLE* = "@VPSG"

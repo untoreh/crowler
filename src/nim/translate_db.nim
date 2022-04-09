@@ -15,6 +15,8 @@ import utils
 
 {.experimental: "notnil".}
 
+static: echo "loading translate_db"
+
 type
     trNode = tuple[prev: int, value: string, next: int]
     CollectionNotNil = Collection not nil

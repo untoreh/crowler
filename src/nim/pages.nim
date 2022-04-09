@@ -1,19 +1,24 @@
-import cfg
-import karax / [karaxdsl, vdom, vstyles]
-import strutils
-import os
-import uri
-import sugar
-import sequtils
-import types
-import times
-import html
-import unicode
-import algorithm
+import
+    karax / [karaxdsl, vdom, vstyles],
+    strutils,
+    os,
+    uri,
+    sugar,
+    sequtils,
+    times,
+    unicode,
+    algorithm
+
+import cfg,
+       types,
+       html,
+       html_misc
 
 const tplRep = @{"WEBSITE_DOMAIN": WEBSITE_DOMAIN}
 const ppRep = @{"WEBSITE_URL": $WEBSITE_URL.combine(),
                  "WEBSITE_DOMAIN": WEBSITE_DOMAIN}
+
+
 proc getSubDirs(path: string): seq[int] =
     var dirs = collect((for f in walkDirs(path / "*"):
         try: parseInt(lastPathPart(f)) except: -1))
@@ -92,7 +97,7 @@ proc articleExcerpt(a: Article): string =
 proc buildShortPosts*(arts: seq[Article], homepage=false): string =
     var url: string
     for a in arts:
-        url = "/" / $a.topic / $a.page / a.slug
+        url = getArticleUrl(a)
         let p = buildHtml(article(class = "entry")):
             h2(class = "entry-title", id = a.slug):
                 a(href = url):

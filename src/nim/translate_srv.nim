@@ -12,15 +12,14 @@ import nimpy,
 from nimpy/py_types import PPyObject
 from nimpy {.all.} import newPyObject
 
-# import utils
-# import cfg
 import
     cfg,
     types,
     translate_types,
     utils,
     quirks
-# import translate_db
+
+static: echo "loading translate_srv"
 
 let pybi = pyBuiltinsModule()
 let pyGlo = pyGlobals()

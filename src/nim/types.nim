@@ -1,8 +1,20 @@
-import times, nimpy, os, strutils, strformat
-# import parseutils
-# import strutils
-#
-#
+import
+    times, nimpy, os, strutils, strformat,
+    nimpy / py_lib,
+    std / osproc
+
+
+proc setPyLib() =
+    var (pylibpath, success) = execCmdEx("python3 -c 'import find_libpython; print(find_libpython.find_libpython())'")
+    if success != 0:
+        let (_, pipsuccess) = execCmdEx("pip3 install find_libpython")
+        assert pipsuccess == 0
+    (pylibpath, success) = execCmdEx("python3 -c 'import find_libpython; print(find_libpython.find_libpython())'")
+    assert success == 0
+    pylibpath.stripLineEnd
+    pyInitLibPath pylibpath
+
+# setPyLib()
 let machinery = pyImport("importlib.machinery")
 proc relpyImport*(relpath: string): PyObject =
     let abspath = os.expandFilename(relpath & ".py")
@@ -146,7 +158,7 @@ proc len*(py: PyObject): int =
     builtins.len(py).to(int)
 
 proc isa*(py: PyObject, tp: PyObject): bool =
-    builtins.isinstance(py,tp).to(bool)
+    builtins.isinstance(py, tp).to(bool)
 
 proc pyget*[T](py: PyObject, k: string, def: T = ""): T =
     let v = py.get(k)
@@ -158,7 +170,7 @@ proc pyget*[T](py: PyObject, k: string, def: T = ""): T =
 type
     topicData* = enum
         articles = "articles",
-        feeds =  "feeds",
+        feeds = "feeds",
         done = "done"
         pages = "pages"
 
@@ -179,3 +191,36 @@ proc initArticle*(data: PyObject, pagenum: int): Article =
     a.tags = pyget(data, "tags", emptyseq)
     a.py = data
     a
+
+import locks,
+       tables
+
+export tables,
+       locks
+
+type LockTable[K, V] = ref object
+    lock: Lock
+    storage: ref Table[K, V]
+
+proc newLockTable*[K; V](): LockTable[K, V] =
+    new(result)
+    initLock(result.lock)
+    # var tbl = new(Table[K, V])
+    # result.storage = tbl
+
+iterator items*(tbl: LockTable): auto =
+    withLock(tbl.lock):
+        for (k, v) in tbl.storage.pairs():
+            yield (k, v)
+
+proc `[]=`*(tbl: LockTable, k, v: auto) =
+    withLock(tbl.lock):
+        tbl.storage[k] = v
+
+proc `[]`*(tbl: LockTable, k: auto): auto =
+    withLock(tbl.lock):
+        tbl.storage[k]
+
+proc clear*(tbl: LockTable) =
+    clear(tbl.storage)
+

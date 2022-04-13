@@ -52,8 +52,16 @@ module.exports = [
                 name: "bundle.css",
               },
             },
-            { loader: "extract-loader" },
-            { loader: "css-loader" },
+            {
+              loader: "extract-loader",
+            },
+            {
+              loader: "css-loader",
+              options: {
+                // https://github.com/peerigon/extract-loader/issues/102#issuecomment-895558537
+                esModule: false,
+              },
+            },
             {
               loader: "postcss-loader",
               options: {
@@ -83,6 +91,10 @@ module.exports = [
           options: {
             presets: ["@babel/preset-env"],
           },
+        },
+        {
+          test: /\.png$/,
+          loader: "file-loader",
         },
       ],
     },

@@ -1,5 +1,6 @@
 import { MDCRipple } from "@material/ripple";
 import { MDCTopAppBar } from "@material/top-app-bar";
+import { getCookie } from "./lib.jl";
 
 function toggleTheme() {
   let el = document.body;
@@ -10,12 +11,20 @@ function toggleTheme() {
     el.classList.remove("light");
     el.classList.add("dark");
   } else {
-    if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+    let dT = getCookie("darkTheme");
+    if (dT != "") {
+      if (dT.split(" ")[0] === "true") {
+        el.classList.add("dark");
+      } else {
+        el.classList.add("light");
+      }
+    } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
       el.classList.add("dark");
     } else {
       el.classList.add("light");
     }
   }
+  document.cookie = `darkTheme=${el.classList.contains("dark")}`;
 }
 
 function toggleDrawer() {
@@ -29,7 +38,9 @@ function toggleDrawer() {
 
 window.onload = function () {
   // dark light
-  document.querySelectorAll(".dk-toggle").forEach(el => el.onclick = toggleTheme)
+  document
+    .querySelectorAll(".dk-toggle")
+    .forEach((el) => (el.onclick = toggleTheme));
   toggleTheme();
 
   document.querySelector(".menu-btn").onclick = toggleDrawer;

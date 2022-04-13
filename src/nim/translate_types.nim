@@ -9,7 +9,6 @@ import
     locks,
     karax/vdom,
     macros
-
 export sets
 
 static:
@@ -24,15 +23,15 @@ type
         code: string
     langPair* = tuple[src: string, trg: string]
     ServiceTable* = Table[langPair, PyObject] ## Maps the api of the wrapped service
-    Translator* = ref object ## An instance of a translation service
+    TranslatorObj = object ## An instance of a translation service
         py*: PyObject
         tr*: ServiceTable
         apis*: HashSet[string]
         name*: service
         lock*: Lock
+    Translator* = ref TranslatorObj
     Queue* = object of RootObj ## An instance of a translation run
         pair*: langPair
-        slator*: Translator
         bufsize*: int
         glues*: seq[(string, Regex)]
         sz*: int
@@ -41,12 +40,11 @@ type
         bucket*: seq[XmlNode]
     QueueDom* = object of Queue
         bucket*: seq[VNode]
-    TFunc* = proc(src: string): string {.gcsafe.} ## the proc that wraps a translation service call
+    TFunc* = proc(src: string, lang: langPair): string {.gcsafe.} ## the proc that wraps a translation service call
     FileContextBase = object of RootObj
         file_path*: string
         url_path*: string
         pair*: langPair
-        slator*: Translator
         t_path*: string
     FileContext* = object of FileContextBase
         case kind: FcKind
@@ -69,7 +67,7 @@ macro getHtml*(code: untyped, kind: static[FcKind], ): untyped =
 proc `html=`*(fc: ptr FileContext, data: XmlNode) = fc.xhtml = data
 proc `html=`*(fc: ptr FileContext, data: vdom.VNode) = fc.vhtml = data
 
-proc initFileContext*(data, file_path, url_path, pair, slator, t_path: auto): ptr FileContext =
+proc initFileContext*(data, file_path, url_path, pair, t_path: auto): ptr FileContext =
     result = create(FileContext)
 
     if data is XmlNode:
@@ -80,7 +78,6 @@ proc initFileContext*(data, file_path, url_path, pair, slator, t_path: auto): pt
     result.file_path = file_path
     result.url_path = url_path
     result.pair = pair
-    result.slator = slator
     result.t_path = t_path
 
 const
@@ -155,26 +152,44 @@ proc initGlues*() =
     (" \n[[...]]\n ", re"\s?\n?\[\[?\.\.\.\]\]?\n?")
     ]
 
-proc initQueue*[T](f: TFunc, pair, slator: auto): T =
+proc initQueue*[T](f: TFunc, pair: auto): T =
     result.glues = glues
     result.bufsize = 5000
     result.call = f
     result.pair = pair
-    result.slator = slator
 
-macro getQueue*(f: TFunc, kind: static[FcKind], pair, slator: untyped): untyped =
+import hashes
+var queueXmlCache* {.threadvar.}: Table[Hash, QueueXml]
+var queueDomCache* {.threadvar.}: Table[Hash, QueueDom]
+proc initQueueCache*() =
+    queueXmlCache = initTable[Hash, QueueXml]()
+    queueDomCache = initTable[Hash, QueueDom]()
+
+macro getCachedQueue(k: Hash, kind: static[int]): untyped =
+    case kind:
+        of 0:
+            quote do:
+                queueXmlCache[`k`]
+        else:
+            quote do:
+                queueDomCache[`k`]
+
+proc setCachedQueue(k: Hash, v: QueueXml) = queueXmlCache[k] = v
+proc setCachedQueue(k: Hash, v: QueueDom) = queueDomCache[k] = v
+
+macro getQueue*(f: TFunc, kind: static[FcKind], pair: langPair): untyped =
     let tp = case kind:
         of xml: QueueXml
         else: QueueDom
     quote do:
-        initQueue[`tp`](`f`, `pair`, `slator`)
+        let k = hash((`f`, `kind`, `pair`))
+        var q: `tp`
+        try:
+            q = getCachedQueue(k, static(`kind`))
+        except KeyError:
+            q = initQueue[`tp`](`f`, `pair`)
+            setCachedQueue(k, q)
+        q.bucket.setLen 0
+        q.sz = 0
+        q
 
-when isMainModule:
-    import sugar
-    import strtabs
-    let t = "a"
-    var tb = initTable[string, TransformFunc]()
-    let ks = collect(for k in tb.keys: k).toHashSet
-    # t["ok"] = (proc (el: XmlNode, file: string, url: string, pair: langPair) = discard nil)
-    if t in ks:
-        echo typeof(tb[t])

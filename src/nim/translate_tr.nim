@@ -70,8 +70,8 @@ proc doQuery[T](q: T, sents: seq[string]): seq[string] =
 
     for (sep, splitsep) in q.glues:
         query = join(sents, sep)
-        # debug "query: calling translation function, bucket: {q.bucket.len}, query: {query.len}"
-        let res = q.call(query)
+        debug "query: calling translation function, bucket: {q.bucket.len}, query: {query.len}"
+        let res = q.call(query, q.pair)
         debug "query: response size: {res.len}"
         let tr = res.split(splitsep)
         debug "query: split translations"
@@ -111,7 +111,7 @@ proc elUpdate(q, el, srv: auto) =
         elSents.add splitCache[][txt]
     debug "elupdate: translating"
     for s in elSents:
-        if reachedBufSize(sentsIn.sents, sentsIn.len, q.bufsize):
+        if reachedBufSize(sentsIn.sents, sentsIn.len + s.len, q.bufsize):
             doTrans(q)
         sentsIn.add(s)
     if sentsIn.len > 0:

@@ -68,56 +68,21 @@ let
 discard pySched.initPool()
 
 proc trywrapPyFunc(fn: PyObject, tries = 3, defVal = ""): PyObject =
+    debug "trywrap: returning try wrapper {tries}, {getThreadId(Weave)}"
     return tryWrapper(fn, tries, defVal)
 
 template pySafeCall(code: untyped): untyped =
-    slator.lock.acquire
-    code
-    slator.lock.release
-
-proc deepTranslatorTfun(lang: langPair, slator: Translator): TFunc =
-    # NOTE: using `slator` inside the closure is fine since it always outlives the closure
-    result = proc(src: string): string =
-        try:
-            var
-                res: PyObject
-                rdy: bool
-            pySafeCall:
-                debug "tfun: applying function with src ({src.len})"
-                let pyf = slator.tr[lang].getattr("translate").trywrapPyFunc
-                let j = pySched.apply(pyf, src)
-                debug "tfun: applied f ({src.len})"
-            while true:
-                pySafeCall:
-                    discard j.wait(cfg.TRANSLATION_TIMEOUT)
-                    rdy = j.ready().to(bool)
-                    debug "tfun: waiting for translation {rdy}, {lang}"
-                if rdy:
-                    debug "tfun: getting translation value"
-                    pySafeCall: res = j.get()
-                    break
-            # # debug "res: {$res}"
-            pySafecall:
-                if not ($res in ["<NULL>", "None"]):
-                    debug "tfun: returning translation"
-                    let v = res.to(string)
-                    result = v
-                else:
-                    debug "tfun: no translation found"
-                    result = ""
-        except Exception as e:
-            raise newException(ValueError, "Translation failed with error: {e.msg}")
-
-
-proc getTfun*(lang: langPair, slator: Translator): TFunc =
+    debug "pysafe: acquiring lock"
     try:
-        result = tFuncCache[][(slator.name, lang)]
+        slator.lock.acquire()
+        debug "pysafe: lock acquired"
+        code
     except:
-        result = case slator.name:
-            of deep_translator:
-                deepTranslatorTfun(lang, slator)
-            else: (src: string) => src
-        tFuncCache[][(slator.name, lang)] = result
+        debug "pysafe: Failed with exception... {getCurrentException()[]}"
+    finally:
+        debug "pysafe: releasing lock"
+        slator.lock.release()
+    debug "pysafe: lock released"
 
 proc initTranslator*(srv: service = default_service, provider: string = "", source: Lang = SLang,
         targets: HashSet[Lang] = TLangs): Translator =
@@ -127,7 +92,8 @@ proc initTranslator*(srv: service = default_service, provider: string = "", sour
     case srv:
         of deep_translator:
             result.py = py
-            result.apis = toHashSet(["GoogleTranslator", "LingueeTranslator", "MyMemoryTranslator"]) # "single_detection", "batch_detection"
+            result.apis = toHashSet(["GoogleTranslator", "LingueeTranslator",
+                    "MyMemoryTranslator"]) # "single_detection", "batch_detection"
             result.name = srv
             let prov = if provider == "": "GoogleTranslator" else: provider
             assert prov in result.apis
@@ -136,6 +102,7 @@ proc initTranslator*(srv: service = default_service, provider: string = "", sour
                 src = source.code
                 cls = provFn()
                 proxies = if USE_PROXIES:
+                              debug "trsrv: enabling proxies with endpoint {PROXY_EP}"
                               {"https": PROXY_EP, "http": PROXY_EP}.to_table
                           else:
                               {"https": "", "http": ""}.to_table
@@ -145,3 +112,52 @@ proc initTranslator*(srv: service = default_service, provider: string = "", sour
                     if l.code in sl:
                         result.tr[(src, sl)] = provFn(source = src, target = sl, proxies = proxies)
     result
+
+let slatorObj = initTranslator()
+let slator* = slatorObj.unsafeAddr
+
+proc deepTranslatorFunc(src: string, lang: langPair): string {.gcsafe.} =
+    # NOTE: using `slator` inside the closure is fine since it always outlives the closure
+    try:
+        var
+            res: PyObject
+            rdy: bool
+            j: PyObject
+            pyf: PyObject
+        pySafeCall:
+            debug "tfun: applying function with src ({src.len})"
+            debug "slator nil?: {slator.tr[lang].isnil}"
+            # debug "slator py object: {slator.tr[lang].getattr(\"translate\")}"
+            pyf = slator.tr[lang].getattr("translate").trywrapPyFunc
+            # debug "tfun: is src valid utf8? {validateUtf8(src)}"
+            debug "tfun: scheduling translation, pysched: {pySched.isnil}, pyf: {pyf.isnil}, slator: {slator.tr[lang].isnil}, tr: {slator.tr[lang].getattr(\"translate\").isnil}"
+            j = pySched.apply(pyf, src)
+            debug "tfun: applied f ({src.len})"
+        while true:
+            pySafeCall:
+                debug "tfun: waiting for translation {rdy}, {lang}, {j.isnil}"
+                discard j.wait(cfg.TRANSLATION_TIMEOUT)
+                rdy = j.ready().to(bool)
+            if rdy:
+                debug "tfun: getting translation value job"
+                pySafeCall: res = j.get()
+                break
+        # debug "tfun: marshaling res, isnil? {res.isnil}"
+        # debug "tfun: res:{$res}"
+        pySafecall:
+            debug "tfun: checking response"
+            if (not res.isnil) and (not ($res in ["<NULL>", "None"])):
+                debug "tfun: returning translation"
+                let v = res.to(string)
+                result = v
+            else:
+                debug "tfun: no translation found"
+                result = ""
+    except Exception as e:
+        raise newException(ValueError, fmt"Translation failed with error: {e.msg}")
+
+proc getTfun*(lang: langPair): TFunc =
+    case slator.name:
+        of deep_translator:
+            deepTranslatorFunc
+        else: (src: string, lang: langPair) => src

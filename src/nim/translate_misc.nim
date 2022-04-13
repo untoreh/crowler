@@ -16,20 +16,6 @@ import
 var langTmpUri: Uri
 langTmpUri.opaque = false
 
-proc sre*(pattern: static string): Regex =
-    let rx {.global.} = re(pattern)
-    return rx
-
-proc pathLink*(path: string, code = "", rel = true, amp = false): string =
-    let name = lastPathPart(path)
-    (case rel:
-        of true: "/"
-        else: $WEBSITE_URL) /
-    (case amp:
-        of true: "amp/"
-        else: "") /
-    (name.replace(sre("(index|404)$"), ""))
-
 proc langUrl(code, url: string, prefix = "/"): string =
     parseUri(url, langTmpUri)
     langTmpUri.path = prefix & code & langTmpUri.path
@@ -65,3 +51,5 @@ proc langLinksHtml*(path: string, rel: static bool = false): string =
         for l in langLinks:
             $l
     join(res)
+
+proc ldjLanguages*(): seq[string] = collect(for (lang, _) in TLangs: lang)

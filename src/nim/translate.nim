@@ -75,7 +75,7 @@ macro defIfDom(kind: static[FcKind]): untyped =
         of dom:
             quote do:
                 var
-                    xq {.inject.} = getTfun(fc.pair, fc.slator).getQueue(xml, fc.pair, fc.slator)
+                    xq {.inject.} = getTfun(fc.pair).getQueue(xml, fc.pair)
                     xtformsTags {.inject.} = collect(for k in getTForms(xml).keys: k).toHashSet()
         else:
             quote do:
@@ -89,10 +89,10 @@ template translateEnv(kind: static[FcKind] = xml): untyped {.dirty.} =
         pair = fc.pair
         tformsTags = collect(for k in getTForms(kind).keys: k).toHashSet()
         rewrite_path = "/" / pair.trg
-        srv = fc.slator.name
+        srv = slator.name
     var
         otree = deepcopy(fc.getHtml(kind))
-        q = getTfun(fc.pair, fc.slator).getQueue(kind, fc.pair, fc.slator)
+        q = getTfun(fc.pair).getQueue(kind, fc.pair)
 
     defIfDom(kind)
 
@@ -153,7 +153,8 @@ proc translateHtml(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true
     (q, otree)
     # raise newException(ValueError, "That's all, folks.")
 
-proc splitUrlPath*(rx, file: auto): auto =
+proc splitUrlPath*(rx: Regex, file: auto): auto =
+    # debug "translate: splitting for file {file} with pattern {rx.pattern}"
     let m = find(file, rx).get.captures
     (m[0], m[1])
 
@@ -205,7 +206,7 @@ template tryTranslateFunc(kind: FcKind, args: untyped, post: untyped) {.dirty.} 
         else:
             var ot: vdom.VNode
             (q, ot) = translateDom(args)
-            echo typeof(trOut)
+            # FIXME
             # trOut[fc.pair.trg] = ot
             post
     debug "trytrans: returning from translations"
@@ -228,7 +229,7 @@ proc tryTranslate(fc: ptr FileContext, kind: FcKind): bool =
                 return false
     return false
 
-proc translateFile(file, rx, langpairs, slator: auto, target_path = "") =
+proc translateFile(file, rx, langpairs: auto, target_path = "") =
     let
         html = fetchHtml(file)
         (filepath, urlpath) = splitUrlPath(rx, file)
@@ -246,7 +247,7 @@ proc translateFile(file, rx, langpairs, slator: auto, target_path = "") =
             d_path = parentDir(t_path)
         if not dirExists(d_path):
             createDir(d_path)
-        var fc = initFileContext(html, file_path, url_path, pair, slator, t_path)
+        var fc = initFileContext(html, file_path, url_path, pair, t_path)
         ctxs.add(fc)
         let j = spawn tryTranslate(fc, xml)
 
@@ -254,7 +255,7 @@ proc translateFile(file, rx, langpairs, slator: auto, target_path = "") =
     saveToDB(force = true)
 
 
-proc translateTree*(tree: vdom.VNode, file, rx, langpairs, slator: auto, targetPath = "") =
+proc translateTree*(tree: vdom.VNode, file, rx, langpairs: auto, targetPath = "") =
     ## Translate a `VNode` tree to multiple languages
 
     let (filepath, urlpath) = splitUrlPath(rx, file)
@@ -273,7 +274,7 @@ proc translateTree*(tree: vdom.VNode, file, rx, langpairs, slator: auto, targetP
         let d_path = parentDir(t_path)
         if not dirExists(d_path):
             createDir(d_path)
-        var fc = initFileContext(tree, file_path, url_path, pair, slator, t_path)
+        var fc = initFileContext(tree, file_path, url_path, pair, t_path)
         ctxs.add(fc)
         let j = spawn tryTranslate(fc, dom)
 
@@ -282,10 +283,10 @@ proc translateTree*(tree: vdom.VNode, file, rx, langpairs, slator: auto, targetP
 
 
 
-proc fileWise(path, exclusions, rx_file, langpairs, slator: auto, target_path = "") =
+proc fileWise(path, exclusions, rx_file, langpairs: auto, target_path = "") =
     for file in filterFiles(path, excl_dirs = exclusions, top_dirs = included_dirs):
         debug "file: translating {file}"
-        translateFile(file, rx_file, langpairs, slator, target_path = target_path)
+        translateFile(file, rx_file, langpairs, target_path = target_path)
         info "file: translation successful for path: {file}"
 
 proc initThread() =
@@ -296,27 +297,28 @@ proc initThread() =
         vbtmcache = newLRUCache[array[5, byte], XmlNode](32)
     initSentsRgx()
     initGlues()
+    initQueueCache()
     dotsRgx = re"^\.?\.?"
 
 proc exitThread() =
     saveToDB(force = true)
 
-proc isWeave(): bool {.inline.} = globalCtx.numWorkers == 0 or workerContext.signaledTerminate
+proc isWeaveOff(): bool {.inline.} = globalCtx.numWorkers == 0 or workerContext.signaledTerminate
 
 template withWeave*(doexit=false, args: untyped): untyped =
-    if isWeave():
-        initThread()
+    # os.putenv("WEAVE_NUM_THREADS", "2")
+    if isWeaveOff():
         init(Weave, initThread)
+        initThread()
     args
     if doexit:
-        exitThread()
         exit(Weave, exitThread)
+        exitThread()
 
 template setupTranslation*(service_kind = deep_translator) {.dirty.} =
     let
         dir = normalizedPath(path)
         langpairs = collect(for lang in TLangs: (src: SLang.code, trg: lang.code)).static
-        slator = initTranslator(`service_kind`, source = SLang)
         rx_file = re fmt"(.*{dir}/)(.*$)"
 
 proc translateDir(path: string, service_kind = deep_translator, tries = 1, target_path = "") =
@@ -325,17 +327,16 @@ proc translateDir(path: string, service_kind = deep_translator, tries = 1, targe
         setupTranslation(service_kind)
         debug "rgx: Regexp is '(.*{dir}/)(.*$)'."
         link_src_to_dir(dir)
-        fileWise(path, excluded_dirs, rx_file, langpairs, slator, target_path = target_path)
+        fileWise(path, excluded_dirs, rx_file, langpairs, target_path = target_path)
 
 when isMainModule:
     import timeit
     let
         dir = normalizePath(SITE_PATH)
         langpairs = collect(for lang in TLangs: (src: SLang.code, trg: lang.code))
-        slator = initTranslator(default_service, source = SLang)
         rx_file = re fmt"(.*{dir}/)(.*$)"
     let
-        file = "/home/fra/dev/wsl/site/vps/2/javascript-is-not-available.html"
+        file = "/home/fra/dev/wsl/site/vps/1/cheap-dedicated-server-hosting-price-best-dedicated-hosting-plans.html"
         html = fetchHtml(file)
         (filepath, urlpath) = splitUrlPath(rx_file, file)
         pair = (src: "en", trg: "it")
@@ -344,8 +345,8 @@ when isMainModule:
     # translateDir(SITE_PATH, target_path = "/tmp/out")
     #
     withWeave(true):
-        initThread()
-        translateFile(file, rx_file, langpairs, slator, target_path = "/tmp/out")
+        translateFile(file, rx_file, langpairs, target_path = "/tmp/out")
+
     # withWeave:
     #     echo timeGo do:
     #         discard translateHtml(html, file_path, url_path, pair, slator)

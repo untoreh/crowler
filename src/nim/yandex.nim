@@ -120,6 +120,42 @@ proc isScriptId(el: VNode, id = ""): bool =
 #               imgUrl=getPageImage(pageId),
 #               getPageLinks(pageId))
 
+
+
+let feedNode = newElement("xml")
+feedNode.attrs = {"version": "1.0", "encoding": "UTF-8"}.toXmlAttributes
+let rssNode = newElement("rss")
+rssNode.attrs = {"xmlns:yandex": "http://news.yandex.ru",
+                  "xmlns:media": "http://search.yahoo.com/mrss/",
+                  "xmlns:turbo": "http://turbo.yandex.ru",
+                  "version": "2.0"}.toXmlAttributes 
+let
+    channelNode = newElement("channel")
+    rssTitle = newElement("title")
+    rssLink = newElement("link")
+    rssDescription = newElement("description")
+    rssLanguage = newElement("language")
+    # rssAnalytics = newXmlNode("turbo:analytics")
+    # rssAdNetwork = newXmlNode("turbo:adNetwork")
+
+proc setChannelNode() =
+    channelNode.clear()
+    channelNode.add rssTitle
+    channelNode.add rssLink
+    channelNode.add rssDescription
+    channelNode.add rssLanguage
+
+rssNode.add channelNode
+
+proc setFeed(topic, link, descr, lang: string): XmlNode =
+    channelNode.clear()
+    rssTitle.text = topic
+    rssLink.text = link
+    rssDescription.text = descr
+    rssLanguage.text = lang
+
+proc feedTopic(): string = rssTitle.text
+
 let breadCrumbsList = newElement("breadcrumblist")
 proc breadcrumbsTags() =
     breadCrumbsList.clear()
@@ -174,7 +210,7 @@ let turboContent = newElement("turbo:content")
 turboContent.add newCData("")
 turboItemNode.add turboContent
 
-proc turboItem*(tree: VNode, ar: Article = static(Article())): XmlNode =
+proc turboItem*(tree: VNode, ar: Article = static(Article())) =
     let
         itemHead = tree.find(VNodeKind.head)
         itemBody = tree.find(VNodeKind.body)
@@ -195,35 +231,4 @@ proc turboItem*(tree: VNode, ar: Article = static(Article())): XmlNode =
     # FIXME: we currently don't produce any related items
     turboRelated.text = pageRelated
     turboContent[0].text = "$itemHead$itemBody"
-    return turboItemNode
-
-let feedNode = newElement("xml")
-feedNode.attrs = {"version": "1.0", "encoding": "UTF-8"}.toXmlAttributes
-let rssNode = newElement("rss")
-rssNode.attrs = {"xmlns:yandex": "http://news.yandex.ru",
-                  "xmlns:media": "http://search.yahoo.com/mrss/",
-                  "xmlns:turbo": "http://turbo.yandex.ru",
-                  "version": "2.0"}.toXmlAttributes 
-let
-    channelNode = newElement("channel")
-    rssTitle = newElement("title")
-    rssLink = newElement("link")
-    rssDescription = newElement("description")
-    rssLanguage = newElement("language")
-    # rssAnalytics = newXmlNode("turbo:analytics")
-    # rssAdNetwork = newXmlNode("turbo:adNetwork")
-
-channelNode.add rssTitle
-channelNode.add rssLink
-channelNode.add rssDescription
-channelNode.add rssLanguage
-rssNode.add channelNode
-
-proc setFeed(title, link, descr, lang: string): XmlNode =
-    channelNode.clear()
-    rssTitle.text = title
-    rssLink.text = link
-    rssDescription.text = descr
-    rssLanguage.text = lang
-
-proc feedTopic(): string = rssTitle.text
+    channelNode.add newVerbatimText($turboItemNode)

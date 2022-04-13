@@ -15,7 +15,8 @@ import nimpy,
 import cfg,
        types,
        utils,
-       html
+       html,
+       rss
 
 privateAccess(LocalitySensitive)
 var pageset = Table[string, bool]()
@@ -128,6 +129,7 @@ proc curPageNumber(topic: string): int =
     # return getSubdirNumber(topic, curdir)
 
 proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, with_arts = false) =
+    ## Writes a single page (fetching its related articles, if its not a template) to storage
     let
         arts = getDoneArticles(topic, pagenum = pagenum.parseInt)
         content = buildShortPosts(arts)
@@ -214,7 +216,12 @@ proc publish(topic: string) =
             a.title = utitle
             posts.add((buildPost(a), a))
     # update done articles after uniqueness checks
-    let done = collect(for (_, a) in posts: a.py)
+    var
+        donePy: seq[PyObject]
+        doneArts: seq[Article]
+    for (_, a) in posts:
+        donePy.add a.py
+        doneArts.add a
     discard ut.save_done(topic, len(arts), done, pagenum)
     if newpage:
         ensureDir(SITE_PATH / pagedir)
@@ -245,6 +252,13 @@ proc publish(topic: string) =
     discard ut.update_page_size(topic, pagenum, pagecount)
 
     finalizePages(topic, pagenum, newpage, pagecount)
+    # update feed file
+    when cfg.RSS:
+        updateFeed(topic, doneArts, dowrite=true)
+    # update ydx turbo items
+    # when cfg.YDX:
+    #     writeFeed()
+
 
 proc resetTopic(topic: string) =
     discard ut.reset_topic(topic)
@@ -300,17 +314,17 @@ when isMainModule:
     pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true)
     # pubPageFromTemplate("dmca.html", "DMCA")
 
-    import amp
-    import html_minify_c
-    let
-        tpl = "dmca.html"
-        title = "DMCA"
-    var txt = readfile(ASSETS_PATH / "templates" / tpl)
-    let slug = slugify(title)
+    # import amp
+    # import html_minify_c
+    # let
+    #     tpl = "dmca.html"
+    #     title = "DMCA"
+    # var txt = readfile(ASSETS_PATH / "templates" / tpl)
+    # let slug = slugify(title)
     # let mn = minifyHtml(p)
     # echo $mn
-    let p = buildPage(title = title, content = txt)
-    echo $p
+    # let p = buildPage(title = title, content = txt)
+    # echo $p
     # writeHtml(p, "/tmp/out")
     # echo mn
 

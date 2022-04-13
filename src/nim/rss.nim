@@ -87,7 +87,9 @@ proc feedItems(chann: XmlNode): seq[XmlNode] {.sideEffect.} =
                     chann.delete(n)
                     node
 
-proc updateFeed*(topic: string, newArts: seq[Article]) =
+proc updateFeed*(topic: string, newArts: seq[Article], dowrite=false) =
+    ## Load existing feed for given topic and update the feed (in-memory)
+    ## with the new articles provided, it does not write to storage.
     let
         feed = topic.fetchFeed
         chann = feed.child("channel")
@@ -104,5 +106,9 @@ proc updateFeed*(topic: string, newArts: seq[Article]) =
         chann.add articleItem(a)
     for item in shrinked:
         chann.add item
+    if dowrite:
+        writeFeed(SITE_PATH / topic)
 
-template updateFeed*(a: Article) = updateFeed(a.topic, @[a])
+template updateFeed*(a: Article) =
+    if a.title != "":
+        updateFeed(a.topic, @[a])

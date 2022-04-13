@@ -104,8 +104,7 @@ proc buildShortPosts*(arts: seq[Article], homepage=false): string =
                     text a.title
             tdiv(class = "entry-info"):
                 span(class = "entry-author"):
-                    text (if a.author != "": a.author
-                          else: a.url.parseuri().hostname) & ", "
+                    text a.getAuthor & ", "
                 time(class = "entry-date", datetime = ($a.pubDate)):
                     italic:
                         text format(a.pubDate, "dd/MMM")

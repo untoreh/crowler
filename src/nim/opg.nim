@@ -5,7 +5,8 @@ import
     xmltree,
     uri,
     macros,
-    sugar
+    sugar,
+    karax/vdom
 
 import cfg,
        types,
@@ -55,16 +56,15 @@ proc opgOptional(description, siteName, locale, audio, video, determiner: string
     if video.isSomething: addMetaTag("video", video)
     if determiner.isSomething: addMetaTag("determiner", determiner)
 
+proc opgTagsToString(): string = collect(for t in opgTags: $t).join
+
 proc fillOpgTags(title, tp, url, image: string, description = "", siteName = "", locale = "", audio = "",
-        video = "", determiner = "") =
+        video = "", determiner = ""): auto =
     ## Generates an HTML String containing opengraph meta tags for one item.
     opgBasic(title, tp, url, image)
     opgOptional(description, siteName, locale, audio, video, determiner)
+    opgTagsToString().verbatim
 
-macro getOpgTags(code: varargs[untyped]): untyped =
-    quote do:
-        fillOpgTags(`code`)
-        collect(for t in opgTags: $t).join
 
 proc opgStructure(prop, url, secureUrl, mime, width, height, alt: string) =
     ## Writes the additional metadata structures to the specified PROP.
@@ -98,22 +98,22 @@ proc opgTwitter(prop, content: string) =
     ## Twitter card meta tags
     addMetaTag(prop, content, base = "twitter")
 
-proc opgPage(a: Article): string =
+proc opgPage*(a: Article): VNode =
     let locale = static(DEFAULT_LOCALE)
     let
         tp = static("article")
         url = getArticleUrl(a)
         siteName = static(WEBSITE_TITLE)
     twitterMeta("card", "summary")
-    twitterMeta("creator", TWITTER_HANDLE)
-    getOpgTags(a.title, tp, url, a.imageUrl, a.desc, siteName, locale)
+    twitterMeta("creator", WEBSITE_TWITTER)
+    fillOpgTags(a.title, tp, url, a.imageUrl, a.desc, siteName, locale)
 
-proc opgPage(title: string, description: string, path: string): string =
+proc opgPage*(title: string, description: string, path: string): VNode =
     let locale = static(DEFAULT_LOCALE)
     let
         title = title
         tp = static("website")
         url = $(WEBSITE_URL / path)
     twitterMeta("card", "summary")
-    twitterMeta("creator", TWITTER_HANDLE)
-    getOpgTags(title, tp, url, "", description, "", locale)
+    twitterMeta("creator", WEBSITE_TWITTER)
+    fillOpgTags(title, tp, url, "", description, "", locale)

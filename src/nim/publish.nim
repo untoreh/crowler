@@ -101,7 +101,7 @@ proc addArticle(lsh: LocalitySensitive[uint64], a: Article): bool =
         return true
     false
 
-proc pubPageFromTemplate(tpl: string, title: string, vars: seq[(string, string)] = tplRep, desc="") =
+proc pubPageFromTemplate(tpl: string, title: string, vars: seq[(string, string)] = tplRep, desc = "") =
     var txt = readfile(ASSETS_PATH / "templates" / tpl)
     txt = multiReplace(txt, vars)
     let slug = slugify(title)
@@ -110,9 +110,11 @@ proc pubPageFromTemplate(tpl: string, title: string, vars: seq[(string, string)]
 
 proc pubInfoPages() =
     ## Build DMCA, TOS, and GPDR pages
-    pubPageFromTemplate("dmca.html", "DMCA", desc=fmt"DMCA compliance for {WEBSITE_DOMAIN}")
-    pubPageFromTemplate("tos.html", "Terms of Service", desc=fmt"Terms of Service for {WEBSITE_DOMAIN}")
-    pubPageFromTemplate("privacy-policy.html", "Privacy Policy", ppRep, desc="Privacy Policy for {WEBSITE_DOMAIN}")
+    pubPageFromTemplate("dmca.html", "DMCA", desc = fmt"DMCA compliance for {WEBSITE_DOMAIN}")
+    pubPageFromTemplate("tos.html", "Terms of Service",
+            desc = fmt"Terms of Service for {WEBSITE_DOMAIN}")
+    pubPageFromTemplate("privacy-policy.html", "Privacy Policy", ppRep,
+            desc = "Privacy Policy for {WEBSITE_DOMAIN}")
 
 proc pageSize(topic: string, pagenum: int): int =
     let py = ut.get_page_size(topic, pagenum)
@@ -143,7 +145,7 @@ proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, w
         discard ut.update_page_size(topic, pagenum.parseInt, pagecount, final = true)
     if with_arts:
         for a in arts:
-            processHtml(topic_path / pagenum, a.slug, buildPost(a))
+            processHtml(topic_path / pagenum, a.slug, buildPost(a), a)
 
 proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
     ## Always update both the homepage and the previous page
@@ -227,7 +229,7 @@ proc publish(topic: string) =
     info "Writing {newposts} articles for topic: {topic}"
     # FIXME: should this be here?
     for (tree, a) in posts:
-        processHtml(pagedir, a.slug, tree)
+        processHtml(pagedir, a.slug, tree, a)
     # after writing the new page, ensure home points to the new page
     if newpage:
         ensureHome(topic, pagenum)
@@ -248,11 +250,17 @@ proc resetTopic(topic: string) =
     discard ut.reset_topic(topic)
     saveLS(topic, initLS())
 
+proc getState(topic: string): (int, int) =
+    ## Get the number of the top page, and the number of `done` pages.
+    let
+        grp = ut.topic_group(topic)
+        topdir = max(grp[$topicData.pages].shape[0].to(int)-1, 0)
+        numdone = max(len(grp[$topicData.done]) - 1, 0)
+    return (topdir, numdone)
+
 proc pubAllPages(topic: string, clear = true) =
     ## Starting from the homepage, rebuild all archive pages, and their articles
-    let grp = ut.topic_group(topic)
-    let topdir = max(grp[$topicData.pages].shape[0].to(int)-1, 0)
-    let numdone = max(len(grp[$topicData.done]) - 1, 0)
+    let (topdir, numdone) = topic.getState
     assert topdir == numdone, fmt"{topdir}, {numdone}"
     if clear:
         for d in walkDirs(SITE_PATH / topic / "*"):
@@ -263,7 +271,7 @@ proc pubAllPages(topic: string, clear = true) =
     block:
         let pagecount = pageSize(topic, topdir)
         pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true)
-    for n in 0..topdir - 1:
+    for n in 0..<topdir:
         let pagenum = n
         var pagecount = pageSize(topic, n)
         pubPage(topic, $pagenum, pagecount, finalize = true, with_arts = true)
@@ -275,17 +283,21 @@ proc refreshPageSizes(topic: string) =
     assert isa(donearts, ut.za.Group)
     assert len(donearts) == len(grp[$topicData.pages])
     let topdir = len(donearts) - 1
-    for pagenum in countup(0, topdir - 1):
+    for pagenum in 0..<topdir:
         discard ut.update_page_size(topic, pagenum, len(donearts[$pagenum]), final = true)
     discard ut.update_page_size(topic, topdir, len(donearts[$topdir]), final = false)
 
+import translate
 when isMainModule:
     let topic = "vps"
     # refreshPageSizes(topic)
     # publish(topic)
     # assert not pyisnone(arts)
     # pubAllPages(topic, clear = true)
-    # pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true)
+    let
+        (topdir, _) = topic.getState()
+        pagecount = pageSize(topic, topdir)
+    pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true)
     # pubPageFromTemplate("dmca.html", "DMCA")
 
     import amp
@@ -295,13 +307,11 @@ when isMainModule:
         title = "DMCA"
     var txt = readfile(ASSETS_PATH / "templates" / tpl)
     let slug = slugify(title)
-    let p = buildPage(title = title, content = txt)
     # let mn = minifyHtml(p)
     # echo $mn
-    let ap = $ampPage(p)
-
-    echo $ap
-    # writeHtmlFile("/tmp/out", ap)
+    let p = buildPage(title = title, content = txt)
+    echo $p
+    # writeHtml(p, "/tmp/out")
     # echo mn
 
     # var path = SITE_PATH / "index.html"

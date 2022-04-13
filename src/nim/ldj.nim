@@ -6,13 +6,18 @@ import json,
        uri,
        strutils,
        sugar,
-       std/enumerate
-
+       hashes,
+       std/enumerate,
+       karax/vdom,
+       nim_curry
 
 import
     cfg,
     types,
-    utils
+    utils,
+    html_misc
+
+export utils, tables
 
 let EMPTY_DATE = dateTime(0, Month(1), 1)
 var ldj_country: string
@@ -22,8 +27,25 @@ let
     S: seq[string] = @[]
     ST: seq[(string, string)] = @[]
 
-var jsonCache* {.threadvar.}: Table[int, JsonNode]
-jsonCache = initTable[int, JsonNode]()
+var jsonCache* {.threadvar.}: Table[Hash, string]
+jsonCache = initTable[int, string]()
+
+macro jm*(code: typed): untyped =
+    code.expectKind nnkCall
+    code[0].expectKind nnkSym
+    let fname = code[0]
+    let tup = nnkTupleConstr.newTree(code[1..^1])
+    quote do:
+        block:
+            # NOTE: this will fail if the arguments have openarrays!
+            let
+                etup = `tup`
+                h = hash(etup)
+            try:
+                jsonCache[h]
+            except KeyError:
+                jsonCache[h] = $`fname`.apply(etup)
+                jsonCache[h]
 
 proc isempty(s: string): bool {.inject.} = s.isEmptyOrWhiteSpace
 
@@ -40,10 +62,22 @@ template withSchema(json: JsonNode): JsonNode =
     json["@context"] = %"https://schema.org/"
     json
 
-proc wrap_ldj[T](data: T, wrap = true, id = "", class = ""): T =
-    wrap and fmt """<script type="application/ld+json" id="{id}" class="{class}"> {%data.json} </script>"""
+let ldjElement = newVNode(VNodeKind.script)
+ldjElement.setAttr("type", "application/ld+json")
 
-proc website(url, author, year: auto, image = ""): auto =
+proc asVNode*[T](data: T, wrap = true, id = "", class = ""): VNode =
+    case wrap:
+        of true:
+            if id != "":
+                ldjElement.setAttr("id", id)
+            if class != "":
+                ldjElement.setAttr("class", class)
+                ldjElement.text = $data
+            result = deepCopy(ldjElement)
+        else:
+            result = deepCopy(ldjElement)
+
+proc jwebsite(url, author, year: auto, image = ""): auto =
     ## "https://schema.org/WebSite"
     withSchema:
         %* {
@@ -54,6 +88,7 @@ proc website(url, author, year: auto, image = ""): auto =
             "copyrightHolder": author,
             "copyrightYear": year
         }
+template website*(code: varargs[untyped]): string = jm jwebsite(`code`)
 
 var searchUri {.threadvar.}: ref Uri
 proc search(url: string, parts: Uri, maxlength = 100): JsonNode =
@@ -88,7 +123,7 @@ proc place(place = "homeLocation"; country = "", region = "", props: JsonNode = 
     setProps
     data
 
-proc author(entity = "Person"; name, email = "", description = "", image = "",
+proc jauthor(entity = "Person"; name, email = "", description = "", image = "",
         sameAs = ""): JsonNode =
     ## "Convenience function for authors. Requires at least `name` and `email`."
     var data = %* {
@@ -98,6 +133,8 @@ proc author(entity = "Person"; name, email = "", description = "", image = "",
     }
     setArgs(data, %*{"image": image, "description": description, "sameAs": sameAs})
     data
+
+template author*(code: varargs[untyped]): string = jm jauthor(code)
 
 template publisher(code: untyped): untyped =
     ## Currently same as `author`.
@@ -146,7 +183,7 @@ proc ensure_time(modified: string, created: string, defv = now()): string =
         return created.toIsoDate
     modified.toIsoDate
 
-proc webpage(id, title, url, mtime, selector, description: auto, keywords: seq[string], name = "", headline = "",
+proc jwebpage(id, title, url, mtime, selector, description: auto, keywords: seq[string], name = "", headline = "",
             image = "", entity = "Article", status = "Published", lang = "english", mentions: seq[
             string] = (@[]), access_mode = (@["textual", "visual"]), access_sufficient: seq[
             string] = @[], access_summary = "", created = "", published = "",
@@ -190,6 +227,15 @@ proc webpage(id, title, url, mtime, selector, description: auto, keywords: seq[s
     setProps
     data
 
+
+template webpage*(id: string, code: varargs[untyped]): string =
+    let k = hash(id)
+    try:
+        jsonCache[k]
+    except:
+        jsonCache[k] = $jwebpage(id, `code`)
+        jsonCache[k]
+
 proc translation(src_url, trg_url, lang, title, mtime, selector, description: auto, keywords: seq[string],
                      image = "", headline = "", props = default(JsonNode),
                      translator_name = "Google", translator_url = "https://translate.google.com/"): auto =
@@ -203,7 +249,7 @@ proc translation(src_url, trg_url, lang, title, mtime, selector, description: au
     data["translationOfWork"] = %*{"@id": src_url}
     data
 
-proc breadcrumbs(crumbs: openArray[(string, string)]): JsonNode =
+proc jbreadcrumbs(crumbs: seq[(string, string)]): JsonNode =
     ## Take a list of (name, link) tuples and returns a breadcrumb
     ## definition with hierarchy from top to bottom.
     let nodes = collect:
@@ -220,6 +266,13 @@ proc breadcrumbs(crumbs: openArray[(string, string)]): JsonNode =
                         ]
                         }
     %nodes
+
+template breadcrumbs*(code: untyped): string = jm jbreadcrumbs(`code`)
+
+proc crumbsNode*(a: Article): auto =
+    @[("Home", $WEBSITE_URL),
+        ("Page", $(WEBSITE_URL / a.topic / $a.page)),
+        ("Post", getArticleUrl(a))]
 
 type
     Book = ref tuple
@@ -327,7 +380,7 @@ type Organization = ref tuple
 
 proc initOrganization(): Organization = new(result)
 
-proc orgschema(name, url: auto, contact = "", tel = "", email = "", sameas = "",
+proc jorgschema(name, url: string; contact = "", tel = "", email = ""; sameas: auto,
         logo = ""): JsonNode =
     result = %*{
         "@type": "Organization",
@@ -340,9 +393,13 @@ proc orgschema(name, url: auto, contact = "", tel = "", email = "", sameas = "",
             "telephone": tel,
             "email": email, }
         }
-proc orgschema(org: Organization): JsonNode =
-    orgschema(org.name, org.url, org.contact, org.tel, org.email, org.sameas, org.logo)
-let OG = initOrganization()
+
+template orgschema*(code: varargs[untyped]): string = jm jorgschema(code)
+
+proc orgschema*(org: Organization): string =
+    jm jorgschema(org.name, org.url, org.contact, org.tel, org.email, org.sameas, org.logo)
+
+var OG = initOrganization()
 
 proc coverage(start_date, end_date = ""): string =
     start_date & "/" & (if end_date.isEmptyOrWhiteSpace: ".." else: end_date)

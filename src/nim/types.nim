@@ -205,8 +205,8 @@ type LockTable[K, V] = ref object
 proc newLockTable*[K; V](): LockTable[K, V] =
     new(result)
     initLock(result.lock)
-    # var tbl = new(Table[K, V])
-    # result.storage = tbl
+    var tbl = new(Table[K, V])
+    result.storage = tbl
 
 iterator items*(tbl: LockTable): auto =
     withLock(tbl.lock):

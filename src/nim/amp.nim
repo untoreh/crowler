@@ -14,7 +14,8 @@ import tables,
        lrucache
 
 import cfg,
-       utils
+       utils,
+       html_misc
 
 const skipNodes = [VNodeKind.iframe, audio, canvas, embed, video, img, button, form, VNodeKind.head, svg]
 const skipNodesXml = ["iframe", "audio", "canvas", "embed", "video", "img", "button", "form",
@@ -269,6 +270,12 @@ proc ampPage*(tree: VNode): VNode =
 proc ampDir(target: string) {.error: "not implemented".} =
     if not dirExists(target):
         raise newException(OSError, fmt"Supplied target directory {target} does not exists.")
+
+let ampLinkEl = newVNode(VNodeKind.link)
+ampLinkEl.setAttr("rel", "amphtml")
+proc ampLink*(path: string): VNode =
+    ampLinkEl.setAttr("href", pathLink(path, amp=true, rel=false))
+    deepCopy(ampLinkEl)
 
 when isMainModule:
     let file = SITE_PATH / "vps" / "index.html"

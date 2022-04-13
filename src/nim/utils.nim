@@ -67,6 +67,30 @@ macro toggle*(flag: static[bool], code: untyped): untyped =
         quote do:
             discard
 
+macro apply*(fun, args: typed): untyped =
+  result = newCall(fun)
+  var funArgLen = getType(fun).len - 2
+  case args.kind:
+    of nnkBracket:
+      for a in args:
+        result.add a
+    of nnkPrefix:
+      if args[0].repr == "@":
+        for a in args[1]:
+          result.add a
+    of nnkTupleConstr:
+      for a in args:
+        result.add a
+    of nnkSym:
+      for i in 0..<funArgLen:
+        var b = newTree(nnkBracketExpr)
+        b.add args
+        b.add newLit(i)
+        result.add b
+    else:
+      error("unsupported kind: " & $args.kind & ", " & args.repr)
+      discard
+
 type StringSet = HashSet[string]
 
 converter asStringSet(v: openarray[string]): StringSet = to_hashset[string](v)
@@ -234,6 +258,10 @@ proc clearChildren*(node: VNode) {.inline.} =
     privateAccess(VNode)
     node.kids.setlen(0)
 
+proc clear*(node: XmlNode) {.inline.} =
+    privateAccess(XmlNode)
+    node.s.setLen 0
+
 proc delAttr*(n: VNode, k: auto) =
     privateAccess(VNode)
     for i in countup(0, n.attrs.len-2, 2):
@@ -326,6 +354,11 @@ proc replaceTilNoChange(input: var auto, pattern, repl: auto): string =
     while pattern in input:
         input = input.replace(pattern, repl)
     input
+
+proc sre*(pattern: static string): Regex =
+    ## Static regex expression
+    let rx {.global.} = re(pattern)
+    return rx
 
 pragmaVars(Regex, threadvar, sentsRgx1, sentsRgx2, sentsRgx3, sentsRgx4, sentsRgx5, sentsRgx6,
         sentsRgx7, sentsRgx8, sentsRgx9, sentsRgx10, sentsRgx11, sentsRgx12, sentsRgx13, sentsRgx14,

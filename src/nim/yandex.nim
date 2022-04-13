@@ -12,9 +12,11 @@ import tables,
        nre,
        uri,
        lrucache,
-       hashes
+       hashes,
+       strtabs
 
 import cfg,
+       types,
        utils,
        ldj
 
@@ -41,7 +43,7 @@ let
     h2Node = newVNode(VNodeKind.h2)
 
 var
-    pageUrl, pageDate, pageId, pageDescr, pageLang, pageSource, pageTopic, pageAuthor, pageRelated: string
+    pageUrl, pageId, pageDescr, pageLang, pageRelated: string
     pageKws: seq[string]
 
 proc fillHeader() =
@@ -75,147 +77,153 @@ proc setHeader(title, subtitle, imgUrl: string, menuLinks: seq[string] = @[]) =
         al.setAttr("src", link)
         crumbsHtml.add al
 
-proc isScriptId(el: VNode, kind: VNodeKind, id=""): bool =
+proc setHeader(ar: Article) = setHeader(ar.title, ar.desc, ar.imageUrl)
+
+proc isScriptId(el: VNode, kind: VNodeKind, id = ""): bool =
     el.kind == kind and el.getAttr("id") == id
 
-proc isScriptId(el: VNode, id=""): bool =
+proc isScriptId(el: VNode, id = ""): bool =
     el.getAttr("id") == id
 
-proc processHead(inHead: VNode) =
-    var
-        canonicalUnset, titleUnset, crumbsUnset, dateUnset = true
-        title, subtitle, subUnset: string
+# proc processHead(inHead: VNode) =
+#     var
+#         canonicalUnset, titleUnset, crumbsUnset, dateUnset = true
+#         title, subtitle, subUnset: string
 
-    crumbsLinks.setLen 0
-    pageKws.setLen 0
-    for el in inHead.preorder:
-        if el.kind in skipNodes:
-            continue
-        if titleUnset and el.kind == VNodeKind.title:
-            title = el.text
-            titleUnset = false
-       elif canonicalUnset and (el.kind == VNodeKind.link) and el.isLink(canonical):
-           pageUrl = el.getAttr("href", "")
-           canonicalUnset = false
-       elif subUnset and el.kind == VNodeKind.meta and el.hasAttr("description"):
-           subtitle = el.getAttr("description")
-           subUnset = false
-       elif dateUnset and el.isScriptId("ldj-webpage"):
-           let data = jsonCache.get(el.text.hash.int)
-           pageDate = data["datePublished"]
-           dateUnset = false
-           pageId = data["mainEntityOfPage"]["@id"]
-           pageKws.add data["keywords"]
-       elif crumbsUnset and isScriptId("ldj-breadcrumbs"):
-           let data = jsonCache.get(el.text.hash.int)
-           for listEl in data["itemListElement"]:
-               crumbsLinks.add (listEl["name"], listEl["item"])
-              crumbsUnset = false
-       titleUnset or subUnset or crumbsUnset or break
-    setHeader(title, subtitle,
-              imgUrl=getPageImage(pageId),
-              getPageLinks(pageId))
+#     crumbsLinks.setLen 0
+#     pageKws.setLen 0
+#     for el in inHead.preorder:
+#         if el.kind in skipNodes:
+#             continue
+#         if titleUnset and el.kind == VNodeKind.title:
+#             title = el.text
+#             titleUnset = false
+#        elif canonicalUnset and (el.kind == VNodeKind.link) and el.isLink(canonical):
+#            pageUrl = el.getAttr("href", "")
+#            canonicalUnset = false
+#        elif subUnset and el.kind == VNodeKind.meta and el.hasAttr("description"):
+#            subtitle = el.getAttr("description")
+#            subUnset = false
+#        elif dateUnset and el.isScriptId("ldj-webpage"):
+#            let data = jsonCache.get(el.text.hash.int)
+#            pageDate = data["datePublished"]
+#            dateUnset = false
+#            pageId = data["mainEntityOfPage"]["@id"]
+#            pageKws.add data["keywords"]
+#        elif crumbsUnset and isScriptId("ldj-breadcrumbs"):
+#            let data = jsonCache.get(el.text.hash.int)
+#            for listEl in data["itemListElement"]:
+#                crumbsLinks.add (listEl["name"], listEl["item"])
+#               crumbsUnset = false
+#        titleUnset or subUnset or crumbsUnset or break
+#     setHeader(title, subtitle,
+#               imgUrl=getPageImage(pageId),
+#               getPageLinks(pageId))
 
-let breadCrumbsList = newXmlTree("breadcrumblist")
-proc breadcrumbsTags()
+let breadCrumbsList = newElement("breadcrumblist")
+proc breadcrumbsTags() =
     breadCrumbsList.clear()
-	for (name, link) in crumbsLinks
-        let bc = newXmlTree("breadcrumb")
-        let at = newStringTable()
+    for (name, link) in crumbsLinks:
+        let bc = newElement("breadcrumb")
+        var at = newStringTable()
         at["url"] = link
         at["text"] = name
-        bc.attrs  = at
+        bc.attrs = at
         breadCrumbsList.add bc
-    end
-end
 
-let turboItemNode = newXmlTree("item")
-turboItemNode.setAttr "turbo" "true"
+let turboItemNode = newElement("item")
+turboItemNode.attrs = {"turbo": "true"}.toXmlAttributes
 # Page Information
-let turboXHtml = newXmlTree("turbo:extendedHtml")
+let turboXHtml = newElement("turbo:extendedHtml")
 turboXHtml.add newText("true")
 turboItemNode.add turboXHtml
-let turboLink = newXmlTree("link")
+let turboLink = newElement("link")
 turboLink.add newText("")
 turboItemNode.add turboLink
 
-let turboLang = newXmlTree("language")
+let turboLang = newElement("language")
 turboLang.add newText("")
 turboItemNode.add turboLang
 
-let turboSource = newXmlNode("turbo:source")
+let turboSource = newElement("turbo:source")
 turboSource.add newText("")
 turboItemNode.add turboSource
 
-let turboTopic = newXmlNode("turbo:topic")
+let turboTopic = newElement("turbo:topic")
 turboTopic.add newText("")
 turboItemNode.add turboTopic
 
-let turboDate = newXmlNode("pubDate")
-turboDate.add newText(pageDate)
+let turboDate = newElement("pubDate")
+turboDate.add newText("")
 turboItemNode.add turboDate
 
-let turboAuthor = newXmlNode("author")
+let turboAuthor = newElement("author")
 turboAuthor.add newText("")
 turboItemNode.add turboAuthor
 
-let turboMetrics = newXmlNode("metrics")
-let turboYandex = newXmlNode("yandex")
+let turboMetrics = newElement("metrics")
+let turboYandex = newElement("yandex")
 turboMetrics.add turboYandex
-turboYandex.setAttr("schema_identifier", "")
+turboYandex.attrs = {"schema_identifier": ""}.toXmlAttributes
 turboYandex.add breadCrumbsList
 
-let turboRelated = newXmlNode("yandex:related")
+let turboRelated = newElement("yandex:related")
 turboItemNode.add turboRelated
 
-let turboContent = newXmlNode("turbo:content")
+let turboContent = newElement("turbo:content")
 turboContent.add newCData("")
 turboItemNode.add turboContent
 
-proc turboItem(tree: VNode, autor= ""): XmlNode =
+proc turboItem*(tree: VNode, ar: Article = static(Article())): XmlNode =
     let
-        itemHead = tree.child(VNodeKind.head)
-        itemBody = tree.child(VNodeKind.body)
+        itemHead = tree.find(VNodeKind.head)
+        itemBody = tree.find(VNodeKind.body)
 
     turboItemNode.clear()
-    turboI
-    let pageLang = tree.getAttr("lang")
+    pageLang = tree.getAttr("lang")
     if pageLang == "":
         pageLang = DEFAULT_LANG_CODE
 
-    processHead(itemHead)
+    # processHead(itemHead)
     turboLink.text = pageUrl
     turboLang.text = pageLang
-    turboSource.text = pageSource
-    turboTopic.text = pageTopic
-    turboDate.text = pageDate
-    turboAuthor.text = pageAuthor
+    turboSource.text = ar.url
+    turboTopic.text = ar.topic
+    turboDate.text = $ar.pubDate
+    turboAuthor.text = ar.author
     breadcrumbsTags()
+    # FIXME: we currently don't produce any related items
     turboRelated.text = pageRelated
     turboContent[0].text = "$itemHead$itemBody"
     return turboItemNode
 
-let feedNode = newXmlFeed("xml")
+let feedNode = newElement("xml")
 feedNode.attrs = {"version": "1.0", "encoding": "UTF-8"}.toXmlAttributes
-rssNode = newXmlNode("rss")
+let rssNode = newElement("rss")
 rssNode.attrs = {"xmlns:yandex": "http://news.yandex.ru",
                   "xmlns:media": "http://search.yahoo.com/mrss/",
                   "xmlns:turbo": "http://turbo.yandex.ru",
-                  "version": "2.0"}
+                  "version": "2.0"}.toXmlAttributes 
 let
-    channelNode = newXmlNode("channel")
-    rssTitle = newXmlNode("title")
-    rssLink = newXmlNode("link")
-    rssDescription = newXmlNode("description")
-    rssLanguage = newXmlNode("language")
+    channelNode = newElement("channel")
+    rssTitle = newElement("title")
+    rssLink = newElement("link")
+    rssDescription = newElement("description")
+    rssLanguage = newElement("language")
     # rssAnalytics = newXmlNode("turbo:analytics")
     # rssAdNetwork = newXmlNode("turbo:adNetwork")
 
-channelNode.add
+channelNode.add rssTitle
+channelNode.add rssLink
+channelNode.add rssDescription
+channelNode.add rssLanguage
 rssNode.add channelNode
 
 proc setFeed(title, link, descr, lang: string): XmlNode =
+    channelNode.clear()
     rssTitle.text = title
     rssLink.text = link
     rssDescription.text = descr
     rssLanguage.text = lang
+
+proc feedTopic(): string = rssTitle.text

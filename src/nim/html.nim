@@ -12,7 +12,8 @@ import
     sequtils,
     normalize,
     unicode,
-    nre
+    nre,
+    json
 
 import cfg,
        types,
@@ -22,7 +23,10 @@ import cfg,
        html_misc,
        html_minify_c,
        amp,
-       opg
+       yandex,
+       opg,
+       rss,
+       ldj
 
 static: echo "loading html..."
 
@@ -35,6 +39,7 @@ const LOGO_DARK_ICON_HTML = readFile(LOGO_DARK_ICON_PATH)
 const ROOT = initUri() / "/"
 const preline = [(white_space, "pre-line")]
 let preline_style = style(preline)
+let rtime = $now()
 
 template kxi*(): int = 0
 template addEventHandler*(n: VNode; k: EventKind; action: string; kxi: int) =
@@ -51,23 +56,62 @@ proc slugify*(value: string): string =
     result = result.replace(wsRgx, "")
     result = result.replace(hypRgx, "-").strip(runes = stripchars)
 
-proc buildHead*(path: string, description: string = ""): VNode =
+
+template ldjWebsite(): VNode {.dirty.} =
+    ldj.website(url = ($WEBSITE_URL / topic),
+                author = ar.author,
+                year = now().year,
+                image = $LOGO_URL).asVNode
+
+template ldjWebpage(): VNode {.dirty.} =
+    ldj.webpage(id=canon,
+                title=ar.title,
+                url=canon,
+                mtime=rtime,
+                selector=".post-content",
+                description=ar.desc,
+                keywords=ar.tags,
+                image=ar.imageUrl,
+                lang=ar.lang,
+                created=($ar.pubDate),
+                props=(%*{
+                    "availableLanguage": ldjLanguages(),
+                     "author": (ldj.author(name=ar.author)),
+                    "publisher": ldj.orgschema(
+                        name=WEBSITE_TITLE,
+                        url=($WEBSITE_URL),
+                        sameas=WEBSITE_SOCIAL,
+                        contact=WEBSITE_CONTACT)
+                    })
+    ).asVNode
+
+proc buildHead*(path: string; description = ""; topic = ""; ar = static(Article())): VNode =
     let canon = $(WEBSITE_URL / path)
     buildHtml(head):
         meta(charset = "UTF-8")
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
         link(rel = "canonical", href = canon)
-        for n in langLinksNodes(canon):
-            n
+        feedLink(topic, path)
+        ampLink(path)
+        for t in opgPage(ar): t
+        for n in langLinksNodes(canon): n
+
+        # LDJ
+        ldjWebsite()
+        ldjWebPage()
+        breadcrumbs(crumbsNode(ar)).asVNode
+
         # styles
         link(rel = "preconnect", href = "https://fonts.googleapis.com")
         link(rel = "preconnect", href = "https://fonts.gstatic.com", crossorigin = "")
         link(rel = "stylesheet", href = "https://fonts.googleapis.com/icon?family=Material+Icons")
         link(rel = "stylesheet", href = CSS_REL_URL)
         title:
-            text "hello"
+            text ar.title
         meta(name = "description", content = description)
-        # script(src="https://cdn.jsdelivr.net/npm/beercss@2.0.10/dist/cdn/beer.min.js", type="text/javascript")
+        link(rel="icon", href=FAVICON_PNG, type="image/x-icon")
+        link(rel="icon", href=FAVICON_SVG, type="image/svg+xml")
+        link(rel ="stylesheet", href=($(WEBSITE_URL / TRANSLATION_FLAGS_PATH)))
 
 proc buildLang(): VNode =
     buildHtml(tdiv):
@@ -119,7 +163,7 @@ proc buildDrawer(a: Article; site: VNode): VNode =
 proc buildImgUrl*(url: string; cls = "image-link"): VNode =
     let cache_url = "/img/" & encodeUrl(url)
     buildHtml(a(class = cls, href = url, alt = "post image source")):
-            # the `alt="image"` is used to display the material-icons placeholder
+        # the `alt="image"` is used to display the material-icons placeholder
         img(class = "material-icons", src = cache_url, alt = "image", loading = "lazy")
 
 proc icon*(name: string; txt = ""; cls = ""): VNode =
@@ -219,7 +263,7 @@ proc postTitle(a: Article): VNode =
             buildSocialShare(a)
             tdiv(class = "post-source"):
                 a(href = a.url):
-                    img(src = a.icon, loading = "lazy", alt = "web", class="material-icons")
+                    img(src = a.icon, loading = "lazy", alt = "web", class = "material-icons")
                     text $a.author
         buildImgUrl(a.imageUrl)
 
@@ -239,7 +283,7 @@ proc postFooter(pubdate: Time): VNode =
 proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): VNode =
     let crumbs = toUpper(&"/ {a.topic} > ...")
     let topic_uri = parseUri("/" & a.topic)
-    buildHtml(body(class = "", style=preline_style)):
+    buildHtml(body(class = "", style = preline_style)):
         buildMenu(crumbs, topic_uri)
         buildMenuSmall(crumbs, topic_uri)
         main(class = "mdc-top-app-bar--fixed-adjust"):
@@ -271,20 +315,21 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
 
 const pageContent* = postContent
 
-proc writeHtml*(data: auto, path: string) {.inline.} =
+proc writeHtml*(data: auto; path: string) {.inline.} =
     debug "writing html file to {path}"
     writeFile(path, fmt"<!doctype html>{'\n'}{data}")
 
-proc processHtml*(relpath: string; slug: string; data: VNode) =
+proc processHtml*(relpath: string; slug: string; data: VNode, ar=static(Article())) =
     # outputs (slug, data)
     var o: seq[(string, VNode)]
     let
-        basepath = relpath / slug & ".html"
         path = SITE_PATH
-    if cfg.TRANSLATION_ENABLED:
-        setupTranslation()
+        fullpath = path / relpath / slug & ".html"
+    when cfg.TRANSLATION_ENABLED:
         withWeave(false):
-            translateTree(data, basepath, rx_file, langpairs, slator)
+            setupTranslation()
+            debug "calling translation with path {fullpath} and rx {rx_file.pattern}"
+            translateTree(data, fullpath, rx_file, langpairs)
         for (code, n) in trOut:
             o.add (code, n)
         trOut.clear()
@@ -295,30 +340,39 @@ proc processHtml*(relpath: string; slug: string; data: VNode) =
     # NOTE: after the amp process we copy the page HTML because
     # amp uses a global tree
     var phtml: string
+    var ppage: VNode
+    when cfg.YDX:
+        if yandex.feedTopic != ar.topic:
+            yandex.setFeed(ar.title, $(WEBSITE_URL / topic / "feed.xml"), topicDesc(), ar.lang)
+        yandex.setFeed(topic, )
     for (pslug, page) in o:
         when cfg.AMP:
-            phtml = $page.ampPage
-        else:
-            phtml = $page
+            ppage = page.ampPage
+        when cfg.YDX:
+            tpage = turboItem(page, ar)
+        when cfg.RSS:
+            updateFeed(ar)
         when cfg.MINIFY:
-            phtml.minifyHtml.writeHtml(basepath)
+            phtml.minifyHtml.writeHtml(fullpath)
         else:
-            phtml.writeHtml(basepath)
+            phtml.writeHtml(fullpath)
 
 proc buildPost*(a: Article): VNode =
-    buildHtml(html(lang=DEFAULT_LANG_CODE,
-                   prefix=opgPrefix(@[Opg.article, website]))
+    buildHtml(html(lang = DEFAULT_LANG_CODE,
+                   prefix = opgPrefix(@[Opg.article, Opg.website]))
     ):
-        buildHead(getArticlePath(a), a.desc)
+        buildHead(getArticlePath(a), a.desc, a.topic)
         buildBody(a)
 
-proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode = nil, topic = "", desc: string = ""): VNode =
+proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode = nil; topic = "";
+        desc: string = ""): VNode =
     let crumbs = if topic != "": fmt"/ > {topic} / >"
                  else: "/ > ..."
     let topic_uri = parseUri("/")
-    result = buildHtml(html(lang=DEFAULT_LANG_CODE, prefix=opgPrefix(@[Opg.article, website]))):
+    result = buildHtml(html(lang = DEFAULT_LANG_CODE, prefix = opgPrefix(@[Opg.article,
+            Opg.website]))):
         buildHead(topic / slug, desc)
-        body(class = "", style=preline_style):
+        body(class = "", style = preline_style):
             buildMenu(crumbs, topic_uri)
             buildMenuSmall(crumbs, topic_uri)
             main(class = "mdc-top-app-bar--fixed-adjust"):

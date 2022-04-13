@@ -1,17 +1,20 @@
 import
-    karax/vdom,
+    karax/[vdom, karaxdsl],
     std/with,
     uri,
     sugar,
     sets,
     os,
     nre,
-    strutils
+    strutils,
+    algorithm,
+    tables
 
 import
     cfg,
     utils,
-    translate_types
+    translate_types,
+    html_misc
 
 var langTmpUri: Uri
 langTmpUri.opaque = false
@@ -53,3 +56,39 @@ proc langLinksHtml*(path: string, rel: static bool = false): string =
     join(res)
 
 proc ldjLanguages*(): seq[string] = collect(for (lang, _) in TLangs: lang)
+
+var sortedLanguages = (
+    collect(for lang in TLangs: lang),
+    SLang.code
+)
+sortedLanguages[0].sort
+
+const countryLangs = {
+    "ar": "sa",
+    "en": "gb",
+    "el": "gr",
+    "hi": "in",
+    "pa": "in",
+    "ja": "jp",
+    "jw": "id",
+    "bn": "bd",
+    "tl": "ph",
+    "zh": "cn",
+    "ko": "kr",
+    "uk": "ua",
+    "zu": "za",
+    "vi": "vn",
+    "ur": "pk",
+    "sv": "se"
+}.toTable
+proc langToCountry(lang: string): string {.inline.} = countryLangs.getOrDefault(lang, lang)
+
+const langCssClasses = "flag flag-"
+proc langsList*(path: string): VNode =
+    buildHtml(ul(class = "lang-list")):
+        for (name, code) in sortedLanguages[0]:
+            let pathCode = if code == sortedLanguages[1]: ""
+                           else: code
+            a(class = "lang-link lang-"&code, href = pathLink(path, pathcode)):
+                span(class = langCssClasses&langToCountry(code))
+                text name

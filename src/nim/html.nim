@@ -49,6 +49,12 @@ const stripchars = ["-".runeAt(0), "_".runeAt(0)]
 let wsRgx = re"[^\w\s-]"
 let hypRgx = re"[-\s]+"
 
+proc icon*(name: string; txt = ""; cls = ""): VNode =
+    buildHtml(span(class = ("mdc-ripple-surface " & cls))):
+        italic(class = "material-icons"):
+            text name
+        text txt
+
 proc slugify*(value: string): string =
     ## Slugifies an unicode string
 
@@ -56,6 +62,15 @@ proc slugify*(value: string): string =
     result = result.replace(wsRgx, "")
     result = result.replace(hypRgx, "-").strip(runes = stripchars)
 
+const mdc_button_classes = "material-icons mdc-top-app-bar__action-item mdc-icon-button"
+
+proc buildButton(txt: string; custom_classes: string = ""; aria_label: string = "";
+        title: string = ""): VNode =
+    buildHtml():
+        button(class = (&"{mdc_button_classes} {custom_classes}"),
+               aria-label = aria_label, title = title):
+            tdiv(class = "mdc-icon-button__ripple")
+            text txt
 
 template ldjWebsite(): VNode {.dirty.} =
     ldj.website(url = ($WEBSITE_URL / topic),
@@ -64,25 +79,25 @@ template ldjWebsite(): VNode {.dirty.} =
                 image = $LOGO_URL).asVNode
 
 template ldjWebpage(): VNode {.dirty.} =
-    ldj.webpage(id=canon,
-                title=ar.title,
-                url=canon,
-                mtime=rtime,
-                selector=".post-content",
-                description=ar.desc,
-                keywords=ar.tags,
-                image=ar.imageUrl,
-                lang=ar.lang,
-                created=($ar.pubDate),
-                props=(%*{
+    ldj.webpage(id = canon,
+                title = ar.title,
+                url = canon,
+                mtime = rtime,
+                selector = ".post-content",
+                description = ar.desc,
+                keywords = ar.tags,
+                image = ar.imageUrl,
+                lang = ar.lang,
+                created = ($ar.pubDate),
+                props = (%*{
                     "availableLanguage": ldjLanguages(),
-                     "author": (ldj.author(name=ar.author)),
+                     "author": (ldj.author(name = ar.author)),
                     "publisher": ldj.orgschema(
-                        name=WEBSITE_TITLE,
-                        url=($WEBSITE_URL),
-                        sameas=WEBSITE_SOCIAL,
-                        contact=WEBSITE_CONTACT)
-                    })
+                        name = WEBSITE_TITLE,
+                        url = ($WEBSITE_URL),
+                        sameas = WEBSITE_SOCIAL,
+                        contact = WEBSITE_CONTACT)
+        })
     ).asVNode
 
 proc buildHead*(path: string; description = ""; topic = ""; ar = static(Article())): VNode =
@@ -109,27 +124,23 @@ proc buildHead*(path: string; description = ""; topic = ""; ar = static(Article(
         title:
             text ar.title
         meta(name = "description", content = description)
-        link(rel="icon", href=FAVICON_PNG, type="image/x-icon")
-        link(rel="icon", href=FAVICON_SVG, type="image/svg+xml")
-        link(rel ="stylesheet", href=($(WEBSITE_URL / TRANSLATION_FLAGS_PATH)))
+        link(rel = "icon", href = FAVICON_PNG, type = "image/x-icon")
+        link(rel = "icon", href = FAVICON_SVG, type = "image/svg+xml")
+        link(rel = "stylesheet", href = ($(WEBSITE_URL / TRANSLATION_FLAGS_PATH)))
 
-proc buildLang(): VNode =
-    buildHtml(tdiv):
-        text "lang menu"
+proc buildLang(path: string): VNode =
+    buildHtml(tdiv(class = "menu-lang-btn", title = "Change website's language")):
+        buildButton("translate", "translate", aria_label = "Languages",
+                    title = "Change the language of the website."):
+        # button(type="button", title="Languages Menu", class="langs-dropdown-wrapper"):
+        #     icon("translate")
+            tdiv(class = "langs-dropdown-content langs-dropdown-menu"):
+                langsList(path)
 
 proc buildTrending(): VNode =
     block: buildHtml(tdiv()):
         text "trending posts"
 
-const mdc_button_classes = "material-icons mdc-top-app-bar__action-item mdc-icon-button"
-
-proc buildButton(txt: string; custom_classes: string = ""; aria_label: string = "";
-        title: string = ""): VNode =
-    buildHtml():
-        button(class = (&"{mdc_button_classes} {custom_classes}"),
-               aria-label = aria_label, title = title):
-            tdiv(class = "mdc-icon-button__ripple")
-            text txt
 
 proc buildSocialShare(a: Article): VNode =
     # let url = WEBSITE_URL & "/" & a.topic & "/" & a.slug
@@ -166,11 +177,6 @@ proc buildImgUrl*(url: string; cls = "image-link"): VNode =
         # the `alt="image"` is used to display the material-icons placeholder
         img(class = "material-icons", src = cache_url, alt = "image", loading = "lazy")
 
-proc icon*(name: string; txt = ""; cls = ""): VNode =
-    buildHtml(span(class = ("mdc-ripple-surface " & cls))):
-        italic(class = "material-icons"):
-            text name
-        text txt
 
 proc buildSearch(withButton = true): VNode =
     buildHtml(tdiv):
@@ -207,7 +213,7 @@ proc buildLogo(pos: string): VNode =
                 verbatim(LOGO_HTML)
 
 
-proc buildMenu*(crumbs: string; topic_uri: Uri): VNode =
+proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): VNode =
     buildHtml(header(class = "mdc-top-app-bar menu", id = "app-bar")):
         tdiv(class = "mdc-top-app-bar__row"):
             section(class = "mdc-top-app-bar__section mdc-top-app-bar__section--align-start"):
@@ -226,9 +232,11 @@ proc buildMenu*(crumbs: string; topic_uri: Uri): VNode =
                 a(class = "trending", href = ($(topic_uri / "trending"))):
                     buildButton("trending_up", aria_label = "Trending",
                             title = "Recent articles that have been trending up.")
-                buildButton("translate", "translate", aria_label = "Languages",
-                        title = "Change the language of the website.")
+                buildLang(path)
                 buildLogo("right")
+
+template buildMenu*(crumbs: string; topic_uri: Uri; a: Article): untyped =
+    buildMenu(crumbs, topic_uri, a.getArticlePath)
 
 proc buildFooter(): VNode =
     buildHtml(tdiv(class = "site-footer container max border medium no-padding")):
@@ -251,7 +259,6 @@ proc buildFooter(): VNode =
                     text "Creative Commons Attribution 3.0 Unported License."
             script(src = "/bundle.js", async = "")
 
-
 proc postTitle(a: Article): VNode =
     buildHtml(tdiv(class = "title-wrap")):
         h1(class = "post-title", id = "main"):
@@ -264,7 +271,7 @@ proc postTitle(a: Article): VNode =
             tdiv(class = "post-source"):
                 a(href = a.url):
                     img(src = a.icon, loading = "lazy", alt = "web", class = "material-icons")
-                    text $a.author
+                    text a.getAuthor
         buildImgUrl(a.imageUrl)
 
 proc postContent(article: string): VNode =
@@ -284,7 +291,7 @@ proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): VNode =
     let crumbs = toUpper(&"/ {a.topic} > ...")
     let topic_uri = parseUri("/" & a.topic)
     buildHtml(body(class = "", style = preline_style)):
-        buildMenu(crumbs, topic_uri)
+        buildMenu(crumbs, topic_uri, a)
         buildMenuSmall(crumbs, topic_uri)
         main(class = "mdc-top-app-bar--fixed-adjust"):
             postTitle(a)
@@ -319,12 +326,13 @@ proc writeHtml*(data: auto; path: string) {.inline.} =
     debug "writing html file to {path}"
     writeFile(path, fmt"<!doctype html>{'\n'}{data}")
 
-proc processHtml*(relpath: string; slug: string; data: VNode, ar=static(Article())) =
+proc processHtml*(relpath: string; slug: string; data: VNode; ar = static(Article())) =
     # outputs (slug, data)
     var o: seq[(string, VNode)]
     let
         path = SITE_PATH
-        fullpath = path / relpath / slug & ".html"
+        pagepath = relpath / slug & ".html"
+        fullpath = path / pagepath
     when cfg.TRANSLATION_ENABLED:
         withWeave(false):
             setupTranslation()
@@ -340,20 +348,22 @@ proc processHtml*(relpath: string; slug: string; data: VNode, ar=static(Article(
     # NOTE: after the amp process we copy the page HTML because
     # amp uses a global tree
     var phtml: string
-    var ppage: VNode
+    when cfg.AMP:
+        var ppage: VNode
     when cfg.YDX:
         if yandex.feedTopic != ar.topic:
-            yandex.setFeed(ar.title, $(WEBSITE_URL / topic / "feed.xml"), topicDesc(), ar.lang)
-        yandex.setFeed(topic, )
+            let ydxTurboFeedpath = $(WEBSITE_URL / topic / "ydx.xml")
+            yandex.setFeed(ar.topic, ydxTurboFeedpath, topicDesc(), ar.lang)
     for (pslug, page) in o:
         when cfg.AMP:
             ppage = page.ampPage
         when cfg.YDX:
-            tpage = turboItem(page, ar)
-        when cfg.RSS:
-            updateFeed(ar)
+            turboItem(page, ar)
         when cfg.MINIFY:
             phtml.minifyHtml.writeHtml(fullpath)
+            when cfg.AMP:
+                let amppath = SITE_PATH / "amp" / pagepath
+                ppage.minifyHtml.writeHtml(amppath)
         else:
             phtml.writeHtml(fullpath)
 
@@ -366,14 +376,16 @@ proc buildPost*(a: Article): VNode =
 
 proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode = nil; topic = "";
         desc: string = ""): VNode =
-    let crumbs = if topic != "": fmt"/ > {topic} / >"
+    let
+        crumbs = if topic != "": fmt"/ > {topic} / >"
                  else: "/ > ..."
-    let topic_uri = parseUri("/")
-    result = buildHtml(html(lang = DEFAULT_LANG_CODE, prefix = opgPrefix(@[Opg.article,
-            Opg.website]))):
-        buildHead(topic / slug, desc)
+        topic_uri = parseUri("/")
+        path = topic / slug
+    result = buildHtml(html(lang = DEFAULT_LANG_CODE,
+                            prefix = opgPrefix(@[Opg.article, Opg.website]))):
+        buildHead(path, desc)
         body(class = "", style = preline_style):
-            buildMenu(crumbs, topic_uri)
+            buildMenu(crumbs, topic_uri, path)
             buildMenuSmall(crumbs, topic_uri)
             main(class = "mdc-top-app-bar--fixed-adjust"):
                 if title != "":

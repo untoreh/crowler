@@ -207,7 +207,8 @@ template tryTranslateFunc(kind: FcKind, args: untyped, post: untyped) {.dirty.} 
             var ot: vdom.VNode
             (q, ot) = translateDom(args)
             # FIXME
-            # trOut[fc.pair.trg] = ot
+            {.cast(gcsafe).}:
+                trOut[fc.pair.trg] = ot
             post
     debug "trytrans: returning from translations"
 

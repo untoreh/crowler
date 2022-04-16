@@ -1,6 +1,6 @@
 import { MDCRipple } from "@material/ripple";
 import { MDCTopAppBar } from "@material/top-app-bar";
-import { getCookie } from "./lib.jl";
+import { getCookie, $, $$ } from "./lib.js";
 
 function toggleTheme() {
   let el = document.body;
@@ -24,43 +24,81 @@ function toggleTheme() {
       el.classList.add("light");
     }
   }
-  document.cookie = `darkTheme=${el.classList.contains("dark")}`;
+  document.cookie = `darkTheme=${el.classList.contains("dark")}; SameSite=Strict`;
 }
 
-function toggleDrawer() {
-  let el = document.querySelector(".menu-list");
-  if (el.style.left !== "-100vh" && el.style.left !== "") {
+function toggleVisibility(el, hide = false) {
+  if (hide || (el.style.left !== "-100vh" && el.style.left !== "")) {
     el.style.left = "-100vh";
   } else {
     el.style.left = "0";
   }
 }
 
+function toggleShow(el, hide = false) {
+  if (hide) {
+    el.classList.remove("show")
+  } else {
+    el.classList.toggle("show")
+  }
+}
+
+function toggleDrawer(_, hide = false) {
+  let el = $(".menu-list");
+  toggleVisibility(el, hide)
+}
+
+function toggleLangs(e, hide = false) {
+  let el = $(".langs-dropdown-content", e.target)
+  toggleShow(el, hide)
+}
+
+function closeMenus(e) {
+  let el = e.target
+  let cls = el.classList
+  e.stopPropagation()
+  if (!cls.contains("langs-dropdown-content") &&
+      !cls.contains("translate")) {
+    let langs = $$(".langs-dropdown-content")
+    langs.forEach(l => toggleShow(l, true))
+  }
+  let pcls = el.parentElement.classList
+  if (!cls.contains("menu-btn") &&
+      !cls.contains("menu-list") &&
+      !pcls.contains("menu-list") &&
+      !pcls.contains("menu-lang-btn")) {
+    toggleDrawer(null, true)
+  }
+}
+
 window.onload = function () {
   // dark light
-  document
-    .querySelectorAll(".dk-toggle")
+  $$(".dk-toggle")
     .forEach((el) => (el.onclick = toggleTheme));
   toggleTheme();
 
-  document.querySelector(".menu-btn").onclick = toggleDrawer;
+  $("html,body").onclick = closeMenus;
+  $(".menu-btn").onclick = toggleDrawer;
+  $$(".menu-lang-btn").forEach(el =>
+    el.onclick = toggleLangs
+  )
 
   // button
   const iconButtonRipple = new MDCRipple(
-    document.querySelector(".mdc-icon-button")
+    $(".mdc-icon-button")
   );
   iconButtonRipple.unbounded = true;
 
   // appbar
-  const topAppBarElement = document.querySelector(".mdc-top-app-bar");
+  const topAppBarElement = $(".mdc-top-app-bar");
   const topAppBar = new MDCTopAppBar(topAppBarElement);
 
   // ripples
-  const surface = document.querySelector(".mdc-ripple-surface");
+  const surface = $(".mdc-ripple-surface");
   const ripple = new MDCRipple(surface);
 
-  const mainContentEl = document.querySelector("main");
-  const menuBtn = document.querySelector(".menu-btn");
+  const mainContentEl = $("main");
+  const menuBtn = $(".menu-btn");
 
   topAppBar.setScrollTarget(mainContentEl);
 };

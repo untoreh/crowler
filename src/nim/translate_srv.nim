@@ -17,7 +17,8 @@ import
     types,
     translate_types,
     utils,
-    quirks
+    quirks,
+    py
 
 static: echo "loading translate_srv"
 
@@ -62,8 +63,6 @@ discard relpyImport("../py/config")
 let
     tryWrapper = pyglo["tryWrapper"]
     pySched = relpyImport("../py/scheduler")
-    pySchedPtr = pySched.privateRawPyObj
-
 
 discard pySched.initPool()
 
@@ -120,10 +119,10 @@ proc deepTranslatorFunc(src: string, lang: langPair): string {.gcsafe.} =
     # NOTE: using `slator` inside the closure is fine since it always outlives the closure
     try:
         var
-            res: PyObject
-            rdy: bool
-            j: PyObject
-            pyf: PyObject
+            res {.threadvar.}: PyObject
+            rdy {.threadvar.}: bool
+            j {.threadvar.}: PyObject
+            pyf {.threadvar.}: PyObject
         pySafeCall:
             debug "tfun: applying function with src ({src.len})"
             debug "slator nil?: {slator.tr[lang].isnil}"

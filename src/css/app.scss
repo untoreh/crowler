@@ -8,6 +8,7 @@
 @use "@material/ripple";
 
 @import "colors.scss";
+@import "mixins.scss";
 @import url("https://fonts.googleapis.com/css2?family=Noto+Serif+Display:ital,wght@0,100;0,300;0,700;1,100;1,300&family=Noto+Serif:ital,wght@0,400;0,700;1,400&family=Petrona:ital,wght@0,400;0,800;1,100;1,400&display=swap");
 
 body {
@@ -53,12 +54,31 @@ main {
   flex: auto;
   max-width: 800px;
   margin: auto;
+  word-wrap: break-word;
+  width: calc(90vw - 2rem);
 }
 
 .post-footer {
   text-align: right;
   padding: 1rem;
   font-size: 0.9rem;
+  display: flex;
+}
+
+.page-crumbs {
+  display: inline-flex;
+  flex-direction: row;
+  width: 100%;
+  font-size: 1.5rem;
+  span {
+    width: calc(50% - 1rem);
+  }
+  .prev-page {
+    text-align: left;
+  }
+  .next-page {
+    text-align: right;
+  }
 }
 
 .title-wrap blockquote {
@@ -162,13 +182,14 @@ footer {
 }
 
 .search-input {
-  width: 15rem;
+  width: calc(100% - 1rem);
   height: 3rem;
   line-height: 3rem;
   font-size: 1rem;
   border-radius: 0.25rem;
   margin-right: 0.25rem;
   text-align: center;
+  display: inline-block;
 }
 
 .search-input:focus::placeholder {
@@ -188,23 +209,20 @@ footer {
 
 .menu-list {
   display: block;
-  overflow: hidden;
   position: fixed;
   z-index: 1;
   left: -100vh;
-  height: 100vh;
+  height: 100%;
   background-color: var(--mdc-theme-primary);
   list-style: none;
-  border-radius: 0px 1rem 1rem 0px;
-  padding: 1rem;
+  @include border-style;
+  padding: 0.25rem;
   & a {
-    text-decoration: none;
     font-variant: small-caps;
   }
   & label {
     padding: 24px;
   }
-  box-shadow: var(--mdc-theme-primary) 0 -4px 2px;
   & .search-input {
     width: 6rem;
     padding-left: 2rem;
@@ -222,6 +240,9 @@ footer {
 
 .entry {
   white-space: normal;
+  hr {
+    margin: 3rem 0 3rem 0;
+  }
 }
 
 .menu-list-entry {
@@ -239,7 +260,6 @@ header .page {
 .material-icons {
   font-variant: none;
 }
-
 .entry-title {
   margin-bottom: 0.5rem;
 }
@@ -265,7 +285,7 @@ header .page {
     border-width: 2px;
     padding: 5px 10px 5px 10px;
     border-radius: 5px;
-    display: inline-block;
+    display: inline-flex;
     margin-top: 4px;
     & i {
       font-size: 1rem;
@@ -277,3 +297,4 @@ header .page {
 
 @import "responsive.scss";
 @import "flags-sprite.css";
+@import "lang.scss";

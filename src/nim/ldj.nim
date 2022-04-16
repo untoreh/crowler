@@ -8,8 +8,7 @@ import json,
        sugar,
        hashes,
        std/enumerate,
-       karax/vdom,
-       nim_curry
+       karax/vdom
 
 import
     cfg,
@@ -17,7 +16,7 @@ import
     utils,
     html_misc
 
-export utils, tables
+export utils, tables, html_misc
 
 let EMPTY_DATE = dateTime(0, Month(1), 1)
 var ldj_country: string
@@ -236,12 +235,12 @@ template webpage*(id: string, code: varargs[untyped]): string =
         jsonCache[k] = $jwebpage(id, `code`)
         jsonCache[k]
 
-proc translation(src_url, trg_url, lang, title, mtime, selector, description: auto, keywords: seq[string],
+proc translation*(src_url, trg_url, lang, title, mtime, selector, description: auto, keywords: seq[string],
                      image = "", headline = "", props = default(JsonNode),
                      translator_name = "Google", translator_url = "https://translate.google.com/"): auto =
     ## file path must be relative to the project directory, assumes the published website is under '__site/'
     # id, title, url, mtime, selector, description: auto, keywords: seq[string], name = "", headline = "",
-    let data = webpage(id = trg_url, title, url = trg_url, mtime, selector, description,
+    let data = jwebpage(id = trg_url, title, url = trg_url, mtime, selector, description,
                             keywords = keywords, image = image, headline = headline, lang = lang, props = props)
     data["translator"] = %*{"@type": "https://schema.org/Organization",
                              "name": translator_name,

@@ -144,6 +144,10 @@ footer {
   box-shadow: var(--light-secondary) 0 -1px 2px;
 }
 
+.menu-list button {
+  color: var(--mdc-theme-on-primary);
+}
+
 // .mdc-tooltip {
 //   @include tooltip.fill-color(var(--light-primary));
 //   @include tooltip.label-ink-color(var(--light-on-primary));

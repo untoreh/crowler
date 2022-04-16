@@ -100,7 +100,7 @@ template ldjWebpage(): VNode {.dirty.} =
         })
     ).asVNode
 
-proc buildHead*(path: string; description = ""; topic = ""; ar = static(Article())): VNode =
+proc buildHead*(path: string; description = ""; topic = ""; ar = emptyArt ): VNode =
     let canon = $(WEBSITE_URL / path)
     buildHtml(head):
         meta(charset = "UTF-8")
@@ -126,16 +126,16 @@ proc buildHead*(path: string; description = ""; topic = ""; ar = static(Article(
         meta(name = "description", content = description)
         link(rel = "icon", href = FAVICON_PNG, type = "image/x-icon")
         link(rel = "icon", href = FAVICON_SVG, type = "image/svg+xml")
-        link(rel = "stylesheet", href = ($(WEBSITE_URL / TRANSLATION_FLAGS_PATH)))
 
-proc buildLang(path: string): VNode =
+proc buildLang(path: string, title=""): VNode =
     buildHtml(tdiv(class = "menu-lang-btn", title = "Change website's language")):
+        if title != "":
+            span:
+                text title
         buildButton("translate", "translate", aria_label = "Languages",
                     title = "Change the language of the website."):
-        # button(type="button", title="Languages Menu", class="langs-dropdown-wrapper"):
-        #     icon("translate")
-            tdiv(class = "langs-dropdown-content langs-dropdown-menu"):
-                langsList(path)
+                        tdiv(class = "langs-dropdown-content langs-dropdown-menu"):
+                            langsList(path)
 
 proc buildTrending(): VNode =
     block: buildHtml(tdiv()):
@@ -179,28 +179,26 @@ proc buildImgUrl*(url: string; cls = "image-link"): VNode =
 
 
 proc buildSearch(withButton = true): VNode =
-    buildHtml(tdiv):
+    buildHtml(tdiv(class="search-bar")):
         label(class = "search-field"):
             input(class = "search-input", type = "text", placeholder = "Search...")
         if withButton:
             buildButton("search", "search-btn", aria_label = "Search",
                     title = "Search across the website.")
 
-proc buildMenuSmall*(crumbs: string; topic_uri: Uri): VNode =
+proc buildMenuSmall*(crumbs: string; topic_uri: Uri, path: string): VNode =
+    let relpath = $(topic_uri / path)
     buildHtml():
-        ul(class = "menu-list mdc-top-app-bar--fixed-adjust"):
-            li():
-                a(class = "dk-toggle", href = "#"):
-                    icon("brightness_4", "Colors", "menu-list-entry")
-            li():
-                a(href = ($(topic_uri / "trending"))):
-                    icon("trending_up", "Trending", "menu-list-entry")
-            li():
-                a(class = "translate", href = "#"):
-                    icon("translate", "Language", "menu-list-entry")
-            li(class = "search"):
-                buildSearch(withButton = false)
-                icon("search", "", "search-icon")
+        section(class = "menu-list mdc-top-app-bar--fixed-adjust"):
+        # ul(class = "menu-list mdc-top-app-bar--fixed-adjust"):
+            buildButton("brightness_4", "dk-toggle", aria_label = "toggle dark theme",
+                        title = "Switch website color between dark and light theme.")
+            a(class = "trending", href = ($(topic_uri / "trending"))):
+                buildButton("trending_up", aria_label = "Trending",
+                        title = "Recent articles that have been trending up.")
+            buildLang(path)
+proc buildMenuSmall*(crumbs: string; topic_uri: Uri, a = emptyArt): VNode =
+    buildMenuSmall(crumbs, topic_uri, a.getArticleUrl)
 
 proc buildLogo(pos: string): VNode =
     buildHtml():
@@ -217,12 +215,15 @@ proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): VNode =
     buildHtml(header(class = "mdc-top-app-bar menu", id = "app-bar")):
         tdiv(class = "mdc-top-app-bar__row"):
             section(class = "mdc-top-app-bar__section mdc-top-app-bar__section--align-start"):
+                # hide the logo on page load
+                initStyleStr(".app-bar-logo, .logo-light-wrap {display: none;}")
                 buildButton("menu", "menu-btn", aria_label = "open menu",
                             title = "Menu Drawer")
                 buildLogo("left")
                 buildButton("brightness_4", "dk-toggle", aria_label = "toggle dark theme",
                             title = "Switch website color between dark and light theme.")
-                a(class = "page mdc-top-app-bar__title mdc-ripple-surface", href = ($topic_uri)):
+                a(class = "page mdc-top-app-bar__title mdc-ripple-surface",
+                  href = pathLink(path.parentDir, rel=false)):
                     text crumbs
             section(class = "mdc-top-app-bar__section mdc-top-app-bar__section--align-end",
                     role = "toolbar"):
@@ -288,11 +289,11 @@ proc postFooter(pubdate: Time): VNode =
                 text format(dt, "dd MMM yyyy")
 
 proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): VNode =
-    let crumbs = toUpper(&"/ {a.topic} > ...")
+    let crumbs = toUpper(&"/ {a.topic} / Page-{a.page} >")
     let topic_uri = parseUri("/" & a.topic)
     buildHtml(body(class = "", style = preline_style)):
         buildMenu(crumbs, topic_uri, a)
-        buildMenuSmall(crumbs, topic_uri)
+        buildMenuSmall(crumbs, topic_uri, a)
         main(class = "mdc-top-app-bar--fixed-adjust"):
             postTitle(a)
             postContent(a.content)
@@ -310,23 +311,26 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
         topic_path = "/" / topic
         pn = pagenum.parseInt
     buildHtml(tdiv(class = "post-footer")):
-        nav(class = "page-crumbs")
-        if pn > 0:
-            span(class = "prev-page"):
-                a(href = (topic_path / (pn - 1).intToStr)):
-                    text "Previous page"
-        if not home:
-            span(class = "next-page"):
-                a(href = (topic_path / (pn + 1).intToStr)):
-                    text "Next page"
+        nav(class = "page-crumbs"):
+            if pn > 0:
+                span(class = "prev-page"):
+                    a(href = (topic_path / (pn - 1).intToStr)):
+                        text "<< Previous page"
+            if not home:
+                span(class = "next-page"):
+                    a(href = (topic_path / (pn + 1).intToStr)):
+                        text "Next page >>"
 
 const pageContent* = postContent
 
 proc writeHtml*(data: auto; path: string) {.inline.} =
     debug "writing html file to {path}"
+    let dir = path.parentDir
+    if not dir.existsDir:
+        createDir(dir)
     writeFile(path, fmt"<!doctype html>{'\n'}{data}")
 
-proc processHtml*(relpath: string; slug: string; data: VNode; ar = static(Article())) =
+proc processHtml*(relpath: string; slug: string; data: VNode; ar = emptyArt) =
     # outputs (slug, data)
     var o: seq[(string, VNode)]
     let
@@ -337,35 +341,34 @@ proc processHtml*(relpath: string; slug: string; data: VNode; ar = static(Articl
         withWeave(false):
             setupTranslation()
             debug "calling translation with path {fullpath} and rx {rx_file.pattern}"
-            translateTree(data, fullpath, rx_file, langpairs)
+            translateTree(data, fullpath, rx_file, langpairs, ar=ar)
         for (code, n) in trOut:
-            o.add (code, n)
+            o.add (code / pagepath, n)
         trOut.clear()
+        o.add (SLang.code / pagepath, data)
     else:
-        o.add (slug, data)
+        o.add (pagepath, data)
     # Search goes here
     #
     # NOTE: after the amp process we copy the page HTML because
     # amp uses a global tree
-    var phtml: string
-    when cfg.AMP:
-        var ppage: VNode
+    var ppage: VNode
     when cfg.YDX:
         if yandex.feedTopic != ar.topic:
             let ydxTurboFeedpath = $(WEBSITE_URL / topic / "ydx.xml")
             yandex.setFeed(ar.topic, ydxTurboFeedpath, topicDesc(), ar.lang)
-    for (pslug, page) in o:
+    for (pagepath, page) in o:
         when cfg.AMP:
             ppage = page.ampPage
+        else: ppage = page
         when cfg.YDX:
             turboItem(page, ar)
         when cfg.MINIFY:
-            phtml.minifyHtml.writeHtml(fullpath)
+            ppage.minifyHtml.writeHtml(fullpath)
             when cfg.AMP:
-                let amppath = SITE_PATH / "amp" / pagepath
-                ppage.minifyHtml.writeHtml(amppath)
+                ppage.minifyHtml.writeHtml(SITE_PATH / "amp" / pagepath)
         else:
-            phtml.writeHtml(fullpath)
+            page.writeHtml(SITE_PATH / pagepath)
 
 proc buildPost*(a: Article): VNode =
     buildHtml(html(lang = DEFAULT_LANG_CODE,
@@ -377,9 +380,9 @@ proc buildPost*(a: Article): VNode =
 proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode = nil; topic = "";
         desc: string = ""): VNode =
     let
-        crumbs = if topic != "": fmt"/ > {topic} / >"
-                 else: "/ > ..."
-        topic_uri = parseUri("/")
+        crumbs = if topic != "": fmt"/ {topic} >"
+                 else: "/ "
+        topic_uri = parseUri("/ >")
         path = topic / slug
     result = buildHtml(html(lang = DEFAULT_LANG_CODE,
                             prefix = opgPrefix(@[Opg.article, Opg.website]))):
@@ -401,3 +404,11 @@ proc buildPage*(title: string; content: string; pagefooter: VNode = nil): VNode 
 
 proc buildPage*(content: string; pagefooter: VNode = nil): VNode =
     buildPage(title = "", content, slug = "", pagefooter)
+
+proc ldjData*(el: VNode, filepath, relpath: string, lang: langPair, a: Article) =
+    ##
+    let
+        srcurl = pathLink(relpath, rel=false)
+        trgurl = pathLink(relpath, code=lang.trg, rel=false)
+
+    let ldjTr = ldjTrans(relpath, srcurl, trgurl, lang ,a)

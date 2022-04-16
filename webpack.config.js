@@ -40,6 +40,8 @@ module.exports = [
     output: {
       // This is necessary for webpack to compile
       filename: "bundle.js",
+      // Needed to resolve url used in css correctly
+      publicPath: "",
     },
     module: {
       rules: [

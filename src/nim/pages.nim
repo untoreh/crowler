@@ -95,12 +95,12 @@ proc articleExcerpt(a: Article): string =
         return a.content[0..maxlen+runesize] & "..."
 
 proc buildShortPosts*(arts: seq[Article], homepage=false): string =
-    var url: string
+    var relpath: string
     for a in arts:
-        url = getArticleUrl(a)
+        relpath = getArticlePath(a)
         let p = buildHtml(article(class = "entry")):
             h2(class = "entry-title", id = a.slug):
-                a(href = url):
+                a(href = relpath):
                     text a.title
             tdiv(class = "entry-info"):
                 span(class = "entry-author"):
@@ -116,6 +116,7 @@ proc buildShortPosts*(arts: seq[Article], homepage=false): string =
             buildImgUrl(a.imageUrl, "entry-image")
             tdiv(class = "entry-content"):
                 verbatim(articleExcerpt(a))
-                a(class = "entry-more", href = url):
+                a(class = "entry-more", href = relpath):
                     text "[continue]"
+            hr()
         result.add(p)

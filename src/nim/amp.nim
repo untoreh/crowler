@@ -220,13 +220,13 @@ proc processBody(inEl, outBody, outHead: VNode, lv = false) =
                 inEl.delete(n)
                 l -= 1
             else:
-                if el.kind != VNodeKind.text:
-                    debug "ampbody: maybe processing {el.kind}"
-                    maybeProcess
-                if lv:
-                    discard
-                else:
-                    outBody.add el
+                case el.kind:
+                    of VNodeKind.text, VNodeKind.verbatim: discard
+                    else:
+                        debug "ampbody: maybe processing {el.kind}"
+                        maybeProcess
+                if lv: discard
+                else: outBody.add el
                 n += 1
 
 proc pre(pattern: static string): Regex =

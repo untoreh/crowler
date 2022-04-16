@@ -12,9 +12,11 @@ import
 
 import
     cfg,
+    types,
     utils,
     translate_types,
-    html_misc
+    html_misc,
+    ldj
 
 var langTmpUri: Uri
 langTmpUri.opaque = false
@@ -74,6 +76,7 @@ const countryLangs = {
     "bn": "bd",
     "tl": "ph",
     "zh": "cn",
+    "zh-CN": "cn",
     "ko": "kr",
     "uk": "ua",
     "zu": "za",
@@ -92,3 +95,15 @@ proc langsList*(path: string): VNode =
             a(class = "lang-link lang-"&code, href = pathLink(path, pathcode)):
                 span(class = langCssClasses&langToCountry(code))
                 text name
+
+proc ldjTrans*(relpath, srcurl, trgurl: string, lang: langPair, a: Article): VNode =
+    ldj.translation(srcurl, trgurl, lang.srcLangName,
+                    title=a.title,
+                    mtime=($a.pubDate),
+                    selector=".post-content",
+                    description=a.desc,
+                    keywords=a.tags,
+                    image=a.imageUrl,
+                    headline=a.title,
+                    translator_name="Google Translate",
+                    translator_url="http://google.translate.com").asVNode

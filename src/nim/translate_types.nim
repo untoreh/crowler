@@ -105,13 +105,20 @@ proc initLang*(name: string, code: string): Lang =
     result.name = name
     result.code = code
 
-proc to_tlangs(langs: openArray[(string, string)]): HashSet[Lang] =
+proc toTLangs(langs: openArray[(string, string)]): HashSet[Lang] =
     for (name, code) in langs:
         result.incl(initLang(name, code))
 
+proc toLangTable(langs: HashSet[Lang]): Table[string, string] =
+    result = initTable[string, string]()
+    for (name, code) in langs:
+        result[code] = name
+
+
+
 const
     SLang* = initLang("English", "en")
-    TLangs* = to_tlangs [
+    TLangs* = toTLangs [
         ("German", "de"),
         ("Italian", "it"),
         ("Mandarin Chinese", "zh-CN"),
@@ -140,9 +147,14 @@ const
         ("Thai", "th"),
         ("Filipino", "tl")
         ]
+    TLangsTable = TLangs.toLangTable()
     RTL_LANGS* = ["yi", "he", "ar", "fa", "ur", "az", "dv", ].toHashSet
 
+
+proc srcLangName*(lang: langPair): string = TLangsTable[lang.src]
+
 var glues {.threadvar.} : seq[(string, Regex)]
+var gluePadding*: int
 
 proc initGlues*() =
     glues = @[
@@ -151,6 +163,9 @@ proc initGlues*() =
     (" %¶%¶% ", re"\%\s\¶\s?\%\s?\¶\s?\%\s?"),
     (" \n[[...]]\n ", re"\s?\n?\[\[?\.\.\.\]\]?\n?")
     ]
+    gluePadding = max:
+        collect(for (sep, _) in glues: sep.len)
+    gluePadding *= 2
 
 proc initQueue*[T](f: TFunc, pair: auto): T =
     result.glues = glues

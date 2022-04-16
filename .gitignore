@@ -3,7 +3,7 @@
 .venv/
 **/queue.txt
 **/rust/target/
-
+**/site*.html
 
 # Added by cargo
 

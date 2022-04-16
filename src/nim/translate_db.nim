@@ -48,6 +48,7 @@ proc initLRUTrans(): LRUTrans =
 var trans* = initLRUTrans()
 var tLock*: Lock
 initLock(tLock)
+# Slations holds python objects, it must be unmanaged memory
 var slations* {.threadvar.}: ptr Table[int64, string]
 
 proc transOpenDB(t = trans) =
@@ -117,9 +118,15 @@ proc clear*(t: LRUTrans) =
 proc save*[T](t: LRUTrans, c: Table[T, string]) =
     withLock(tLock):
         # compress outside the closure..
+        debug "length of translations is {c.len}"
         var comp: seq[(T, seq[byte])]
         for (k, v) in c.pairs:
-            comp.add (k, compress(t.zstd_c, v, level=ZSTD_COMPRESSION_LEVEL))
+            # Trying to compress empty values errors out
+            if unlikely v == "":
+                comp.add (k, static(newSeq[byte]()))
+            else:
+                comp.add (k, compress(t.zstd_c, v, level=ZSTD_COMPRESSION_LEVEL))
+        debug "doing TX"
         t.coll.inTransaction do (ct: CollectionTransaction):
             for (k, v) in comp:
                 ct[k.int64] = v

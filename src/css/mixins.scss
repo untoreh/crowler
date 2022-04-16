@@ -1,0 +1,6 @@
+@mixin border-style {
+    border: solid;
+    border-color: var(--mdc-theme-secondary);
+    border-width: 1px;
+    box-shadow: 0px 0px 4px var(--mdc-theme-secondary);
+}

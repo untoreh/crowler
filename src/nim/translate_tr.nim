@@ -26,14 +26,14 @@ type splitSent = object
     size: int
 
 proc add(ss: ptr splitSent, s: string) =
-    ss[].sents.add(s)
-    ss[].size += s.len
+    ss.sents.add(s)
+    ss.size += s.len
 
 proc clear(ss: ptr splitSent) =
-    ss[].sents.setLen(0)
-    ss[].size = 0
+    ss.sents.setLen(0)
+    ss.size = 0
 
-proc len(ss: ptr splitSent): int = ss[].size
+proc len(ss: ptr splitSent): int = ss.size
 
 var
     sentsIn: ptr splitSent
@@ -42,12 +42,9 @@ var
     scLock: Lock
     elSents {.threadvar.}: seq[string]
 
-# sentsIn = new(splitSent)[].addr
 sentsIn = create(splitSent)
 transOut = create(seq[string])
-# splitCache = new(Table[string, seq[string]])[].addr
 splitCache = create(Table[string, seq[string]])
-# init(splitCache)
 initLock(scLock)
 
 proc checkBatchedTranslation(sents: seq[string], query = "", tr: auto) =
@@ -70,6 +67,7 @@ proc doQuery[T](q: T, sents: seq[string]): seq[string] =
 
     for (sep, splitsep) in q.glues:
         query = join(sents, sep)
+        assert query.len < q.bufsize, fmt"mmh: {sents.len}, {query.len}"
         debug "query: calling translation function, bucket: {q.bucket.len}, query: {query.len}"
         let res = q.call(query, q.pair)
         debug "query: response size: {res.len}"
@@ -95,9 +93,8 @@ proc setEl(q, el: auto, t: string) =
     # debug "slations: setting element"
     el.setText(t)
 
-const gluePadding = 15
-proc reachedBufSize(s: auto, sz: int, bufsize: int): bool = len(s) * gluePadding + sz > bufsize
-proc reachedBufSize[T](s: seq, q: T): bool = reachedBufSize(s, q.size, q.bufsize)
+proc reachedBufSize(s: auto, sz: int, bufsize: int): bool = (len(s) * gluePadding + sz) > bufsize
+proc reachedBufSize[T](s: seq, q: T): bool = reachedBufSize(s, q.sz, q.bufsize)
 proc reachedBufSize[T](s: int, q: T): bool = reachedBufSize(q.bucket, s + q.sz, q.bufsize)
 
 proc elUpdate(q, el, srv: auto) =

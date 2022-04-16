@@ -1,0 +1,94 @@
+@import "mixins.scss";
+
+.langs-dropdown-wrapper {
+  cursor: pointer;
+}
+
+.langs-dropdown-content {
+  display: none;
+  text-align: left;
+  width: 12rem;
+  font-family: initial;
+  position: absolute;
+  background-color: var(--mdc-theme-primary);
+  top: 3.5rem;
+  height: 50vh;
+  overflow-y: scroll;
+  @include border-style;
+  border-radius: 5px 0 0 5px;
+  a:hover {
+    background-color: var(--mdc-theme-on-surface);
+  }
+}
+
+.langs-dropdown-content.show {
+  display: block;
+  right: -1rem;
+}
+
+.langs-dropdown-content a {
+  display: block;
+  font-variant: petite-caps;
+  white-space: break-spaces;
+  margin: 0.1rem 0 0.1rem 0;
+}
+
+.menu-lang-btn::before {
+  border-radius: 25% 25% 25% 50% !important;
+}
+
+@media (max-width: 680px) {
+  .lang-link {
+    height: 3rem;
+  }
+}
+
+.lang-link .flag-icon,
+.lang-link .flag {
+  position: absolute;
+  /* for svg */
+  /* left: 0.75rem; */
+  /* margin-top: 0.5rem; */
+  left: 1rem;
+  margin-top: 0.5rem;
+}
+
+#site-nav .langs-dropdown-menu {
+  left: 1.5rem;
+  position: relative;
+  top: 1rem;
+}
+
+#site-nav .langs-dropdown-menu .lang-list {
+  font-size: 1rem;
+  line-height: 2rem;
+  overflow-x: hidden;
+  height: 20rem;
+  position: absolute;
+  overflow-y: scroll;
+  right: 1rem;
+  scrollbar-width: thin;
+  border: solid;
+  border-radius: 25%;
+  border-width: 0 0 0 0.25rem;
+  transition: height;
+  padding-left: 3rem;
+}
+
+#site-nav .langs-dropdown-menu .lang-link:hover {
+  color: var(--foreground-color);
+}
+
+.lang-list {
+  background-color: var(--background-color);
+}
+
+// small menu styling
+.menu-list {
+  .langs-dropdown-content {
+    left: -100vw;
+    &.show {
+      left: 0;
+    }
+  }
+}

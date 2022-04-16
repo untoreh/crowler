@@ -107,7 +107,7 @@ proc pubPageFromTemplate(tpl: string, title: string, vars: seq[(string, string)]
     txt = multiReplace(txt, vars)
     let slug = slugify(title)
     let p = buildPage(title = title, content = txt)
-    processHtml(SITE_PATH, slug, p)
+    processHtml("", slug, p)
 
 proc pubInfoPages() =
     ## Build DMCA, TOS, and GPDR pages
@@ -128,17 +128,21 @@ proc curPageNumber(topic: string): int =
     return ut.get_top_page(topic).to(int)
     # return getSubdirNumber(topic, curdir)
 
-proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, with_arts = false) =
+proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, ishome = false,
+        with_arts = false) =
     ## Writes a single page (fetching its related articles, if its not a template) to storage
     let
         arts = getDoneArticles(topic, pagenum = pagenum.parseInt)
         content = buildShortPosts(arts)
         # if the page is not finalized, it is the homepage
-        footer = pageFooter(topic, pagenum, not finalize)
-        page = buildPage(content = content, pagefooter = footer)
+        footer = pageFooter(topic, pagenum, ishome)
+        page = buildPage(title = "",
+                         content = content,
+                         slug = pagenum,
+                         pagefooter = footer,
+                         topic = topic)
 
     info "Updating page:{pagenum} for topic:{topic} with entries:{pagecount}"
-    let topic_path = SITE_PATH / topic
     processHTML(topic,
                 pagenum / "index",
                 page)
@@ -147,7 +151,7 @@ proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, w
         discard ut.update_page_size(topic, pagenum.parseInt, pagecount, final = true)
     if with_arts:
         for a in arts:
-            processHtml(topic_path / pagenum, a.slug, buildPost(a), a)
+            processHtml(topic / pagenum, a.slug, buildPost(a), a)
 
 proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
     ## Always update both the homepage and the previous page
@@ -254,7 +258,7 @@ proc publish(topic: string) =
     finalizePages(topic, pagenum, newpage, pagecount)
     # update feed file
     when cfg.RSS:
-        updateFeed(topic, doneArts, dowrite=true)
+        updateFeed(topic, doneArts, dowrite = true)
     # update ydx turbo items
     # when cfg.YDX:
     #     writeFeed()
@@ -284,7 +288,7 @@ proc pubAllPages(topic: string, clear = true) =
             ensureDir(topic_path / $n)
     block:
         let pagecount = pageSize(topic, topdir)
-        pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true)
+        pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true, ishome = true)
     for n in 0..<topdir:
         let pagenum = n
         var pagecount = pageSize(topic, n)
@@ -309,8 +313,10 @@ when isMainModule:
     # assert not pyisnone(arts)
     # pubAllPages(topic, clear = true)
     let
-        (topdir, _) = topic.getState()
+        # (topdir, _) = topic.getState()
+        topdir = 0
         pagecount = pageSize(topic, topdir)
+
     pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true)
     # pubPageFromTemplate("dmca.html", "DMCA")
 

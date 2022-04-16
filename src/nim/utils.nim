@@ -14,6 +14,7 @@ import os,
        locks,
        uri,
        weave,
+       weave/[runtime, contexts],
        karax / vdom,
        std/importutils
 
@@ -28,9 +29,13 @@ type kstring = string
 var loggingLock: Lock
 initLock(loggingLock)
 
+proc isWeaveOff*(): bool {.inline.} = globalCtx.numWorkers == 0 or workerContext.signaledTerminate
+
 template logstring(code: untyped): untyped =
-    # fmt"{getThreadId(Weave)} - " & fmt code
-    fmt code
+    if isWeaveOff():
+        fmt code
+    else:
+        fmt"{getThreadId(Weave)} - " & fmt code
 
 macro debug*(code: untyped): untyped =
     if not defined(release) and logLevelMacro != lvlNone:
@@ -281,6 +286,15 @@ iterator flatorder*(tree: var XmlNode): XmlNode {.closure.} =
                 yield e
         yield el
 
+proc initStyle*(path: string): VNode =
+    result = newVNode(VNodeKind.style)
+    result.add newVNode(VNodeKind.text)
+    result[0].text = readFile(path)
+
+proc initStyleStr*(s: sink string): VNode =
+    result = newVNode(VNodeKind.style)
+    result.add newVNode(VNodeKind.text)
+    result[0].text = s
 
 proc getText*(el: XmlNode): string =
     case el.kind:
@@ -495,8 +509,3 @@ proc splitSentences*(text: string): seq[string] =
 
         sents.split(sentsRgx54)
 
-
-when isMainModule:
-    let node = buildHtml(html):
-        text "ciao!!!"
-    echo key("ciaosidoaksdks")

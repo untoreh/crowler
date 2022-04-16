@@ -163,6 +163,8 @@ proc fetchHtml(file: string): XmlNode =
         htmlcache[file] = loadHtml(file)
     return htmlcache[file]
 
+import py
+let pyGil = initGilLock()
 proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true): auto =
     translateEnv(dom)
     for node in otree.preorder():
@@ -188,11 +190,12 @@ proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true)
                     if el.hasAttr("href"):
                         rewriteUrl(el, rewrite_path, hostname)
                 elif t == VNodeKind.verbatim:
+                    debug "dom: translating verbatim"
                     translateNode(el, xq)
                 elif ((el.hasAttr("alt")) and el.isTranslatable("alt")) or
                         ((el.hasAttr("title")) and el.isTranslatable("title")):
                     translate(q, el, srv)
-    debug "html: finishing translations"
+    debug "dom: finishing translations"
     translate(q, srv, finish = finish)
     (q, otree)
 
@@ -256,7 +259,7 @@ proc translateFile(file, rx, langpairs: auto, target_path = "") =
     saveToDB(force = true)
 
 
-proc translateTree*(tree: vdom.VNode, file, rx, langpairs: auto, targetPath = "") =
+proc translateTree*(tree: vdom.VNode, file, rx, langpairs: auto, targetPath = "", ar=emptyArt) =
     ## Translate a `VNode` tree to multiple languages
 
     let (filepath, urlpath) = splitUrlPath(rx, file)
@@ -293,7 +296,6 @@ proc fileWise(path, exclusions, rx_file, langpairs: auto, target_path = "") =
 proc initThread() =
     initPunctRgx()
     initTrans()
-    initTFuncCache()
     if vbtmcache.isnil:
         vbtmcache = newLRUCache[array[5, byte], XmlNode](32)
     initSentsRgx()
@@ -304,7 +306,6 @@ proc initThread() =
 proc exitThread() =
     saveToDB(force = true)
 
-proc isWeaveOff(): bool {.inline.} = globalCtx.numWorkers == 0 or workerContext.signaledTerminate
 
 template withWeave*(doexit=false, args: untyped): untyped =
     # os.putenv("WEAVE_NUM_THREADS", "2")

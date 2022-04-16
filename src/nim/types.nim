@@ -59,6 +59,7 @@ let
     PyStrClass = builtins.str.getattr("__class__")
     PyZArray = za.getAttr("Array")
     PyNone* = builtins.None
+    emptyArt* = Article()
 
 proc pytype*(py: PyObject): string =
     builtins.type(py).getattr("__name__").to(string)

@@ -36,7 +36,7 @@ const
     USE_PROXIES* = true
     PROXY_EP* = "socks5://localhost:8877"
     PROJECT_PATH* = joinPath(cfg_path, "..", "..")
-    WEBSITE_DOMAIN* = "localhost"
+    WEBSITE_DOMAIN* = "wsl:8080"
     WEBSITE_URL* = parseUri("http://" & WEBSITE_DOMAIN)
     WEBSITE_TITLE* = "wsl"
     WEBSITE_DEBUG_PORT* = "8080"
@@ -47,7 +47,8 @@ const
     WEBSITE_WEIBO* = "wslweibo"
     WEBSITE_REDDIT* = "wslreddit"
     WEBSITE_SOCIAL* = [WEBSITE_TWITTER, WEBSITE_FACEBOOK, WEBSITE_PINTEREST, WEBSITE_WEIBO, WEBSITE_REDDIT]
-    SITE_PATH* = joinPath(PROJECT_PATH, "site")
+    SITE_PATH* = PROJECT_PATH / "site"
+    SITE_ASSETS_DIR* = "assets"
     DATA_PATH* = PROJECT_PATH / "data"
     ASSETS_PATH* = PROJECT_PATH / "src" / "assets"
     LOGO_DIR = ASSETS_PATH / "logo"
@@ -71,6 +72,7 @@ const
     TRANSLATION_ENABLED* = true
     TRANSLATION_TIMEOUT* = 0.25
     TRANSLATION_FLAGS_PATH* = ASSETS_PATH / "flags-sprite.css"
+    TRANSLATION_FLAGS_REL* = "/" / SITE_ASSETS_DIR / "flags-sprite.css"
     ZSTD_COMPRESSION_LEVEL* = 2
     TRANSLATION_TO_FILE* = true
     AMP* = true
@@ -78,3 +80,4 @@ const
     MINIFY* = true
     RSS* = true
     RSS_N_ITEMS* = 10
+

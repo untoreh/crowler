@@ -1,21 +1,28 @@
 // drawer alignment with top app bar
+html {
+  overflow-x: hidden;
+}
 @media (max-width: 599px) {
   .menu-list {
-    top: 2.4rem;
+    top: 3.5rem;
   }
 }
 @media (min-width: 600px) {
   .menu-list {
-    top: 2.9rem;
+    top: 4rem;
   }
 }
 
-@media (max-width: 460px) {
-  #app-bar {
-    & .search-field,
-    .search-btn {
-      display: none;
-    }
+@media (max-width: 360px) {
+  .right.app-bar-logo {
+    display: none;
+  }
+}
+
+@media (min-width: 361px) and (max-width: 460px) {
+  .search-bar .search-field {
+    display: flex;
+    flex-direction: row-reverse;
   }
   .app-bar-logo.right {
     display: initial;
@@ -86,6 +93,6 @@
   .menu-list {
     position: fixed;
     // user important to override js toggling
-    left: -100vh!important;
+    left: -100vh !important;
   }
 }

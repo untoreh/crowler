@@ -120,3 +120,9 @@ proc buildShortPosts*(arts: seq[Article], homepage=false): string =
                     text "[continue]"
             hr()
         result.add(p)
+
+proc buildHomePage*(lang: string, amp: bool): auto {.gcsafe.} =
+    let a = Article()
+    a.content = "this is homepage"
+    let p = buildPage("Home Page", buildFooter())
+    (p, $p)

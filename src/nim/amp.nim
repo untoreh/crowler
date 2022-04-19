@@ -271,9 +271,10 @@ proc ampDir(target: string) {.error: "not implemented".} =
     if not dirExists(target):
         raise newException(OSError, fmt"Supplied target directory {target} does not exists.")
 
-let ampLinkEl = newVNode(VNodeKind.link)
+var ampLinkEl {.threadvar.}: VNode
+ampLinkEl = newVNode(VNodeKind.link)
 ampLinkEl.setAttr("rel", "amphtml")
-proc ampLink*(path: string): VNode =
+proc ampLink*(path: string): VNode {.gcsafe.} =
     ampLinkEl.setAttr("href", pathLink(path, amp=true, rel=false))
     deepCopy(ampLinkEl)
 

@@ -147,7 +147,8 @@ const
         ("Thai", "th"),
         ("Filipino", "tl")
         ]
-    TLangsTable = TLangs.toLangTable()
+    TLangsTable* = TLangs.toLangTable()
+    TLangsCodes* = static(collect(for (name, code) in TLangs: code))
     RTL_LANGS* = ["yi", "he", "ar", "fa", "ur", "az", "dv", ].toHashSet
 
 

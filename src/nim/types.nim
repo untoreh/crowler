@@ -1,7 +1,8 @@
 import
     times, nimpy, os, strutils, strformat,
     nimpy / py_lib,
-    std / osproc
+    std / osproc,
+    sets, locks, sequtils
 
 
 proc setPyLib() =
@@ -59,7 +60,10 @@ let
     PyStrClass = builtins.str.getattr("__class__")
     PyZArray = za.getAttr("Array")
     PyNone* = builtins.None
-    emptyArt* = Article()
+    pySlice = builtins.slice
+
+var emptyArt* {.threadvar.}: Article
+emptyArt = static(Article())
 
 proc pytype*(py: PyObject): string =
     builtins.type(py).getattr("__name__").to(string)
@@ -193,21 +197,23 @@ proc initArticle*(data: PyObject, pagenum: int): Article =
     a.py = data
     a
 
-import locks,
-       tables
+import tables
 
 export tables,
        locks
 
-type LockTable[K, V] = ref object
-    lock: Lock
-    storage: ref Table[K, V]
+type
+    LockTableObj[K, V] = object
+        lock: Lock
+        storage {.guard: lock.}: ref Table[K, V]
+    LockTable*[K, V] = ptr LockTableObj[K, V]
 
-proc newLockTable*[K; V](): LockTable[K, V] =
-    new(result)
+proc initLockTable*[K; V](): LockTable[K, V] =
+    result = create(LockTableObj[K, V])
     initLock(result.lock)
     var tbl = new(Table[K, V])
-    result.storage = tbl
+    withLock(result.lock):
+        result.storage = tbl
 
 iterator items*(tbl: LockTable): auto =
     withLock(tbl.lock):
@@ -220,8 +226,106 @@ proc `[]=`*(tbl: LockTable, k, v: auto) =
 
 proc `[]`*(tbl: LockTable, k: auto): auto =
     withLock(tbl.lock):
-        tbl.storage[k]
+        return tbl.storage[k]
+
+proc contains*[T](tbl: LockTable, k: T) =
+    withLock(tbl.lock):
+        return k in tbl.storage
 
 proc clear*(tbl: LockTable) =
-    clear(tbl.storage)
+    withLock(tbl.lock):
+        clear(tbl.storage)
 
+# PySequence
+import quirks
+type PySequence*[T] = ref object
+    py: PyObject
+    getitem: PyObject
+    setitem: PyObject
+
+proc initPySequence*[T](o: PyObject): PySequence[T] =
+    new(result)
+    result.py = o
+    result.getitem = o.getAttr("__getitem__")
+    result.setitem = o.getAttr("__setitem__")
+
+proc `[]`*[S, K](s: PySequence[S], k: K): PyObject =
+    s.getitem(k)
+
+proc `slice`*[S](s: PySequence[S], start: int, stop: int, step = 1): PyObject =
+    s.getitem(pySlice(start, stop, step))
+
+proc `[]=`*[S, K, V](s: PySequence[S], k: K, v: S) =
+    s.setitem(k, v)
+
+proc `$`*(s: PySequence): string = $s.py
+
+{.experimental: "dotOperators".}
+
+import macros
+macro `.()`*(o: PySequence, field: untyped, args: varargs[untyped]): untyped =
+    quote do:
+        `o`.py.`field`(`args`)
+
+macro `.`*(o: PySequence, field: untyped): untyped =
+    quote do:
+        `o`.py.`field`
+
+macro `.=`*(o: PySequence, field: untyped, value: untyped): untyped =
+    quote do:
+        `o`.py.`field` = `value`
+
+# Shared hashset
+type SharedHashSet*[T] = ref object
+    data: HashSet[T]
+    lock: Lock
+
+proc init*[T](s: SharedHashSet[T]) =
+    s.data = initHashSet[T]()
+    initLock(s.lock)
+
+proc contains*[T](d: SharedHashSet[T], v: T): bool =
+    withLock(d.lock):
+        result = v in d.data
+proc incl*[T](d: SharedHashSet[T], v: T) =
+    withLock(d.lock):
+        d.data.incl(v)
+proc excl*[T](d: SharedHashSet[T], v: T) =
+    withLock(d.lock):
+        d.data.excl(v)
+
+# PathLocker
+type PathLock* = LockTable[string, Lock]
+var locksBuffer* {.threadvar.}: seq[Lock]
+locksBuffer.setLen(100)
+
+proc initPathLock*(): PathLock = initLockTable[string, Lock]()
+
+proc get*(b: var seq[Lock]): Lock =
+    try:
+        return b.pop()
+    except:
+        b.setLen(100)
+        return b.pop()
+
+proc contains*(pl: PathLock, k: string): bool = k in pl
+
+proc waitOrAcquire*(pl: PathLock, k: string): bool =
+    var taken: bool
+    var l: Lock
+    try:
+        l = pl[k]
+        l.acquire
+        l.release
+        result = true
+    except KeyError:
+        pl[k] = locksBuffer.get
+        l = pl[k]
+        l.acquire
+        result = false
+
+proc release*(pl: PathLock, k: string) =
+    try:
+        var l = pl[k]
+        l.release()
+    except KeyError: discard

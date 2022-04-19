@@ -369,9 +369,10 @@ proc replaceTilNoChange(input: var auto, pattern, repl: auto): string =
         input = input.replace(pattern, repl)
     input
 
-proc sre*(pattern: static string): Regex =
+proc sre*(pattern: static string): Regex {.gcsafe.} =
     ## Static regex expression
-    let rx {.global.} = re(pattern)
+    var rx {.threadvar.}: Regex
+    rx = re(pattern)
     return rx
 
 pragmaVars(Regex, threadvar, sentsRgx1, sentsRgx2, sentsRgx3, sentsRgx4, sentsRgx5, sentsRgx6,
@@ -508,4 +509,3 @@ proc splitSentences*(text: string): seq[string] =
         sents = replace(sents, sentsRgx53, "$1 ")
 
         sents.split(sentsRgx54)
-

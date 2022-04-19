@@ -38,8 +38,10 @@ const LOGO_DARK_SMALL_HTML = readFile(LOGO_DARK_SMALL_PATH)
 const LOGO_DARK_ICON_HTML = readFile(LOGO_DARK_ICON_PATH)
 const ROOT = initUri() / "/"
 const preline = [(white_space, "pre-line")]
-let preline_style = style(preline)
-let rtime = $now()
+var preline_style {.threadvar.}: VStyle
+preline_style = style(preline)
+var rtime {.threadvar.}: string
+rtime = $now()
 
 template kxi*(): int = 0
 template addEventHandler*(n: VNode; k: EventKind; action: string; kxi: int) =
@@ -100,7 +102,7 @@ template ldjWebpage(): VNode {.dirty.} =
         })
     ).asVNode
 
-proc buildHead*(path: string; description = ""; topic = ""; ar = emptyArt ): VNode =
+proc buildHead*(path: string; description = ""; topic = ""; ar = emptyArt ): VNode {.gcsafe.} =
     let canon = $(WEBSITE_URL / path)
     buildHtml(head):
         meta(charset = "UTF-8")
@@ -127,7 +129,7 @@ proc buildHead*(path: string; description = ""; topic = ""; ar = emptyArt ): VNo
         link(rel = "icon", href = FAVICON_PNG, type = "image/x-icon")
         link(rel = "icon", href = FAVICON_SVG, type = "image/svg+xml")
 
-proc buildLang(path: string, title=""): VNode =
+proc buildLang(path: string, title=""): VNode {.gcsafe.} =
     buildHtml(tdiv(class = "menu-lang-btn", title = "Change website's language")):
         if title != "":
             span:
@@ -186,7 +188,7 @@ proc buildSearch(withButton = true): VNode =
             buildButton("search", "search-btn", aria_label = "Search",
                     title = "Search across the website.")
 
-proc buildMenuSmall*(crumbs: string; topic_uri: Uri, path: string): VNode =
+proc buildMenuSmall*(crumbs: string; topic_uri: Uri, path: string): VNode {.gcsafe.} =
     let relpath = $(topic_uri / path)
     buildHtml():
         section(class = "menu-list mdc-top-app-bar--fixed-adjust"):
@@ -239,7 +241,7 @@ proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): VNode =
 template buildMenu*(crumbs: string; topic_uri: Uri; a: Article): untyped =
     buildMenu(crumbs, topic_uri, a.getArticlePath)
 
-proc buildFooter(): VNode =
+proc buildFooter*(): VNode =
     buildHtml(tdiv(class = "site-footer container max border medium no-padding")):
         footer(class = "padding absolute blue white-text primary left bottom"):
             tdiv(class = "footer-links"):
@@ -323,12 +325,15 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
 
 const pageContent* = postContent
 
+proc asHtml*(data: auto): string {.inline.} = fmt"<!doctype html>{'\n'}{data}"
+
 proc writeHtml*(data: auto; path: string) {.inline.} =
     debug "writing html file to {path}"
     let dir = path.parentDir
     if not dir.existsDir:
         createDir(dir)
-    writeFile(path, fmt"<!doctype html>{'\n'}{data}")
+    writeFile(path, data.asHtml)
+
 
 proc processHtml*(relpath: string; slug: string; data: VNode; ar = emptyArt) =
     # outputs (slug, data)
@@ -378,7 +383,7 @@ proc buildPost*(a: Article): VNode =
         buildBody(a)
 
 proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode = nil; topic = "";
-        desc: string = ""): VNode =
+        desc: string = ""): VNode {.gcsafe.} =
     let
         crumbs = if topic != "": fmt"/ {topic} >"
                  else: "/ "

@@ -32,6 +32,8 @@ import cfg,
        translate_tr,
        translate_tforms
 
+export translate_types
+
 static: echo "loading translate..."
 
 export sugar, translate_types, translate_srv, sets, nre
@@ -41,7 +43,15 @@ const included_dirs = to_hashset[string]([])
 
 let htmlcache = newLRUCache[string, XmlNode](32)
 var vbtmcache {.threadvar.}: LruCache[array[5, byte], XmlNode]
-let trOut* = newLockTable[string, VNode]()
+var rxcache {.threadvar.}: LruCache[string, Regex]
+let trOut* = initLockTable[string, VNode]()
+
+proc getDirRx*(dir: string): Regex =
+    try:
+        rxcache[dir]
+    except KeyError:
+        rxcache[dir] = re fmt"(.*{dir}/)(.*$)"
+        return rxcache[dir]
 
 proc link_src_to_dir(dir: string) =
     let link_path = dir / SLang.code
@@ -163,8 +173,6 @@ proc fetchHtml(file: string): XmlNode =
         htmlcache[file] = loadHtml(file)
     return htmlcache[file]
 
-import py
-let pyGil = initGilLock()
 proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true): auto =
     translateEnv(dom)
     for node in otree.preorder():
@@ -208,10 +216,10 @@ template tryTranslateFunc(kind: FcKind, args: untyped, post: untyped) {.dirty.} 
             post
         else:
             var ot: vdom.VNode
+            trOut.clear()
             (q, ot) = translateDom(args)
             # FIXME
-            {.cast(gcsafe).}:
-                trOut[fc.pair.trg] = ot
+            trOut[fc.pair.trg] = ot
             post
     debug "trytrans: returning from translations"
 
@@ -259,7 +267,8 @@ proc translateFile(file, rx, langpairs: auto, target_path = "") =
     saveToDB(force = true)
 
 
-proc translateTree*(tree: vdom.VNode, file, rx, langpairs: auto, targetPath = "", ar=emptyArt) =
+proc translateTree*(tree: vdom.VNode, file, rx, langpairs: auto, targetPath = "",
+        ar = emptyArt) {.gcsafe.} =
     ## Translate a `VNode` tree to multiple languages
 
     let (filepath, urlpath) = splitUrlPath(rx, file)
@@ -269,9 +278,6 @@ proc translateTree*(tree: vdom.VNode, file, rx, langpairs: auto, targetPath = ""
 
     let getTargetPath = if targetPath == "": (pair: langPair) => file_path / pair.trg / url_path
                         else: (pair: langPair) => target_path / pair.trg / url_path
-
-    # empty output translations before a new pass
-    trOut.clear()
 
     for pair in langpairs:
         let t_path = getTargetPath(pair)
@@ -285,7 +291,13 @@ proc translateTree*(tree: vdom.VNode, file, rx, langpairs: auto, targetPath = ""
     syncRoot(Weave)
     saveToDB(force = true)
 
-
+proc translateLang(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath = "",
+        ar = emptyArt): VNode {.gcsafe.} =
+    let
+        (filepath, urlpath) = splitUrlPath(rx, file)
+        t_path = if targetPath == "": file_path / lang.trg / url_path
+    var fc = initFileContext(tree, file_path, url_path, lang, t_path)
+    translateDom(fc)[1]
 
 proc fileWise(path, exclusions, rx_file, langpairs: auto, target_path = "") =
     for file in filterFiles(path, excl_dirs = exclusions, top_dirs = included_dirs):
@@ -293,7 +305,7 @@ proc fileWise(path, exclusions, rx_file, langpairs: auto, target_path = "") =
         translateFile(file, rx_file, langpairs, target_path = target_path)
         info "file: translation successful for path: {file}"
 
-proc initThread() =
+proc initThread*() =
     initPunctRgx()
     initTrans()
     if vbtmcache.isnil:
@@ -307,7 +319,7 @@ proc exitThread() =
     saveToDB(force = true)
 
 
-template withWeave*(doexit=false, args: untyped): untyped =
+template withWeave*(doexit = false, args: untyped) =
     # os.putenv("WEAVE_NUM_THREADS", "2")
     if isWeaveOff():
         init(Weave, initThread)
@@ -317,15 +329,15 @@ template withWeave*(doexit=false, args: untyped): untyped =
         exit(Weave, exitThread)
         exitThread()
 
-template setupTranslation*(service_kind = deep_translator) {.dirty.} =
+template setupTranslation*(service_kind = deep_translator, fpath = "") {.dirty.} =
     let
-        dir = normalizedPath(path)
+        dir = normalizedPath(if fpath == "": fpath else: path)
         langpairs = collect(for lang in TLangs: (src: SLang.code, trg: lang.code)).static
-        rx_file = re fmt"(.*{dir}/)(.*$)"
+        rx_file = getDirRx(dir)
 
 proc translateDir(path: string, service_kind = deep_translator, tries = 1, target_path = "") =
     assert path.dirExists
-    withWeave(doexit=true):
+    withWeave(doexit = true):
         setupTranslation(service_kind)
         debug "rgx: Regexp is '(.*{dir}/)(.*$)'."
         link_src_to_dir(dir)

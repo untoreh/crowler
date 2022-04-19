@@ -61,10 +61,11 @@ template withSchema(json: JsonNode): JsonNode =
     json["@context"] = %"https://schema.org/"
     json
 
-let ldjElement = newVNode(VNodeKind.script)
+var ldjElement {.threadvar.}: VNode
+ldjElement = newVNode(VNodeKind.script)
 ldjElement.setAttr("type", "application/ld+json")
 
-proc asVNode*[T](data: T, wrap = true, id = "", class = ""): VNode =
+proc asVNode*[T](data: T, wrap = true, id = "", class = ""): VNode {.gcsafe.} =
     case wrap:
         of true:
             if id != "":

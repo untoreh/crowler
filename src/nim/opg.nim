@@ -20,13 +20,14 @@ type Opg* = enum
     article, website, book, profile, video, music
 
 let prefixCache = initTable[static seq[Opg], static string]()
-var opgTags = newSeq[XmlNode]()
+var opgTags {.threadvar.}: seq[XmlNode]
+opgTags = newSeq[XmlNode]()
 
 proc asPrefix(opgKind: Opg): string =
     fmt" {opgKind}: http://ogp.me/ns/{opgKind}#"
 
-proc opgPrefix*(opgKinds: static seq[Opg]): string =
-    var res {.global.}: string
+proc opgPrefix*(opgKinds: static seq[Opg]): string {.gcsafe.} =
+    var res {.threadvar.}: string
     for kind in opgKinds:
         res.add kind.asPrefix
 
@@ -56,10 +57,10 @@ proc opgOptional(description, siteName, locale, audio, video, determiner: string
     if video.isSomething: addMetaTag("video", video)
     if determiner.isSomething: addMetaTag("determiner", determiner)
 
-proc opgTagsToString(): string = collect(for t in opgTags: $t).join
+proc opgTagsToString(): string {.gcsafe.} = collect(for t in opgTags: $t).join
 
 proc fillOpgTags(title, tp, url, image: string, description = "", siteName = "", locale = "", audio = "",
-        video = "", determiner = ""): auto =
+        video = "", determiner = ""): auto {.gcsafe.} =
     ## Generates an HTML String containing opengraph meta tags for one item.
     opgBasic(title, tp, url, image)
     opgOptional(description, siteName, locale, audio, video, determiner)
@@ -108,7 +109,7 @@ proc opgPage*(a: Article): VNode =
     twitterMeta("creator", WEBSITE_TWITTER)
     fillOpgTags(a.title, tp, url, a.imageUrl, a.desc, siteName, locale)
 
-proc opgPage*(title: string, description: string, path: string): VNode =
+proc opgPage*(title: string, description: string, path: string): VNode {.gcsafe.} =
     let locale = static(DEFAULT_LOCALE)
     let
         title = title

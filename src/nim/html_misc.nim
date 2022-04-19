@@ -19,7 +19,7 @@ proc getAuthor*(a: Article): string {.inline.} =
 
 const baseUri = initUri()
 
-proc pathLink*(path: string, code = "", rel = true, amp = false): string =
+proc pathLink*(path: string, code = "", rel = true, amp = false): string {.gcsafe.} =
     let (dir, name, _) = path.splitFile
     $((case rel:
           of true: baseUri

@@ -18,10 +18,10 @@ import
     html_misc,
     ldj
 
-var langTmpUri: Uri
+var langTmpUri {.threadvar.}: Uri
 langTmpUri.opaque = false
 
-proc langUrl(code, url: string, prefix = "/"): string =
+proc langUrl(code, url: string, prefix = "/"): string {.gcsafe.} =
     parseUri(url, langTmpUri)
     langTmpUri.path = prefix & code & langTmpUri.path
     $langTmpUri
@@ -34,17 +34,18 @@ proc makeLangLink(code, url: string): VNode =
         setAttr("hreflang", code)
         setAttr("href", href)
 
-let langLinks = collect:
+var langLinks {.threadvar.}: seq[VNode]
+langLinks = collect:
     for lang in TLangs:
         makeLangLink(lang.code, "/")
 
-proc setLangLinks*(url: string) =
+proc setLangLinks*(url: string) {.gcsafe.} =
     for link in langLinks:
         let code = link.getAttr("hreflang")
         # TODO: this can be optimized
         link.setAttr("href", langUrl(code, url))
 
-proc langLinksNodes*(path: string, rel: static bool = false): seq[VNode] =
+proc langLinksNodes*(path: string, rel: static bool = false): seq[VNode] {.gcsafe.} =
     let srcUrl = if rel: path
                  else: $(WEBSITE_URL / path)
     setLangLinks(srcUrl)
@@ -87,14 +88,15 @@ const countryLangs = {
 proc langToCountry(lang: string): string {.inline.} = countryLangs.getOrDefault(lang, lang)
 
 const langCssClasses = "flag flag-"
-proc langsList*(path: string): VNode =
-    buildHtml(ul(class = "lang-list")):
-        for (name, code) in sortedLanguages[0]:
-            let pathCode = if code == sortedLanguages[1]: ""
-                           else: code
-            a(class = "lang-link lang-"&code, href = pathLink(path, pathcode)):
-                span(class = langCssClasses&langToCountry(code))
-                text name
+proc langsList*(path: string): VNode {.gcsafe.} =
+    {.cast(gcsafe).}:
+        buildHtml(ul(class = "lang-list")):
+            for (name, code) in sortedLanguages[0]:
+                let pathCode = if code == sortedLanguages[1]: ""
+                            else: code
+                a(class = "lang-link lang-"&code, href = pathLink(path, pathcode)):
+                    span(class = langCssClasses & langToCountry(code))
+                    text name
 
 proc ldjTrans*(relpath, srcurl, trgurl: string, lang: langPair, a: Article): VNode =
     ldj.translation(srcurl, trgurl, lang.srcLangName,

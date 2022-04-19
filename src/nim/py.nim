@@ -34,3 +34,5 @@ proc initGilLock*(): ptr GilLock =
 
 proc acquire*(g: ptr GilLock) = g.s = Py_GILState_Ensure()
 proc release*(g: ptr GilLock) = Py_GILState_Release(g.s)
+
+

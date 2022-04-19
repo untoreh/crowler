@@ -60,11 +60,12 @@ proc initFeed(path: string, title: string, description: string, arts: seq[Articl
 
 proc writeFeed*(path: string, fd: XmlNode = feed) = writeFile(path / "feed.xml", $fd)
 
-let feedLinkEl = newVNode(VNodeKind.link)
+var feedLinkEl {.threadvar.}: VNode
+feedLinkEl = newVNode(VNodeKind.link)
 feedLinkEl.setAttr("rel", "alternate")
 feedLinkEl.setAttr("type", "application/rss+xml")
 
-proc feedLink*(title, path: string): VNode =
+proc feedLink*(title, path: string): VNode {.gcsafe.} =
     feedLinkEl.setAttr("title", title)
     feedLinkEl.setAttr("href", $(WEBSITE_URL / path))
     deepCopy(feedLinkEl)

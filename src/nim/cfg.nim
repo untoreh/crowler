@@ -27,7 +27,8 @@ proc logLevelFromEnv(): auto =
 
 let logLevel = logLevelFromEnv()
 const logLevelMacro* = logLevelFromEnv()
-setLogFilter(logLevel)
+proc initLogging*() = setLogFilter(logLevel)
+initLogging()
 static: echo "cfg: debug level set to: " & $logLevelMacro
 
 export logging
@@ -36,10 +37,10 @@ const
     USE_PROXIES* = true
     PROXY_EP* = "socks5://localhost:8877"
     PROJECT_PATH* = joinPath(cfg_path, "..", "..")
-    WEBSITE_DOMAIN* = "wsl:8080"
-    WEBSITE_URL* = parseUri("http://" & WEBSITE_DOMAIN)
+    WEBSITE_DEBUG_PORT* = ":5050"
+    WEBSITE_DOMAIN* = "wsl"
+    WEBSITE_URL* = parseUri("http://" & WEBSITE_DOMAIN & WEBSITE_DEBUG_PORT)
     WEBSITE_TITLE* = "wsl"
-    WEBSITE_DEBUG_PORT* = "8080"
     WEBSITE_CONTACT* = "contact@wsl"
     WEBSITE_TWITTER* = "https://twitter.com/wsl"
     WEBSITE_FACEBOOK* = "wslfb"
@@ -48,20 +49,20 @@ const
     WEBSITE_REDDIT* = "wslreddit"
     WEBSITE_SOCIAL* = [WEBSITE_TWITTER, WEBSITE_FACEBOOK, WEBSITE_PINTEREST, WEBSITE_WEIBO, WEBSITE_REDDIT]
     SITE_PATH* = PROJECT_PATH / "site"
-    SITE_ASSETS_DIR* = "assets"
+    SITE_ASSETS_DIR* = DirSep & "assets"
     DATA_PATH* = PROJECT_PATH / "data"
     ASSETS_PATH* = PROJECT_PATH / "src" / "assets"
-    LOGO_DIR = ASSETS_PATH / "logo"
-    CSS_REL_URL * = "/bundle.css"
-    LOGO_PATH* = os.joinPath(LOGO_DIR, "logo.svg")
-    LOGO_URL* = WEBSITE_URL / LOGO_DIR / "logo.png"
-    LOGO_SMALL_PATH* = os.joinPath(LOGO_DIR, "logo-small.svg")
-    LOGO_ICON_PATH* = os.joinPath(LOGO_DIR, "logo-icon.svg")
-    LOGO_DARK_PATH* = os.joinPath(LOGO_DIR, "logo-dark.svg")
-    LOGO_DARK_SMALL_PATH* = os.joinPath(LOGO_DIR, "logo-small-dark.svg")
-    LOGO_DARK_ICON_PATH* = os.joinPath(LOGO_DIR, "logo-icon-dark.svg")
-    FAVICON_PNG* = LOGO_DIR / "logo-icon.png"
-    FAVICON_SVG* = LOGO_DIR / "logo-icon.svg"
+    CSS_REL_URL* = SITE_ASSETS_DIR / "/bundle.css"
+    JS_REL_URL* = SITE_ASSETS_DIR / "/bundle.js"
+    LOGO_DIR* = WEBSITE_URL / SITE_ASSETS_DIR / "logo"
+    LOGO_URL* = $(LOGO_DIR / "logo.svg")
+    LOGO_SMALL_URL* = $(LOGO_DIR / "logo-small.svg")
+    LOGO_ICON_URL* = $(LOGO_DIR / "logo-icon.svg")
+    LOGO_DARK_URL* = $(LOGO_DIR / "logo-dark.svg")
+    LOGO_DARK_SMALL_URL* = $(LOGO_DIR / "logo-small-dark.svg")
+    LOGO_DARK_ICON_URL* = $(LOGO_DIR / "logo-icon-dark.svg")
+    FAVICON_PNG_URL* = $(LOGO_DIR / "logo-icon.png")
+    FAVICON_SVG_URL* = $(LOGO_DIR / "logo-icon.svg")
     MAX_DIR_FILES* = 10
     ARTICLE_EXCERPT_SIZE* = 300 ## Size (in bytes) of the excerpt
     DB_SIZE* = 1024 * 1024 * 1024
@@ -76,7 +77,7 @@ const
     ZSTD_COMPRESSION_LEVEL* = 2
     TRANSLATION_TO_FILE* = true
     AMP* = true
-    YDX* = false ## Don't build yandex turbopages if the site is large
+    YDX* = false                ## Don't build yandex turbopages if the site is large
     MINIFY* = true
     RSS* = true
     RSS_N_ITEMS* = 10

@@ -18,16 +18,26 @@ import
 
 export utils, tables, html_misc
 
-let EMPTY_DATE = dateTime(0, Month(1), 1)
-var ldj_country: string
-var ldj_region: string
-let
-    J = JsonNode()
-    S: seq[string] = @[]
-    ST: seq[(string, string)] = @[]
+type Organization = ref tuple
+    name: string
+    url: string
+    contact: string
+    tel: string
+    email: string
+    sameas: string
+    logo: string
 
-var jsonCache* {.threadvar.}: Table[Hash, string]
-jsonCache = initTable[int, string]()
+threadVars(
+    (EMPTY_DATE, DateTime),
+    (ldj_country, ldj_region, string),
+    (jsonCache, Table[Hash, string]),
+    (J, JsonNode),
+    (S, seq[string]),
+    (ST, seq[(string, string)]),
+    (ldjElement, VNode),
+    (OG, Organization)
+)
+export jsonCache
 
 macro jm*(code: typed): untyped =
     code.expectKind nnkCall
@@ -61,9 +71,6 @@ template withSchema(json: JsonNode): JsonNode =
     json["@context"] = %"https://schema.org/"
     json
 
-var ldjElement {.threadvar.}: VNode
-ldjElement = newVNode(VNodeKind.script)
-ldjElement.setAttr("type", "application/ld+json")
 
 proc asVNode*[T](data: T, wrap = true, id = "", class = ""): VNode {.gcsafe.} =
     case wrap:
@@ -369,14 +376,6 @@ proc license(name = ""): JsonNode =
         else:
             "https://creativecommons.org/publicdomain/zero/1.0/")
 
-type Organization = ref tuple
-    name: string
-    url: string
-    contact: string
-    tel: string
-    email: string
-    sameas: string
-    logo: string
 
 proc initOrganization(): Organization = new(result)
 
@@ -399,7 +398,6 @@ template orgschema*(code: varargs[untyped]): string = jm jorgschema(code)
 proc orgschema*(org: Organization): string =
     jm jorgschema(org.name, org.url, org.contact, org.tel, org.email, org.sameas, org.logo)
 
-var OG = initOrganization()
 
 proc coverage(start_date, end_date = ""): string =
     start_date & "/" & (if end_date.isEmptyOrWhiteSpace: ".." else: end_date)
@@ -659,6 +657,17 @@ proc video(name, url: auto, desc = "", duration = "", embed = "",
             "publication": pubevents
             }
 
+proc initLDJ*() =
+    jsonCache = initTable[int, string]()
+    EMPTY_DATE = dateTime(0, Month(1), 1)
+    J = JsonNode()
+    S = @[]
+    ST= @[]
+    ldjElement = newVNode(VNodeKind.script)
+    ldjElement.setAttr("type", "application/ld+json")
+    OG = initOrganization()
+
+initLDJ()
 # when isMainModule:
 #     let
 #         url = $WEBSITE_URL

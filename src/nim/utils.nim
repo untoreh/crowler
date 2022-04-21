@@ -96,6 +96,7 @@ macro apply*(fun, args: typed): untyped =
       error("unsupported kind: " & $args.kind & ", " & args.repr)
       discard
 
+
 type StringSet = HashSet[string]
 
 converter asStringSet(v: openarray[string]): StringSet = to_hashset[string](v)
@@ -151,6 +152,15 @@ iterator filterFiles*(root: string;
         elif path.fileExtension in exts:
             yield path
             processed.incl(path)
+
+proc findnil*(tree: VNode) =
+    for el in items(tree):
+        if el.isnil:
+            echo "NIL"
+        else:
+            echo el.kind
+            if len(el) > 0:
+                findnil(el)
 
 iterator preorder*(tree: XmlNode): XmlNode =
     ## Iterator, skipping tags in `skip_nodes`
@@ -344,8 +354,18 @@ proc hasAttr*(el: XmlNode, k: string): bool = (not el.attrs.isnil) and el.attrs.
 proc getAttr*(el: XmlNode, k: string): string = el.attrs[k]
 proc setAttr*(el: XmlNode, k: string, v: auto) = el.attrs[k] = v
 
-macro pragmaVars(tp, pragma: untyped, vars: varargs[untyped]): untyped =
-    ## Apply a pragma to multiple variables
+import std/[macros, genasts]
+
+macro threadVars*(args: varargs[untyped]) =
+  result = newStmtList()
+  for i, arg in args:
+    for name in arg[0..^2]:
+      result.add:
+        genast(name, typ = arg[^1]):
+          var name {.threadVar.}: typ
+
+macro pragmaVars*(tp, pragma: untyped, vars: varargs[untyped]): untyped =
+    ## Apply a pragma to multiple variables (push/pop doesn't work in nim 1.6.4)
     let prg = nnkPragma.newTree(pragma)
     let idefs = nnkIdentDefs.newTree()
     for varIdent in vars:

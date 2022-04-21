@@ -30,26 +30,27 @@ import cfg,
 
 static: echo "loading html..."
 
-const LOGO_HTML = readFile(LOGO_PATH)
-const LOGO_SMALL_HTML = readFile(LOGO_SMALL_PATH)
-const LOGO_ICON_HTML = readFile(LOGO_ICON_PATH)
-const LOGO_DARK_HTML = readFile(LOGO_DARK_PATH)
-const LOGO_DARK_SMALL_HTML = readFile(LOGO_DARK_SMALL_PATH)
-const LOGO_DARK_ICON_HTML = readFile(LOGO_DARK_ICON_PATH)
 const ROOT = initUri() / "/"
 const preline = [(white_space, "pre-line")]
-var preline_style {.threadvar.}: VStyle
-preline_style = style(preline)
-var rtime {.threadvar.}: string
-rtime = $now()
+
+threadVars((preline_style, VStyle), (rtime, string), (wsRgx, hypRgx, Regex))
+
+proc initHtml*() =
+    try:
+        preline_style = style(preline)
+        rtime = $now()
+        wsRgx = re"[^\w\s-]"
+        hypRgx = re"[-\s]+"
+    except:
+        echo "Could not initialize html vars"
+
+initHtml()
 
 template kxi*(): int = 0
 template addEventHandler*(n: VNode; k: EventKind; action: string; kxi: int) =
     n.setAttr($k, action)
 
 const stripchars = ["-".runeAt(0), "_".runeAt(0)]
-let wsRgx = re"[^\w\s-]"
-let hypRgx = re"[-\s]+"
 
 proc icon*(name: string; txt = ""; cls = ""): VNode =
     buildHtml(span(class = ("mdc-ripple-surface " & cls))):
@@ -78,7 +79,7 @@ template ldjWebsite(): VNode {.dirty.} =
     ldj.website(url = ($WEBSITE_URL / topic),
                 author = ar.author,
                 year = now().year,
-                image = $LOGO_URL).asVNode
+                image = LOGO_URL).asVNode
 
 template ldjWebpage(): VNode {.dirty.} =
     ldj.webpage(id = canon,
@@ -102,7 +103,7 @@ template ldjWebpage(): VNode {.dirty.} =
         })
     ).asVNode
 
-proc buildHead*(path: string; description = ""; topic = ""; ar = emptyArt ): VNode {.gcsafe.} =
+proc buildHead*(path: string; description = ""; topic = ""; ar = emptyArt): VNode {.gcsafe.} =
     let canon = $(WEBSITE_URL / path)
     buildHtml(head):
         meta(charset = "UTF-8")
@@ -126,18 +127,18 @@ proc buildHead*(path: string; description = ""; topic = ""; ar = emptyArt ): VNo
         title:
             text ar.title
         meta(name = "description", content = description)
-        link(rel = "icon", href = FAVICON_PNG, type = "image/x-icon")
-        link(rel = "icon", href = FAVICON_SVG, type = "image/svg+xml")
+        link(rel = "icon", href = FAVICON_PNG_URL, type = "image/x-icon")
+        link(rel = "icon", href = FAVICON_SVG_URL, type = "image/svg+xml")
 
-proc buildLang(path: string, title=""): VNode {.gcsafe.} =
+proc buildLang(path: string; title = ""): VNode {.gcsafe.} =
     buildHtml(tdiv(class = "menu-lang-btn", title = "Change website's language")):
         if title != "":
             span:
                 text title
         buildButton("translate", "translate", aria_label = "Languages",
                     title = "Change the language of the website."):
-                        tdiv(class = "langs-dropdown-content langs-dropdown-menu"):
-                            langsList(path)
+            tdiv(class = "langs-dropdown-content langs-dropdown-menu"):
+                langsList(path)
 
 proc buildTrending(): VNode =
     block: buildHtml(tdiv()):
@@ -181,14 +182,14 @@ proc buildImgUrl*(url: string; cls = "image-link"): VNode =
 
 
 proc buildSearch(withButton = true): VNode =
-    buildHtml(tdiv(class="search-bar")):
+    buildHtml(tdiv(class = "search-bar")):
         label(class = "search-field"):
             input(class = "search-input", type = "text", placeholder = "Search...")
         if withButton:
             buildButton("search", "search-btn", aria_label = "Search",
                     title = "Search across the website.")
 
-proc buildMenuSmall*(crumbs: string; topic_uri: Uri, path: string): VNode {.gcsafe.} =
+proc buildMenuSmall*(crumbs: string; topic_uri: Uri; path: string): VNode {.gcsafe.} =
     let relpath = $(topic_uri / path)
     buildHtml():
         section(class = "menu-list mdc-top-app-bar--fixed-adjust"):
@@ -199,7 +200,7 @@ proc buildMenuSmall*(crumbs: string; topic_uri: Uri, path: string): VNode {.gcsa
                 buildButton("trending_up", aria_label = "Trending",
                         title = "Recent articles that have been trending up.")
             buildLang(path)
-proc buildMenuSmall*(crumbs: string; topic_uri: Uri, a = emptyArt): VNode =
+proc buildMenuSmall*(crumbs: string; topic_uri: Uri; a = emptyArt): VNode =
     buildMenuSmall(crumbs, topic_uri, a.getArticleUrl)
 
 proc buildLogo(pos: string): VNode =
@@ -208,9 +209,9 @@ proc buildLogo(pos: string): VNode =
                 aria-label = "Website Logo"):
             tdiv(class = "mdc-icon-button__ripple")
             span(class = "logo-dark-wrap"):
-                verbatim(LOGO_DARK_HTML)
+                img(src=LOGO_DARK_URL)
             span(class = "logo-light-wrap"):
-                verbatim(LOGO_HTML)
+                img(src=LOGO_URL)
 
 
 proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): VNode =
@@ -225,7 +226,7 @@ proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): VNode =
                 buildButton("brightness_4", "dk-toggle", aria_label = "toggle dark theme",
                             title = "Switch website color between dark and light theme.")
                 a(class = "page mdc-top-app-bar__title mdc-ripple-surface",
-                  href = pathLink(path.parentDir, rel=false)):
+                  href = pathLink(path.parentDir, rel = false)):
                     text crumbs
             section(class = "mdc-top-app-bar__section mdc-top-app-bar__section--align-end",
                     role = "toolbar"):
@@ -260,7 +261,7 @@ proc buildFooter*(): VNode =
                 text "Except where otherwise noted, this website is licensed under a "
                 a(rel = "license", href = "http://creativecommons.org/licenses/by/3.0/deed.en_US"):
                     text "Creative Commons Attribution 3.0 Unported License."
-            script(src = "/bundle.js", async = "")
+            script(src = JS_REL_URL , async = "")
 
 proc postTitle(a: Article): VNode =
     buildHtml(tdiv(class = "title-wrap")):
@@ -346,7 +347,7 @@ proc processHtml*(relpath: string; slug: string; data: VNode; ar = emptyArt) =
         withWeave(false):
             setupTranslation()
             debug "calling translation with path {fullpath} and rx {rx_file.pattern}"
-            translateTree(data, fullpath, rx_file, langpairs, ar=ar)
+            translateTree(data, fullpath, rx_file, langpairs, ar = ar)
         for (code, n) in trOut:
             o.add (code / pagepath, n)
         trOut.clear()
@@ -403,17 +404,17 @@ proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode 
                     pageFooter
             buildFooter()
 
-proc buildPage*(title: string; content: string; pagefooter: VNode = nil): VNode =
+proc buildPage*(title: string; content: string; pagefooter: VNode = static(VNode())): VNode =
     let slug = slugify(title)
     buildPage(title = title, content, slug, pagefooter)
 
-proc buildPage*(content: string; pagefooter: VNode = nil): VNode =
+proc buildPage*(content: string; pagefooter: VNode = static(VNode())): VNode =
     buildPage(title = "", content, slug = "", pagefooter)
 
-proc ldjData*(el: VNode, filepath, relpath: string, lang: langPair, a: Article) =
+proc ldjData*(el: VNode; filepath, relpath: string; lang: langPair; a: Article) =
     ##
     let
-        srcurl = pathLink(relpath, rel=false)
-        trgurl = pathLink(relpath, code=lang.trg, rel=false)
+        srcurl = pathLink(relpath, rel = false)
+        trgurl = pathLink(relpath, code = lang.trg, rel = false)
 
-    let ldjTr = ldjTrans(relpath, srcurl, trgurl, lang ,a)
+    let ldjTr = ldjTrans(relpath, srcurl, trgurl, lang, a)

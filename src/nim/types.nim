@@ -4,6 +4,15 @@ import
     std / osproc,
     sets, locks, sequtils
 
+# Generics
+proc put*[T, K, V](t: T, k: K, v: V): V = (t[k] = v; v)
+
+template lgetOrPut*[T, K](c: T, k: K, v: untyped): untyped =
+    ## Lazy `mgetOrPut`
+    try:
+        c[k]
+    except KeyError:
+        c.put(k, v)
 
 proc setPyLib() =
     var (pylibpath, success) = execCmdEx("python3 -c 'import find_libpython; print(find_libpython.find_libpython())'")
@@ -23,6 +32,7 @@ proc relpyImport*(relpath: string): PyObject =
     let loader = machinery.SourceFileLoader(name, abspath)
     return loader.load_module(name)
 
+
 type
     TS = enum
         str,
@@ -32,7 +42,7 @@ type
     #     of str: str: string
     #     of time: time: Time
 
-    Article* = ref object
+    Article* = ref object of RootObj
         title*: string
         desc*: string
         content*: string
@@ -63,7 +73,6 @@ let
     pySlice = builtins.slice
 
 var emptyArt* {.threadvar.}: Article
-emptyArt = static(Article())
 
 proc pytype*(py: PyObject): string =
     builtins.type(py).getattr("__name__").to(string)
@@ -166,11 +175,18 @@ proc isa*(py: PyObject, tp: PyObject): bool =
     builtins.isinstance(py, tp).to(bool)
 
 proc pyget*[T](py: PyObject, k: string, def: T = ""): T =
-    let v = py.get(k)
-    if pyisnone(v):
-        return def
-    else:
-        return v.to(T)
+    try:
+        let v = py.get(k)
+        echo 2
+        if pyisnone(v):
+            return def
+        else:
+            return v.to(T)
+    except:
+        if pyisnone(py):
+            return def
+        else:
+            return py.to(T)
 
 type
     topicData* = enum
@@ -185,7 +201,7 @@ proc initArticle*(data: PyObject, pagenum: int): Article =
     a.desc = pyget(data, "desc")
     a.content = pyget(data, "content")
     a.author = pyget(data, "author")
-    a.pubDate = pydate(data.get("pubDate"), getTIme())
+    a.pubDate = pydate(data.pyget("pubDate", PyNone), getTIme())
     a.imageUrl = pyget(data, "imageUrl")
     a.icon = pyget(data, "icon")
     a.url = pyget(data, "url")
@@ -193,9 +209,22 @@ proc initArticle*(data: PyObject, pagenum: int): Article =
     a.lang = pyget(data, "lang")
     a.topic = pyget(data, "topic")
     a.page = pyget(data, "page", pagenum)
+    a.slug = pyget(data, "slug")
     a.tags = pyget(data, "tags", emptyseq)
     a.py = data
     a
+
+proc default*(_: typedesc[Article]): Article = initArticle(PyNone, 0)
+emptyArt = default(Article)
+
+proc initTypes*() =
+    try:
+        emptyArt = default(Article)
+    except:
+        try:
+            echo fmt"types: failed to initialize default article {getCurrentExceptionMsg()}"
+        except:
+            emptyArt = static(Article())
 
 import tables
 
@@ -215,24 +244,24 @@ proc initLockTable*[K; V](): LockTable[K, V] =
     withLock(result.lock):
         result.storage = tbl
 
-iterator items*(tbl: LockTable): auto =
+iterator items*[K, V](tbl: LockTable[K, V]): (K, V) =
     withLock(tbl.lock):
         for (k, v) in tbl.storage.pairs():
             yield (k, v)
 
-proc `[]=`*(tbl: LockTable, k, v: auto) =
+proc `[]=`*[K, V](tbl: LockTable[K, V], k: K, v: V) =
     withLock(tbl.lock):
         tbl.storage[k] = v
 
-proc `[]`*(tbl: LockTable, k: auto): auto =
+proc `[]`*[K, V](tbl: LockTable[K, V], k: K): V =
     withLock(tbl.lock):
         return tbl.storage[k]
 
-proc contains*[T](tbl: LockTable, k: T) =
+proc contains*[K, V](tbl: LockTable[K, V], k: K): bool =
     withLock(tbl.lock):
         return k in tbl.storage
 
-proc clear*(tbl: LockTable) =
+proc clear*[K, V](tbl: LockTable[K, V]) =
     withLock(tbl.lock):
         clear(tbl.storage)
 
@@ -295,37 +324,37 @@ proc excl*[T](d: SharedHashSet[T], v: T) =
         d.data.excl(v)
 
 # PathLocker
-type PathLock* = LockTable[string, Lock]
-var locksBuffer* {.threadvar.}: seq[Lock]
-locksBuffer.setLen(100)
+type PathLock* = LockTable[string, ref Lock]
+var locksBuffer* {.threadvar.}: seq[ref Lock]
 
-proc initPathLock*(): PathLock = initLockTable[string, Lock]()
+proc initPathLock*(): PathLock = initLockTable[string, ref Lock]()
 
-proc get*(b: var seq[Lock]): Lock =
+proc addLocks*() =
+    for _ in 0..<100:
+        locksBuffer.add new(Lock)
+
+proc get*(b: var seq[ref Lock]): ref Lock =
     try:
         return b.pop()
     except:
-        b.setLen(100)
+        addLocks()
         return b.pop()
 
 proc contains*(pl: PathLock, k: string): bool = k in pl
 
-proc waitOrAcquire*(pl: PathLock, k: string): bool =
-    var taken: bool
-    var l: Lock
+proc acquireOrWait*(pl: PathLock, k: string): bool =
     try:
-        l = pl[k]
-        l.acquire
-        l.release
-        result = true
-    except KeyError:
-        pl[k] = locksBuffer.get
-        l = pl[k]
-        l.acquire
+        # waited
+        withLock(pl[k][]):
+            discard
         result = false
+    except KeyError:
+        # acquired
+        pl.put(k, locksBuffer.get)[].acquire()
+        result = true
 
 proc release*(pl: PathLock, k: string) =
     try:
-        var l = pl[k]
-        l.release()
+        pl[k][].release()
     except KeyError: discard
+

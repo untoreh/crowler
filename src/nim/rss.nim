@@ -20,22 +20,37 @@ type Feed = XmlNode
 template `attrs=`(node: XmlNode, code: untyped) =
     node.attrs = code.toXmlAttributes
 
-let feed = newElement("xml")
-feed.attrs = {"version": "1.0", "encoding": "UTF-8"}
-let rss = newElement("rss")
-rss.attrs = {"version": "2.0"}
-feed.add rss
-let chann = newElement("channel")
-rss.add chann
-let channTitle = newElement("title")
-channTitle.add newText("")
-chann.add channTitle
-let channLink = newElement("link")
-channLink.add newText("")
-chann.add channLink
-let channDesc = newElement("description")
-channDesc.add newText("")
-chann.add channDesc
+pragmaVars(XmlNode, threadvar, feed, rss, chann, channTitle, channLink, channDesc)
+
+var feedLinkEl {.threadvar.}: VNode
+
+proc initFeed*() {.gcsafe.} =
+    feed = newElement("xml")
+    feed.attrs = {"version": "1.0", "encoding": "UTF-8"}
+
+    rss = newElement("rss")
+    rss.attrs = {"version": "2.0"}
+    feed.add rss
+
+    chann = newElement("channel")
+    rss.add chann
+
+    channTitle = newElement("title")
+    channTitle.add newText("")
+    chann.add channTitle
+
+    channLink = newElement("link")
+    channLink.add newText("")
+    chann.add channLink
+
+    channDesc = newElement("description")
+    channDesc.add newText("")
+    chann.add channDesc
+
+    feedLinkEl = newVNode(VNodeKind.link)
+    feedLinkEl.setAttr("rel", "alternate")
+
+initFeed()
 
 proc articleItem(ar: Article): XmlNode =
     let item = newElement("item")
@@ -60,10 +75,6 @@ proc initFeed(path: string, title: string, description: string, arts: seq[Articl
 
 proc writeFeed*(path: string, fd: XmlNode = feed) = writeFile(path / "feed.xml", $fd)
 
-var feedLinkEl {.threadvar.}: VNode
-feedLinkEl = newVNode(VNodeKind.link)
-feedLinkEl.setAttr("rel", "alternate")
-feedLinkEl.setAttr("type", "application/rss+xml")
 
 proc feedLink*(title, path: string): VNode {.gcsafe.} =
     feedLinkEl.setAttr("title", title)
@@ -83,12 +94,12 @@ proc fetchFeed(topic: string): XmlNode =
 
 proc feedItems(chann: XmlNode): seq[XmlNode] {.sideEffect.} =
     result = collect:
-            for (n, node) in enumerate(chann.items):
-                if node.tag == "item":
-                    chann.delete(n)
-                    node
+        for (n, node) in enumerate(chann.items):
+            if node.tag == "item":
+                chann.delete(n)
+                node
 
-proc updateFeed*(topic: string, newArts: seq[Article], dowrite=false) =
+proc updateFeed*(topic: string, newArts: seq[Article], dowrite = false) =
     ## Load existing feed for given topic and update the feed (in-memory)
     ## with the new articles provided, it does not write to storage.
     let

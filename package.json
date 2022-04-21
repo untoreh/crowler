@@ -35,7 +35,8 @@
     "@material/tooltip": "^13.0.0",
     "@material/top-app-bar": "^13.0.0",
     "esbuild": "^0.14.31",
-    "material-components": "^0.5.0"
+    "material-components": "^0.5.0",
+    "svgo": "^2.8.0"
   },
   "keywords": []
 }

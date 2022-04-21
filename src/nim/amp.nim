@@ -21,45 +21,20 @@ const skipNodes = [VNodeKind.iframe, audio, canvas, embed, video, img, button, f
 const skipNodesXml = ["iframe", "audio", "canvas", "embed", "video", "img", "button", "form",
         "head", "svg", "document"]
 
-var vbtmcache {.threadvar.}: LruCache[array[5, byte], XmlNode]
-vbtmcache = newLruCache[array[5, byte], XmlNode](32)
+threadVars(
+    (vbtmcache, LruCache[array[5, byte], XmlNode]),
+    (rootDir, string),
+    (ampDoc, ampHead, ampBody, styleEl1, styleEl2, styleEl2Wrapper, ampjs, charset, viewport,
+            styleElCustom, VNode),
+    (client, HttpClient)
+)
 
-let
-    rootDir = SITE_PATH
-    ampDoc = newVNode(VNodeKind.html)
-    ampHead = newVNode(VNodeKind.head)
-    ampBody = newVNode(VNodeKind.body)
-    styleEl1 = newVNode(VNodeKind.style)
-    styleEl2 = newVNode(VNodeKind.style)
-    styleEl2Wrapper = newVNode(VNodeKind.noscript)
-    ampjs = newVNode(script)
-    charset = newVNode(meta)
-    viewport = newVNode(meta)
-    styleElCustom = newVNode(VNodeKind.style)
-    client = newHttpClient()
-
-var
-    styleStr {.threadvar.}: string
-    filesCache = initTable[string, string]()
-    styleScript = newSeq[string]()
-
-ampjs.setAttr("async", "")
-ampjs.setAttr("src", "https://cdn.ampproject.org/v0.js")
-charset.setAttr("charset", "utf-8")
-viewport.setAttr("name", "viewport")
-viewport.setAttr("content", "width=device-width,minimum-scale=1,initial-scale=1")
-
-styleEl1.setAttr("amp-boilerplate", "")
-styleEl1.add newVNode(VNodeKind.text)
-styleEl1[0].text = "body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}"
-styleEl2.setAttr("amp-boilerplate", "")
-styleEl2.add newVNode(VNodeKind.text)
-styleEl2[0].text =  "body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}"
-
-styleEl2Wrapper.add styleEl2
-styleElCustom.setAttr("amp-custom", "")
-styleElCustom.setAttr("type", "text/css")
-styleElCustom.add newVNode(VNodeKind.text)
+threadVars(
+    (styleStr, string),
+    (filesCache, Table[string, string]),
+    (styleScript, seq[string]),
+    (ampLinkEl, VNode)
+)
 
 const skipFiles = ["bundle.css"]
 
@@ -229,11 +204,12 @@ proc processBody(inEl, outBody, outHead: VNode, lv = false) =
                 else: outBody.add el
                 n += 1
 
-proc pre(pattern: static string): Regex =
-    let res {.global.} = re(pattern)
+proc pre(pattern: static string): Regex {.gcsafe.} =
+    var res {.threadvar.}: Regex
+    res = re(pattern)
     res
 
-proc ampPage*(tree: VNode): VNode =
+proc ampPage*(tree: VNode): VNode {.gcsafe.} =
     let
         inBody = tree.find(VNodeKind.body).deepcopy
         inHead = tree.find(VNodeKind.head).deepcopy
@@ -271,13 +247,53 @@ proc ampDir(target: string) {.error: "not implemented".} =
     if not dirExists(target):
         raise newException(OSError, fmt"Supplied target directory {target} does not exists.")
 
-var ampLinkEl {.threadvar.}: VNode
-ampLinkEl = newVNode(VNodeKind.link)
-ampLinkEl.setAttr("rel", "amphtml")
+
+proc initAmp*() =
+    vbtmcache = newLruCache[array[5, byte], XmlNode](32)
+    rootDir = SITE_PATH
+
+    ampDoc = newVNode(VNodeKind.html)
+    ampHead = newVNode(VNodeKind.head)
+    ampBody = newVNode(VNodeKind.body)
+    styleEl1 = newVNode(VNodeKind.style)
+    styleEl2 = newVNode(VNodeKind.style)
+    styleEl2Wrapper = newVNode(VNodeKind.noscript)
+    ampjs = newVNode(script)
+    charset = newVNode(meta)
+    viewport = newVNode(meta)
+    styleElCustom = newVNode(VNodeKind.style)
+    client = newHttpClient()
+
+    filesCache = initTable[string, string]()
+    styleScript = newSeq[string]()
+
+    ampLinkEl = newVNode(VNodeKind.link)
+    ampLinkEl.setAttr("rel", "amphtml")
+
+    ampjs.setAttr("async", "")
+    ampjs.setAttr("src", "https://cdn.ampproject.org/v0.js")
+    charset.setAttr("charset", "utf-8")
+    viewport.setAttr("name", "viewport")
+    viewport.setAttr("content", "width=device-width,minimum-scale=1,initial-scale=1")
+
+    styleEl1.setAttr("amp-boilerplate", "")
+    styleEl1.add newVNode(VNodeKind.text)
+    styleEl1[0].text = "body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}"
+    styleEl2.setAttr("amp-boilerplate", "")
+    styleEl2.add newVNode(VNodeKind.text)
+    styleEl2[0].text = "body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}"
+
+    styleEl2Wrapper.add styleEl2
+    styleElCustom.setAttr("amp-custom", "")
+    styleElCustom.setAttr("type", "text/css")
+    styleElCustom.add newVNode(VNodeKind.text)
+
+initAmp()
+
 proc ampLink*(path: string): VNode {.gcsafe.} =
-    ampLinkEl.setAttr("href", pathLink(path, amp=true, rel=false))
+    ampLinkEl.setAttr("href", pathLink(path, amp = true, rel = false))
     deepCopy(ampLinkEl)
 
-when isMainModule:
-    let file = SITE_PATH / "vps" / "index.html"
-    let p = ampPage(file)
+# when isMainModule:
+#     let file = SITE_PATH / "vps" / "index.html"
+#     let p = ampPage(file)

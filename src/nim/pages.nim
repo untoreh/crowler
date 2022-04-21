@@ -11,13 +11,15 @@ import
 
 import cfg,
        types,
+       utils,
        html,
-       html_misc
+       html_misc,
+       translate,
+       amp
 
 const tplRep = @{"WEBSITE_DOMAIN": WEBSITE_DOMAIN}
 const ppRep = @{"WEBSITE_URL": $WEBSITE_URL.combine(),
                  "WEBSITE_DOMAIN": WEBSITE_DOMAIN}
-
 
 proc getSubDirs(path: string): seq[int] =
     var dirs = collect((for f in walkDirs(path / "*"):
@@ -121,8 +123,30 @@ proc buildShortPosts*(arts: seq[Article], homepage=false): string =
             hr()
         result.add(p)
 
-proc buildHomePage*(lang: string, amp: bool): auto {.gcsafe.} =
-    let a = Article()
+proc buildHomePage*(lang: string, amp: bool, tree: VNode): VNode {.gcsafe.} =
+    if lang in TLangsCodes:
+        # result = translateLang(tree)
+        result = tree
+    else:
+        result = tree
+    if amp:
+        result = result.ampPage
+
+proc buildHomePage*(lang: string, tree: VNode): VNode {.gcsafe.} =
+    if lang in TLangsCodes:
+        # result = translateLang(tree)
+        result = tree
+    else:
+        result = tree
+
+proc buildHomePage*(amp: bool, tree: VNode): VNode {.gcsafe.} =
+    if amp:
+        return ampPage(tree)
+    else:
+        return tree
+
+proc buildHomePage*(lang: string, amp: bool): (VNode, VNode) {.gcsafe.} =
+    var a = default(Article)
     a.content = "this is homepage"
-    let p = buildPage("Home Page", buildFooter())
-    (p, $p)
+    let tree = buildPage("Home Page", "")
+    (tree, buildHomePage(lang, amp, tree))

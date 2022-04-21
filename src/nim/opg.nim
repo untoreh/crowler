@@ -21,7 +21,9 @@ type Opg* = enum
 
 let prefixCache = initTable[static seq[Opg], static string]()
 var opgTags {.threadvar.}: seq[XmlNode]
-opgTags = newSeq[XmlNode]()
+proc initOpg*() =
+    opgTags = newSeq[XmlNode]()
+initOpg()
 
 proc asPrefix(opgKind: Opg): string =
     fmt" {opgKind}: http://ogp.me/ns/{opgKind}#"

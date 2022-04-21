@@ -62,15 +62,15 @@ proc link_src_to_dir(dir: string) =
     createSymlink("./", link_path)
     debug "Created symlink from {dir} to {link_path}"
 
-proc isTranslatable(t: string): bool = not (punct_rgx in t)
-proc isTranslatable(el: XmlNode | vdom.VNode): bool = isTranslatable(el.text)
-proc isTranslatable(el: XmlNode, attr: string): bool = isTranslatable(el.attrs[attr])
-proc isTranslatable(el: vdom.VNode, attr: string): bool = isTranslatable(vdom.getAttr(el, attr))
+proc isTranslatable*(t: string): bool = not (punct_rgx in t)
+proc isTranslatable*(el: XmlNode | vdom.VNode): bool = isTranslatable(el.text)
+proc isTranslatable*(el: XmlNode, attr: string): bool = isTranslatable(el.attrs[attr])
+proc isTranslatable*(el: vdom.VNode, attr: string): bool = isTranslatable(vdom.getAttr(el, attr))
 
 var dotsRgx {.threadvar.}: Regex
 var uriVar {.threadVar.}: URI
 
-proc rewriteUrl(el, rewrite_path, hostname: auto) =
+proc rewriteUrl*(el, rewrite_path, hostname: auto) =
     parseURI(el.getAttr("href"), uriVar)
     # remove initial dots from links
     uriVar.path = uriVar.path.replace(dotsRgx, "")
@@ -80,7 +80,7 @@ proc rewriteUrl(el, rewrite_path, hostname: auto) =
     el.setAttr("href", $uriVar)
     # debug "old: {prev} new: {$uriVar}, {rewrite_path}"
 
-macro defIfDom(kind: static[FcKind]): untyped =
+macro defIfDom*(kind: static[FcKind]): untyped =
     case kind:
         of dom:
             quote do:
@@ -91,7 +91,7 @@ macro defIfDom(kind: static[FcKind]): untyped =
             quote do:
                 discard
 
-template translateEnv(kind: static[FcKind] = xml): untyped {.dirty.} =
+template translateEnv*(kind: static[FcKind] = xml): untyped {.dirty.} =
     debug "html: initializing vars "
     let
         file_path = fc.file_path
@@ -108,7 +108,7 @@ template translateEnv(kind: static[FcKind] = xml): untyped {.dirty.} =
 
     debug "html: setting root node attributes"
 
-template translateNode(otree: XmlNode, q: QueueXml, tformsTags: auto) =
+template translateNode*(otree: XmlNode, q: QueueXml, tformsTags: auto) =
     for el in preorder(otree):
         # skip empty nodes
         case el.kind:
@@ -130,7 +130,7 @@ template translateNode(otree: XmlNode, q: QueueXml, tformsTags: auto) =
                     translate(q, el, srv)
     translate(q, srv, finish = finish)
 
-template translateNode(node: VNode, q: QueueXml) =
+template translateNode*(node: VNode, q: QueueXml) =
     assert node.kind == VNodeKind.verbatim
     let
         s = node.text
@@ -291,13 +291,6 @@ proc translateTree*(tree: vdom.VNode, file, rx, langpairs: auto, targetPath = ""
     syncRoot(Weave)
     saveToDB(force = true)
 
-proc translateLang(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath = "",
-        ar = emptyArt): VNode {.gcsafe.} =
-    let
-        (filepath, urlpath) = splitUrlPath(rx, file)
-        t_path = if targetPath == "": file_path / lang.trg / url_path
-    var fc = initFileContext(tree, file_path, url_path, lang, t_path)
-    translateDom(fc)[1]
 
 proc fileWise(path, exclusions, rx_file, langpairs: auto, target_path = "") =
     for file in filterFiles(path, excl_dirs = exclusions, top_dirs = included_dirs):
@@ -358,8 +351,10 @@ when isMainModule:
 
     # translateDir(SITE_PATH, target_path = "/tmp/out")
     #
-    withWeave(true):
-        translateFile(file, rx_file, langpairs, target_path = "/tmp/out")
+    # withWeave(true):
+        # translateFile(file, rx_file, langpairs, target_path = "/tmp/out")
+    import threadpool
+    # translateLang()
 
     # withWeave:
     #     echo timeGo do:

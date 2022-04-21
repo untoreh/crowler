@@ -67,7 +67,7 @@ let
 discard pySched.initPool()
 
 proc trywrapPyFunc(fn: PyObject, tries = 3, defVal = ""): PyObject =
-    debug "trywrap: returning try wrapper {tries}, {getThreadId(Weave)}"
+    debug "trywrap: returning try wrapper {tries}"
     return tryWrapper(fn, tries, defVal)
 
 template pySafeCall(code: untyped): untyped =

@@ -1,4 +1,5 @@
 import nimdbx
+import os
 import cfg
 import translate_types
 import strformat
@@ -18,7 +19,6 @@ import utils
 static: echo "loading translate_db"
 
 type
-    trNode = tuple[prev: int, value: string, next: int]
     CollectionNotNil = Collection not nil
     LRUTransObj = object
         db: nimdbx.Database.Database not nil
@@ -34,11 +34,12 @@ when defined(gcDestructors):
         if not t.zstd_d.isnil:
             discard free_context(t.zstd_d)
 
-const
+var
     MAX_CACHE_ENTRIES = 16
-    MAX_DB_SIZE = 4096 * 1024 * 1024
+    MAX_DB_SIZE* = 4096 * 1024 * 1024
+    DB_PATH* = DATA_PATH / "translate.db"
 
-proc initLRUTrans(): LRUTrans =
+proc initLRUTrans*(): LRUTrans =
     result = createShared(LRUTransObj)
     result.zstd_c = new_compress_context()
     result.zstd_d = new_decompress_context()
@@ -52,7 +53,7 @@ initLock(tLock)
 var slations* {.threadvar.}: ptr Table[int64, string]
 
 proc transOpenDB(t = trans) =
-    t.db = openDatabase(cfg.DB_PATH, maxFileSize = MAX_DB_SIZE)
+    t.db = openDatabase(DB_PATH, maxFileSize = MAX_DB_SIZE)
     var c: Collection = t.db.openCollectionOrNil("slations", keytype = IntegerKeys)
     var cnn: Collection not nil
     if c.isnil:
@@ -64,6 +65,8 @@ proc transOpenDB(t = trans) =
     else:
         cnn = c
     t.coll = cnn
+
+proc openDB*(t: LRUTrans = trans) = transOpenDB(t)
 
 proc initTrans*() =
     if slations.isnil:
@@ -83,25 +86,29 @@ macro doSnap(pair: langPair, what: untyped): untyped =
         pairCollection(`pair`).inSnapshot do (cs {.inject.}: CollectionSnapshot):
             `what`
 
-proc `[]`*(t: LRUTrans, k: int64): string =
+proc getImpl(t: LRUTrans, k: int64, throw=static(false)): string =
     withLock(tLock):
         var o: seq[byte]
         t.coll.inSnapshot do (cs: CollectionSnapshot):
             o.add cs[k].asByteSeq
         if len(o) > 0:
             result = cast[string](decompress(t.zstd_d, o))
+        elif throw:
+            raise newException(KeyError, "nimdbx: key not found")
 
-proc `[]`*(t: LRUTrans, k: (langPair, string)): string = t[hash(k).int64]
+template `[]`*[T](t: LRUTrans, k: T): string = t.getImpl(hash(k).int64, false)
+proc `get`*[T](t: LRUTrans, k: T): string = t.getImpl(hash(k).int64, throw=true)
 
 proc `[]=`*(t: LRUTrans, k: int64, v: string) =
-    withLock(tLock):
-        # FIXME: Compress out of scope of the closure otherwise zstd has problems...
-        let v = compress(t.zstd_c, v, cfg.ZSTD_COMPRESSION_LEVEL)
-        t.coll.inTransaction do (ct: CollectionTransaction):
-            ct[k] = v
-            ct.commit()
+    {.cast(gcsafe).}:
+        withLock(tLock):
+            # FIXME: Compress out of scope of the closure otherwise zstd has problems...
+            let v = compress(t.zstd_c, v, cfg.ZSTD_COMPRESSION_LEVEL)
+            t.coll.inTransaction do (ct: CollectionTransaction):
+                ct[k] = v
+                ct.commit()
 
-proc `[]=`*(t: LRUTrans, k: (langPair, string), v: string) = t[hash(k).int64] = v
+proc `[]=`*[K: not int64](t: LRUTrans, k: K, v: string) = t[hash(k).int64] = v
 
 proc clear*(t: LRUTrans) =
     withLock(tLock):
@@ -114,6 +121,8 @@ proc clear*(t: LRUTrans) =
             for k in ks:
                 ct.del(k)
             ct.commit
+
+proc delete*(t: LRUTrans) = removeDir(t.db.path)
 
 proc save*[T](t: LRUTrans, c: Table[T, string]) =
     withLock(tLock):

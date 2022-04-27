@@ -9,7 +9,7 @@ import numpy as np
 from re import finditer
 from enum import Enum
 from time import sleep
-from typing import MutableSequence, Optional
+from typing import MutableSequence, Optional, Set
 
 from cachetools import LRUCache
 import numcodecs
@@ -25,6 +25,7 @@ from zict import Func, LRU
 compressor = Blosc(cname="zstd", clevel=2, shuffle=Blosc.BITSHUFFLE)
 codec = numcodecs.Pickle()
 TOPICS: Optional[za.Array] = None
+TPSET: Set[str] = set()
 PUBCACHE = LRUCache(2**20)
 
 def init_lru(n=1000):
@@ -270,19 +271,24 @@ def reset_topic(topic: str):
     pages.resize(0)
 
 def load_topics():
-    global TOPICS
+    global TOPICS, TPSET
     if TOPICS is None:
         TOPICS = load_zarr(k=ZarrKey.topics, root=cfg.TOPICS_IDX, dims=2)
         if TOPICS is None:
             raise IOError("Couldn't load topics.")
-    return TOPICS
+        TPSET = set(TOPICS[:].flatten())
+    return (TOPICS, TPSET)
 
-def save_topics(topics):
-    if isinstance(topics, tuple):
+def save_topics(tp):
+    global TOPICS, TPSET
+    if isinstance(tp, tuple):
         topics = load_topics()
-        topics.append(topics[1])
-    elif isinstance(topics, list):
-        save_zarr(topics, cfg.TOPICS_IDX, ZarrKey.topics, reset=True)
+        topics.append(tp[1])
+        TPSET.add(tp[1])
+    elif isinstance(tp, list):
+        save_zarr(tp, cfg.TOPICS_IDX, ZarrKey.topics, reset=True)
+        TOPICS = None
+        TPSET = set()
     else:
         raise ValueError
 

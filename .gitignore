@@ -4,6 +4,8 @@
 **/queue.txt
 **/rust/target/
 **/site*.html
+**/data/*.db/
+**.nimcache
 
 # Added by cargo
 

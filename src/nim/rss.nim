@@ -55,13 +55,13 @@ initFeed()
 proc articleItem(ar: Article): XmlNode =
     let item = newElement("item")
     let itemTitle = newElement("title")
-    itemTitle.text = ar.title
+    itemTitle.add ar.title
     item.add itemTitle
     let itemLink = newElement("link")
-    itemLink.text = getArticleUrl(ar)
+    itemLink.add getArticleUrl(ar)
     item.add itemLink
     let itemDesc = newElement("description")
-    itemDesc.text = ar.desc
+    itemDesc.add ar.desc
     item.add itemDesc
     return item
 
@@ -72,8 +72,11 @@ proc initFeed(path: string, title: string, description: string, arts: seq[Articl
     channDesc[0].text = description
     for ar in arts:
         chann.add articleItem(ar)
+    deepCopy(feed)
 
-proc writeFeed*(path: string, fd: XmlNode = feed) = writeFile(path / "feed.xml", $fd)
+proc writeFeed*(path: string, fd: XmlNode = feed) =
+    debug "rss: writing feed to {path}/feed.xml"
+    writeFile(path / "feed.xml", $fd)
 
 
 proc feedLink*(title, path: string): VNode {.gcsafe.} =
@@ -85,12 +88,14 @@ var topicFeeds: SharedTable[string, XmlNode]
 init(topicFeeds)
 
 proc fetchFeed(topic: string): XmlNode =
-    var feed: XmlNode
-    try:
-        feed = topicFeeds.mget(topic)
-    except:
-        feed = loadXml(SITE_PATH / topic / "feed.xml")
-        topicFeeds[topic] = feed
+    var tfeed: XmlNode
+    tfeed = topicFeeds.lgetOrPut(topic):
+        try:
+            loadXml(SITE_PATH / topic / "feed.xml")
+        except IOError:
+            initFeed()
+            deepcopy(feed)
+    topicFeeds.put(topic, tfeed)
 
 proc feedItems(chann: XmlNode): seq[XmlNode] {.sideEffect.} =
     result = collect:
@@ -103,8 +108,8 @@ proc updateFeed*(topic: string, newArts: seq[Article], dowrite = false) =
     ## Load existing feed for given topic and update the feed (in-memory)
     ## with the new articles provided, it does not write to storage.
     let
-        feed = topic.fetchFeed
-        chann = feed.child("channel")
+        feed = topic.fetchFeed()
+        chann = feed.findel("channel")
         itms = chann.feedItems
         arl = itms.len
         narl = newArts.len

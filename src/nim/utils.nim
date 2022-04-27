@@ -46,6 +46,10 @@ macro debug*(code: untyped): untyped =
         quote do:
             discard
 
+template qdebug*(code) =
+    try: debug code
+    except: quit()
+
 macro warn*(code: untyped): untyped =
     if logLevelMacro >= lvlWarn:
         quote do:
@@ -162,6 +166,7 @@ proc findnil*(tree: VNode) =
             if len(el) > 0:
                 findnil(el)
 
+
 iterator preorder*(tree: XmlNode): XmlNode =
     ## Iterator, skipping tags in `skip_nodes`
     ## also skipping comments, entities, CDATA and zero-length text nodes
@@ -195,6 +200,11 @@ iterator preorder*(tree: XmlNode): XmlNode =
                         yield node
 
 
+proc findel*(tree: XmlNode, t: string): XmlNode =
+    for el in preorder(tree):
+        if el.tag == t:
+            return el
+
 proc key*(s: string): array[5, byte] =
     case s.len
         of 0: result = default(array[5, byte])
@@ -227,6 +237,11 @@ proc mergeUri*(dst: ref Uri, src: Uri): ref Uri =
     # FIXME: should this be assigned ?
     # src.isIpv6 = dst.isIpv6
     dst
+
+proc `==`*(a: string, b: XmlNode): bool {.inline.} = a == b.tag
+proc `==`*(a: XmlNode, b: string): bool {.inline.} = b == a
+
+proc `add`*(n: XmlNode, s: string) = n.add newText(s)
 
 iterator preorder*(tree: VNode): VNode =
     ## Iterator, skipping tags in `skip_nodes`
@@ -529,3 +544,17 @@ proc splitSentences*(text: string): seq[string] =
         sents = replace(sents, sentsRgx53, "$1 ")
 
         sents.split(sentsRgx54)
+
+proc readBytes*(f: string): seq[uint8] =
+    let s = open(f)
+    defer: s.close()
+    result.setLen(s.getFileSize())
+    discard readBytes(s, result, 0, result.len)
+
+proc toString*(bytes: openarray[byte | char]): string =
+  result = newString(bytes.len)
+  copyMem(result[0].addr, bytes[0].unsafeAddr, bytes.len)
+
+proc toString*(p: ptr uint8, len: int): string =
+    let ua = cast[ptr UncheckedArray[char]](p)
+    ua.toOpenArray(0, len - 1).toString()

@@ -65,8 +65,6 @@ const
     FAVICON_SVG_URL* = $(LOGO_DIR / "logo-icon.svg")
     MAX_DIR_FILES* = 10
     ARTICLE_EXCERPT_SIZE* = 300 ## Size (in bytes) of the excerpt
-    DB_SIZE* = 1024 * 1024 * 1024
-    DB_PATH* = DATA_PATH / "translate.db"
     MAX_TRANSLATION_TRIES* = 3
     DEFAULT_LANG_CODE* = "en"
     DEFAULT_LOCALE* = "en_US"
@@ -81,4 +79,9 @@ const
     MINIFY* = true
     RSS* = true
     RSS_N_ITEMS* = 10
-
+    SERVER_MODE* = true
+    # WEBSITE_IMG_PORT* = ":5051"
+    # WEBSITE_URL_IMG* = initUri() / ("img" & "." & WEBSITE_DOMAIN) / WEBSITE_IMG_PORT
+    WEBSITE_URL_IMG* = initUri() / (WEBSITE_DOMAIN & WEBSITE_DEBUG_PORT)  / "i"
+    IMG_VIEWPORT* = ["320w", "800w", "1920w"]
+    IMG_SIZES* = ["122x122", "305x305", "733x733"]

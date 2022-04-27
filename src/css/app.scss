@@ -91,10 +91,10 @@ main {
 
 .title-wrap > .image-link {
   text-decoration: none;
-  position: relative;
-  left: calc(50% - 7rem);
+  margin: auto;
+  display: block;
+  text-align: center;
   & img {
-    margin: auto;
     display: inline-block;
     padding: 1rem;
     max-width: 100%;
@@ -116,7 +116,6 @@ main {
   padding: 0.5rem;
   background: var(--mdc-theme-primary);
   border-radius: 4px 0 0 4px;
-  height: 100%;
   & a {
     text-decoration: none;
     text-align: center;
@@ -130,8 +129,6 @@ main {
   background: var(--mdc-theme-primary);
   border-radius: 0 4px 4px 0;
   padding: 0.5rem;
-  height: 100%;
-  line-height: 2rem;
   & a {
     text-decoration: none;
     text-align: center;

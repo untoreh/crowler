@@ -128,24 +128,29 @@ proc curPageNumber(topic: string): int =
     return ut.get_top_page(topic).to(int)
     # return getSubdirNumber(topic, curdir)
 
-proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, ishome = false,
-        with_arts = false) =
+template topicPage*(topic: string, pagenum: string, istop = false) {.dirty.} =
     ## Writes a single page (fetching its related articles, if its not a template) to storage
+    let arts = getDoneArticles(topic, pagenum = pagenum.parseInt)
+    let content = buildShortPosts(arts)
+    # if the page is not finalized, it is the homepage
     let
-        arts = getDoneArticles(topic, pagenum = pagenum.parseInt)
-        content = buildShortPosts(arts)
-        # if the page is not finalized, it is the homepage
-        footer = pageFooter(topic, pagenum, ishome)
-        page = buildPage(title = "",
+        footer = pageFooter(topic, pagenum, istop)
+        pagetree = buildPage(title = "",
                          content = content,
                          slug = pagenum,
                          pagefooter = footer,
                          topic = topic)
 
+
+proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, istop = false,
+        with_arts = false) =
+    ## Writes a single page (fetching its related articles, if its not a template) to storage
+    topicPage(topic, pagenum, istop)
+
     info "Updating page:{pagenum} for topic:{topic} with entries:{pagecount}"
     processHTML(topic,
                 pagenum / "index",
-                page)
+                pagetree)
     # if we pass a pagecount we mean to finalize
     if finalize:
         discard ut.update_page_size(topic, pagenum.parseInt, pagecount, final = true)
@@ -193,6 +198,7 @@ proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
 
 proc publish(topic: string) =
     ##  Generates html for a list of `Article` objects and writes to file.
+    assert topic in ut.load_topics()[1]
     var pagenum = curPageNumber(topic)
     let newpage = pageSize(topic, pagenum) > cfg.MAX_DIR_FILES
     if newpage:
@@ -226,7 +232,7 @@ proc publish(topic: string) =
     for (_, a) in posts:
         donePy.add a.py
         doneArts.add a
-    discard ut.save_done(topic, len(arts), done, pagenum)
+    discard ut.save_done(topic, len(arts), donePy, pagenum)
     if newpage:
         ensureDir(SITE_PATH / pagedir)
     let newposts = len(posts)
@@ -268,7 +274,7 @@ proc resetTopic(topic: string) =
     discard ut.reset_topic(topic)
     saveLS(topic, initLS())
 
-proc getState(topic: string): (int, int) =
+proc getState*(topic: string): (int, int) =
     ## Get the number of the top page, and the number of `done` pages.
     let
         grp = ut.topic_group(topic)
@@ -288,7 +294,7 @@ proc pubAllPages(topic: string, clear = true) =
             ensureDir(topic_path / $n)
     block:
         let pagecount = pageSize(topic, topdir)
-        pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true, ishome = true)
+        pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true, istop = true)
     for n in 0..<topdir:
         let pagenum = n
         var pagecount = pageSize(topic, n)
@@ -307,17 +313,15 @@ proc refreshPageSizes(topic: string) =
 
 import translate
 when isMainModule:
-    let topic = "vps"
+    let topic = "web"
     # refreshPageSizes(topic)
-    # publish(topic)
-    # assert not pyisnone(arts)
-    # pubAllPages(topic, clear = true)
+    publish(topic)
+    quit()
     let
         # (topdir, _) = topic.getState()
         topdir = 0
         pagecount = pageSize(topic, topdir)
-
-    pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true)
+    # pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true)
     # pubPageFromTemplate("dmca.html", "DMCA")
 
     # import amp

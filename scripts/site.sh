@@ -31,7 +31,7 @@ if [ ! -e $sdir ]; then
     exit 1
 fi
 
-if [ $COPY_ONLY = 1 ]; then
+if [ $COPY_ONLY = 0 ]; then
     cp -a $sdir /tmp
     echo "deleting local link $PWD/$lname"
     rm -f $PWD/$lname

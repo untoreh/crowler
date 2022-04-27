@@ -7,7 +7,8 @@ import
     sequtils,
     times,
     unicode,
-    algorithm
+    algorithm,
+    strformat
 
 import cfg,
        types,
@@ -15,6 +16,7 @@ import cfg,
        html,
        html_misc,
        translate,
+       translate_lang,
        amp
 
 const tplRep = @{"WEBSITE_DOMAIN": WEBSITE_DOMAIN}
@@ -96,7 +98,7 @@ proc articleExcerpt(a: Article): string =
         let runesize = runeLenAt(a.content, maxlen)
         return a.content[0..maxlen+runesize] & "..."
 
-proc buildShortPosts*(arts: seq[Article], homepage=false): string =
+proc buildShortPosts*(arts: seq[Article], homepage = false): string =
     var relpath: string
     for a in arts:
         relpath = getArticlePath(a)
@@ -123,30 +125,24 @@ proc buildShortPosts*(arts: seq[Article], homepage=false): string =
             hr()
         result.add(p)
 
-proc buildHomePage*(lang: string, amp: bool, tree: VNode): VNode {.gcsafe.} =
+proc processPage*(lang, amp: string, tree: VNode): VNode {.gcsafe.} =
     if lang in TLangsCodes:
-        # result = translateLang(tree)
-        result = tree
+        let
+            filedir = SITE_PATH
+            relpath = "index.html"
+            tpath = filedir / lang / relpath
+        var fc = initFileContext(tree, filedir, relpath,
+            (src: SLang.code, trg: lang), tpath)
+        debug "home: translating home to {lang}"
+        result = translateLang(fc)
     else:
         result = tree
-    if amp:
+    if amp != "":
+        debug "home: amping"
         result = result.ampPage
 
-proc buildHomePage*(lang: string, tree: VNode): VNode {.gcsafe.} =
-    if lang in TLangsCodes:
-        # result = translateLang(tree)
-        result = tree
-    else:
-        result = tree
-
-proc buildHomePage*(amp: bool, tree: VNode): VNode {.gcsafe.} =
-    if amp:
-        return ampPage(tree)
-    else:
-        return tree
-
-proc buildHomePage*(lang: string, amp: bool): (VNode, VNode) {.gcsafe.} =
+proc buildHomePage*(lang , amp: string): (VNode, VNode) {.gcsafe.} =
     var a = default(Article)
     a.content = "this is homepage"
     let tree = buildPage("Home Page", "")
-    (tree, buildHomePage(lang, amp, tree))
+    (tree, processPage(lang, amp, tree))

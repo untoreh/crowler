@@ -52,10 +52,13 @@ proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true)
 proc translateLang*(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath = "",
         ar = emptyArt): VNode {.gcsafe.} =
     let
-        (filepath, urlpath) = splitUrlPath(rx, file)
-        t_path = if targetPath == "": file_path / lang.trg / url_path
+        (filedir, relpath) = splitUrlPath(rx, file)
+        t_path = if targetPath == "": filedir / lang.trg / (if relpath == "": "index.html" else: relpath)
                  else: targetPath
-    var fc = initFileContext(tree, file_path, url_path, lang, t_path)
+    var fc = initFileContext(tree, filedir, relpath, lang, t_path)
+    translateDom(fc)[1]
+
+proc translateLang*(fc: ptr FileContext, ar = emptyArt): VNode {.gcsafe.} =
     translateDom(fc)[1]
 
 when isMainModule:
@@ -74,4 +77,4 @@ when isMainModule:
         t_path = file_path / pair.trg / url_path
 
     let ar = default(Article)
-    let d = translateLang(p, file, rx_file, lang, ar=ar)
+    let d = translateLang(p, file, rx_file, lang, ar = ar)

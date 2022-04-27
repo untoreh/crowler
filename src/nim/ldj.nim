@@ -84,17 +84,20 @@ proc asVNode*[T](data: T, wrap = true, id = "", class = ""): VNode {.gcsafe.} =
         else:
             result = deepCopy(ldjElement)
 
-proc jwebsite(url, author, year: auto, image = ""): auto =
+const emptyCpr = (holder: "", year: "")
+proc jwebsite(url, author, year: auto, image = "", cpr: tuple[holder, year: string] = emptyCpr): JsonNode =
     ## "https://schema.org/WebSite"
-    withSchema:
+    result = withSchema:
         %* {
             "@type": "WebSite",
             "@id": url,
             "url": url,
-            "image": image,
-            "copyrightHolder": author,
-            "copyrightYear": year
+            "image": image
         }
+    if cpr.holder != "":
+        result["copyrightHolder"] = %cpr.holder
+        result["copyrightYear"] = %cpr.year
+
 template website*(code: varargs[untyped]): string = jm jwebsite(`code`)
 
 var searchUri {.threadvar.}: ref Uri
@@ -379,7 +382,7 @@ proc license(name = ""): JsonNode =
 
 proc initOrganization(): Organization = new(result)
 
-proc jorgschema(name, url: string; contact = "", tel = "", email = ""; sameas: auto,
+proc jorgschema(name, url: string; contact = "", tel = "", email = ""; sameas: string | JsonNode = "",
         logo = ""): JsonNode =
     result = %*{
         "@type": "Organization",

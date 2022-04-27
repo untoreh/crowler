@@ -26,7 +26,8 @@ import cfg,
        yandex,
        opg,
        rss,
-       ldj
+       ldj,
+       shorturls
 
 static: echo "loading html..."
 
@@ -41,6 +42,7 @@ proc initHtml*() =
         rtime = $now()
         wsRgx = re"[^\w\s-]"
         hypRgx = re"[-\s]+"
+        initZstd()
     except:
         echo "Could not initialize html vars"
 
@@ -96,10 +98,8 @@ template ldjWebpage(): VNode {.dirty.} =
                     "availableLanguage": ldjLanguages(),
                      "author": (ldj.author(name = ar.author)),
                     "publisher": ldj.orgschema(
-                        name = WEBSITE_TITLE,
-                        url = ($WEBSITE_URL),
-                        sameas = WEBSITE_SOCIAL,
-                        contact = WEBSITE_CONTACT)
+                        name = ar.url.parseuri().hostname,
+                        url = ar.url, )
         })
     ).asVNode
 
@@ -109,7 +109,7 @@ proc buildHead*(path: string; description = ""; topic = ""; ar = emptyArt): VNod
         meta(charset = "UTF-8")
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
         link(rel = "canonical", href = canon)
-        feedLink(topic, path)
+        feedLink(topic, path / topic)
         ampLink(path)
         for t in opgPage(ar): t
         for n in langLinksNodes(canon): n
@@ -175,10 +175,17 @@ proc buildDrawer(a: Article; site: VNode): VNode =
         label(class = "pure-overlay", `for` = "pure-toggle-left", data_overlay = "left")
 
 proc buildImgUrl*(url: string; cls = "image-link"): VNode =
-    let cache_url = "/img/" & encodeUrl(url)
+    var srcsetstr, bsrc: string
+    if url != "":
+        let burl = url.toBstring
+        bsrc = $(WEBSITE_URL_IMG / IMG_SIZES[1] / burl)
+        for (view, size) in zip(IMG_VIEWPORT, IMG_SIZES):
+            srcsetstr.add "///" & $(WEBSITE_URL_IMG / size / burl)
+            srcsetstr.add " " & view & ","
     buildHtml(a(class = cls, href = url, alt = "post image source")):
         # the `alt="image"` is used to display the material-icons placeholder
-        img(class = "material-icons", src = cache_url, alt = "image", loading = "lazy")
+        img(class = "material-icons", src = bsrc, srcset = srcsetstr, alt = "image", loading = "lazy")
+
 
 
 proc buildSearch(withButton = true): VNode =
@@ -209,9 +216,9 @@ proc buildLogo(pos: string): VNode =
                 aria-label = "Website Logo"):
             tdiv(class = "mdc-icon-button__ripple")
             span(class = "logo-dark-wrap"):
-                img(src=LOGO_DARK_URL)
+                img(src = LOGO_DARK_URL)
             span(class = "logo-light-wrap"):
-                img(src=LOGO_URL)
+                img(src = LOGO_URL)
 
 
 proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): VNode =
@@ -261,7 +268,7 @@ proc buildFooter*(): VNode =
                 text "Except where otherwise noted, this website is licensed under a "
                 a(rel = "license", href = "http://creativecommons.org/licenses/by/3.0/deed.en_US"):
                     text "Creative Commons Attribution 3.0 Unported License."
-            script(src = JS_REL_URL , async = "")
+            script(src = JS_REL_URL, async = "")
 
 proc postTitle(a: Article): VNode =
     buildHtml(tdiv(class = "title-wrap")):
@@ -271,11 +278,12 @@ proc postTitle(a: Article): VNode =
         tdiv(class = "post-info"):
             blockquote(class = "post-desc"):
                 text a.desc
-            buildSocialShare(a)
-            tdiv(class = "post-source"):
-                a(href = a.url):
-                    img(src = a.icon, loading = "lazy", alt = "web", class = "material-icons")
-                    text a.getAuthor
+            tdiv(class = "post-links"):
+                buildSocialShare(a)
+                tdiv(class = "post-source"):
+                    a(href = a.url):
+                        img(src = a.icon, loading = "lazy", alt = "web", class = "material-icons")
+                        text a.getAuthor
         buildImgUrl(a.imageUrl)
 
 proc postContent(article: string): VNode =
@@ -343,6 +351,9 @@ proc processHtml*(relpath: string; slug: string; data: VNode; ar = emptyArt) =
         path = SITE_PATH
         pagepath = relpath / slug & ".html"
         fullpath = path / pagepath
+    when cfg.SERVER_MODE:
+        data.writeHtml(SITE_PATH / pagepath)
+        return
     when cfg.TRANSLATION_ENABLED:
         withWeave(false):
             setupTranslation()

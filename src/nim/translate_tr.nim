@@ -156,7 +156,7 @@ proc translate*[Q, T](q: T, el: T, srv: auto, finish: bool) =
 proc translate*[Q](q: var Q, srv: auto, finish: bool) =
     if finish and q.sz > 0:
         elementsUpdate(q)
-        saveToDB()
+        saveToDB(force=true)
 
 # when isMainModule:
 #     let

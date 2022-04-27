@@ -2,7 +2,8 @@ import
     times, nimpy, os, strutils, strformat,
     nimpy / py_lib,
     std / osproc,
-    sets, locks, sequtils
+    sets, locks, sequtils,
+    sharedtables
 
 # Generics
 proc put*[T, K, V](t: T, k: K, v: V): V = (t[k] = v; v)
@@ -10,7 +11,7 @@ proc put*[T, K, V](t: T, k: K, v: V): V = (t[k] = v; v)
 template lgetOrPut*[T, K](c: T, k: K, v: untyped): untyped =
     ## Lazy `mgetOrPut`
     try:
-        c[k]
+        c.get(k)
     except KeyError:
         c.put(k, v)
 
@@ -177,7 +178,6 @@ proc isa*(py: PyObject, tp: PyObject): bool =
 proc pyget*[T](py: PyObject, k: string, def: T = ""): T =
     try:
         let v = py.get(k)
-        echo 2
         if pyisnone(v):
             return def
         else:
@@ -226,44 +226,19 @@ proc initTypes*() =
         except:
             emptyArt = static(Article())
 
-import tables
+import
+    locktpl,
+    tables
 
 export tables,
        locks
 
-type
-    LockTableObj[K, V] = object
-        lock: Lock
-        storage {.guard: lock.}: ref Table[K, V]
-    LockTable*[K, V] = ptr LockTableObj[K, V]
+lockedStore(Table)
 
-proc initLockTable*[K; V](): LockTable[K, V] =
-    result = create(LockTableObj[K, V])
-    initLock(result.lock)
-    var tbl = new(Table[K, V])
-    withLock(result.lock):
-        result.storage = tbl
+# Py
+proc contains*[K](v: PyObject, k: K): bool =
+    v.callMethod("__contains__", k).to(bool)
 
-iterator items*[K, V](tbl: LockTable[K, V]): (K, V) =
-    withLock(tbl.lock):
-        for (k, v) in tbl.storage.pairs():
-            yield (k, v)
-
-proc `[]=`*[K, V](tbl: LockTable[K, V], k: K, v: V) =
-    withLock(tbl.lock):
-        tbl.storage[k] = v
-
-proc `[]`*[K, V](tbl: LockTable[K, V], k: K): V =
-    withLock(tbl.lock):
-        return tbl.storage[k]
-
-proc contains*[K, V](tbl: LockTable[K, V], k: K): bool =
-    withLock(tbl.lock):
-        return k in tbl.storage
-
-proc clear*[K, V](tbl: LockTable[K, V]) =
-    withLock(tbl.lock):
-        clear(tbl.storage)
 
 # PySequence
 import quirks
@@ -304,6 +279,12 @@ macro `.=`*(o: PySequence, field: untyped, value: untyped): untyped =
     quote do:
         `o`.py.`field` = `value`
 
+proc `[]`*[K, V](t: var SharedTable[K, V], k: K): V = t.mget(k)
+proc `get`*[K, V](t: var SharedTable[K, V], k: K): V = t.mget(k)
+proc `put`*[K, V](t: var SharedTable[K, V], k: K, v: V): V =
+    t[k] = v
+    return v
+
 # Shared hashset
 type SharedHashSet*[T] = ref object
     data: HashSet[T]
@@ -327,7 +308,8 @@ proc excl*[T](d: SharedHashSet[T], v: T) =
 type PathLock* = LockTable[string, ref Lock]
 var locksBuffer* {.threadvar.}: seq[ref Lock]
 
-proc initPathLock*(): PathLock = initLockTable[string, ref Lock]()
+proc initPathLock*(): PathLock =
+    initLockTable[string, ref Lock]()
 
 proc addLocks*() =
     for _ in 0..<100:
@@ -358,3 +340,7 @@ proc release*(pl: PathLock, k: string) =
         pl[k][].release()
     except KeyError: discard
 
+# Bytes handling
+# const MAX_FILE_SIZE = 100 * 1024 * 1024
+# proc readBytes(f: string): seq[byte] =
+#     readBytes(f, )

@@ -1,0 +1,194 @@
+import
+    vendor/imageflow_plumbing,
+    strformat,
+    std/cpuinfo,
+    json,
+    tables,
+    std/httpclient,
+    uri,
+    os,
+    unicode,
+    hashes
+
+import
+    cfg,
+    utils
+
+const
+    IF_VERSION_MAJOR: uint32 = 3
+    IF_VERSION_MINOR: uint32 = 0
+    BUFFER_SIZE = 10 * 1024 * 1024
+    RES_BUFFER_SIZE = 1 * 1024 * 1024
+    MAX_BUFFERS = 16
+
+type
+    IFLContext = object
+        p: pointer
+    IFLMethod = enum
+        crop_whitespace,
+        command_string,
+        constrain,
+        encode,
+        decode
+    Source* = enum filesrc = "file", urlsrc = "url", bytesrc = "byte_array", buffersrc = "output_buffer"
+
+when defined(gcDestructors):
+    proc `=destroy`(c: var IFLContext) =
+        imageflow_context_destroy(c.p)
+
+var
+    ctx {.threadvar.}: IFLContext
+    client {.threadvar.}: HttpClient
+    outputBuffer {.threadvar.}: ptr ptr uint8
+    outputBufferLen {.threadvar.}: ptr csize_t
+var
+    resPtr {.threadvar.}: ptr ptr uint8
+    resLen {.threadvar.}: ptr csize_t
+
+proc check(c: IFLContext): bool =
+    let msg = case imageflow_context_error_as_exit_code(c.p):
+        of 0: ""
+        of 64: "Invalid usage (graph invalid, node argument invalid, action not supported)"
+        of 65: "Invalid Json, Image malformed, Image type not supported"
+        of 66: "Primary or secondary file or resource not found."
+        of 69: "Upstream server errored or timed out"
+        of 70: "Possible bug: internal error, custom error, unknown error, or no graph solution found"
+        of 71: "Out Of Memory condition (malloc/calloc/realloc failed)."
+        of 74: "I/O Error"
+        of 77: "Action forbidden under imageflow security policy"
+        of 402: "License error"
+        of 401: "Imageflow server authorization required"
+        else:
+            "Unknown Error"
+    if (msg != ""):
+        if imageflow_context_error_recoverable(c.p) and
+           imageflow_context_error_try_clear(c.p):
+            return false
+        else:
+            raise newException(Exception, msg)
+    return true
+
+threadVars(
+    (cmd, cmdSteps, cmdStr, JsonNode),
+    (cmdKind, cmdValue, string),
+    (status, int64),
+    (resBuffer, seq[uint8]),
+    (resBufferLen, csize_t)
+)
+
+when false:
+    const buildMethod = "v1/build"
+const execMethod = "v1/execute"
+
+proc initCmd() =
+    cmd = newJObject()
+    cmdStr = newJObject()
+    cmdSteps = %[]
+    cmdKind = "ir4"
+    cmdValue = ""
+    cmd["framewise"] = newJObject()
+    cmd["framewise"]["steps"] = cmdSteps
+    cmdSteps.add newJObject()
+    cmdSteps[0]["command_string"] = cmdStr
+    cmdStr["kind"] = %cmdKind
+    cmdStr["value"] = %cmdValue
+    cmdStr["decode"] = %0
+    cmdStr["encode"] = %1
+
+proc setIO*(u: string, kind=filesrc) =
+    cmd["io"] = %*[
+        {
+            "io_id": 0,
+            "direction": "in",
+            "io": {
+                $kind: $u
+                }
+        },
+        {
+            "io_id": 1,
+            "direction": "out",
+            "io": "output_buffer"
+        }
+    ]
+
+proc setCmd(v: string) {.inline.} = cmdStr["value"] = %v
+
+proc initImageFlow*() =
+    outputBuffer = create(ptr uint8)
+    outputBufferLen = create(csize_t)
+    resPtr = create(ptr uint8)
+    resLen = create(csize_t)
+
+    client = newHttpClient()
+    initCmd()
+    resBuffer = newSeq[uint8](RES_BUFFER_SIZE)
+    resBufferLen = RES_BUFFER_SIZE
+    if not imageflow_abi_compatible(IF_VERSION_MAJOR, IF_VERSION_MINOR):
+        let
+            mj = imageflow_abi_version_major()
+            mn = imageflow_abi_version_minor()
+            msg = fmt"Could not create imageflow context, requested version {IF_VERSION_MAJOR}.{IF_VERSION_MINOR} but found {mj}.{mn}"
+        raise newException(Exception, msg)
+
+    ctx.p = imageflow_context_create(IF_VERSION_MAJOR, IF_VERSION_MINOR)
+    # NOTE: only needed with method v1/execute (probably)
+    let b = imageflow_context_add_output_buffer(ctx.p, 1)
+    if not b: doassert ctx.check
+    # discard imageflow_context_memory_allocate(ctx.p, BUFFER_SIZE.csize_t, "", 0)
+    doassert ctx.check
+
+proc addImg*(img: string): bool =
+    if img == "": return false
+    let a = imageflow_context_add_input_buffer(
+        ctx.p,
+        0,
+        cast[ptr uint8](img[0].unsafeAddr),
+        img.len.csize_t,
+        imageflow_lifetime_lifetime_outlives_context)
+    if not a:
+        doassert ctx.check
+    return true
+
+
+proc getImg*(src: string, kind: Source): string =
+    case kind:
+        of urlsrc:
+            client.getContent(src)
+        else:
+            readFile(src)
+
+proc processImg*(input: string, mtd = execMethod): string =
+    setCmd(input)
+    let c = $cmd
+    # debug "{hash(c)} - {c}"
+    let json_res = imageflow_context_send_json(
+        ctx.p,
+        mtd,
+        cast[ptr uint8](c[0].unsafeAddr),
+        c.len.csize_t
+        )
+    defer: assert imageflow_json_response_destroy(ctx.p, json_res)
+
+    discard imageflow_json_response_read(ctx.p, json_res,
+                                         status.addr,
+                                         resPtr,
+                                         resLen)
+
+    if status != 200:
+        let msg = resPtr[].toString(resLen[].int)
+        debug "imageflow: conversion failed {msg}"
+        doassert ctx.check
+    discard imageflow_context_get_output_buffer_by_id(ctx.p, 1, outputBuffer, outputBufferLen)
+    doassert ctx.check
+    result = outputBuffer[].toString(outputBufferLen[].int)
+
+when isMainModule:
+    initImageFlow()
+    let img = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fwww.nj.com%2Fresizer%2Fmg42jsVYwvbHKUUFQzpw6gyKmBg%3D%2F1280x0%2Fsmart%2Fadvancelocal-adapter-image-uploads.s3.amazonaws.com%2Fimage.nj.com%2Fhome%2Fnjo-media%2Fwidth2048%2Fimg%2Fsomerset_impact%2Fphoto%2Fsm0212petjpg-7a377c1c93f64d37.jpg&f=1&nofb=1"
+    # let img = PROJECT_PATH / "vendor" / "imageflow.dist" / "data" / "cat.jpg"
+    let data = getImg(img, kind=urlsrc)
+    doassert data.addImg
+    let query = "width=100&height=100&mode=max"
+    # cmd.delete("io")
+    # setIO(img, kind=filesrc)
+    echo processImg(query).len

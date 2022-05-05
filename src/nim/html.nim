@@ -27,7 +27,9 @@ import cfg,
        opg,
        rss,
        ldj,
-       shorturls
+       shorturls,
+       topics,
+       quirks # PySequence requires quirks
 
 static: echo "loading html..."
 
@@ -44,7 +46,7 @@ proc initHtml*() =
         hypRgx = re"[-\s]+"
         initZstd()
     except:
-        echo "Could not initialize html vars"
+        qdebug "Could not initialize html vars {getCurrentExceptionMsg()}"
 
 initHtml()
 
@@ -129,6 +131,8 @@ proc buildHead*(path: string; description = ""; topic = ""; ar = emptyArt): VNod
         meta(name = "description", content = description)
         link(rel = "icon", href = FAVICON_PNG_URL, type = "image/x-icon")
         link(rel = "icon", href = FAVICON_SVG_URL, type = "image/svg+xml")
+        # https://stackoverflow.com/questions/21147149/flash-of-unstyled-content-fouc-in-firefox-only-is-ff-slow-renderer
+        verbatim("<script>const _ = null</script>")
 
 proc buildLang(path: string; title = ""): VNode {.gcsafe.} =
     buildHtml(tdiv(class = "menu-lang-btn", title = "Change website's language")):
@@ -184,15 +188,20 @@ proc buildImgUrl*(url: string; cls = "image-link"): VNode =
             srcsetstr.add " " & view & ","
     buildHtml(a(class = cls, href = url, alt = "post image source")):
         # the `alt="image"` is used to display the material-icons placeholder
-        img(class = "material-icons", src = bsrc, srcset = srcsetstr, alt = "image", loading = "lazy")
+        img(class = "material-icons", src = bsrc, srcset = srcsetstr, alt = "image",
+                loading = "lazy")
 
 
 
-proc buildSearch(withButton = true): VNode =
-    buildHtml(tdiv(class = "search-bar")):
-        label(class = "search-field"):
-            input(class = "search-input", type = "text", placeholder = "Search...")
+proc buildSearch(action: string; withButton = true): VNode =
+    buildHtml(form(`method` = "get", action = (action & "/s/"), class = "search")):
+        label(class = "search-field", `for` = "search-input")
+        input(id = "search-input", class = "search-input", autocomplete = "off",
+                 type = "text", name = "q", placeholder = "Search...")
+        ul(class = "search-suggest", style = style([(display, "none")]))
         if withButton:
+            buildButton("clear", "clear-search-btn", aria_label = "Clear Search",
+                    title = "Clear search input.")
             buildButton("search", "search-btn", aria_label = "Search",
                     title = "Search across the website.")
 
@@ -203,10 +212,21 @@ proc buildMenuSmall*(crumbs: string; topic_uri: Uri; path: string): VNode {.gcsa
         # ul(class = "menu-list mdc-top-app-bar--fixed-adjust"):
             buildButton("brightness_4", "dk-toggle", aria_label = "toggle dark theme",
                         title = "Switch website color between dark and light theme.")
-            a(class = "trending", href = ($(topic_uri / "trending"))):
-                buildButton("trending_up", aria_label = "Trending",
-                        title = "Recent articles that have been trending up.")
+            when TRENDS:
+                a(class = "trending", href = ($(topic_uri / "trending"))):
+                    buildButton("trending_up", aria_label = "Trending",
+                            title = "Recent articles that have been trending up.")
             buildLang(path)
+            # Topics
+            ul(class = "menu-list-topics"):
+                for tpc in loadTopics(MENU_TOPICS):
+                    li(class = "menu-topic-item mdc-icon-button"):
+                        tdiv(class = "mdc-icon-button__ripple")
+                        a(href = ($(WEBSITE_URL / $tpc)), title = ($tpc)):
+                            # only use the first letter
+                            text $($tpc).runeAt(0).toUpper # loadTopics iterator returns pyobjects
+                        br()
+
 proc buildMenuSmall*(crumbs: string; topic_uri: Uri; a = emptyArt): VNode =
     buildMenuSmall(crumbs, topic_uri, a.getArticleUrl)
 
@@ -227,22 +247,32 @@ proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): VNode =
             section(class = "mdc-top-app-bar__section mdc-top-app-bar__section--align-start"):
                 # hide the logo on page load
                 initStyleStr(".app-bar-logo, .logo-light-wrap {display: none;}")
+                # Menu hamburger
                 buildButton("menu", "menu-btn", aria_label = "open menu",
                             title = "Menu Drawer")
                 buildLogo("left")
+                # Dark/light theme toggle
                 buildButton("brightness_4", "dk-toggle", aria_label = "toggle dark theme",
                             title = "Switch website color between dark and light theme.")
+                # Page location
                 a(class = "page mdc-top-app-bar__title mdc-ripple-surface",
                   href = pathLink(path.parentDir, rel = false)):
                     text crumbs
+                # Topics list
+                ul(class = "app-bar-topics"):
+                    for tpc in loadTopics(MENU_TOPICS):
+                        li(class = "topic-item mdc-icon-button"):
+                            tdiv(class = "mdc-icon-button__ripple")
+                            a(href = ($(WEBSITE_URL / $tpc))):
+                                text $tpc # loadTopics iterator returns pyobjects
+                            span(class = "separator")
             section(class = "mdc-top-app-bar__section mdc-top-app-bar__section--align-end",
                     role = "toolbar"):
-                buildSearch(false)
-                buildButton("search", "search-btn", aria_label = "Search",
-                        title = "Search across the website.")
-                a(class = "trending", href = ($(topic_uri / "trending"))):
-                    buildButton("trending_up", aria_label = "Trending",
-                            title = "Recent articles that have been trending up.")
+                buildSearch($topic_uri, true)
+                when TRENDS:
+                    a(class = "trending", href = ($(topic_uri / "trending"))):
+                        buildButton("trending_up", aria_label = "Trending",
+                                title = "Recent articles that have been trending up.")
                 buildLang(path)
                 buildLogo("right")
 
@@ -288,7 +318,7 @@ proc postTitle(a: Article): VNode =
 
 proc postContent(article: string): VNode =
     buildHtml(article(class = "post-wrapper")):
-        tdiv(class = "post-content"):
+        tdiv(class = HTML_POST_SELECTOR):
             verbatim(article)
 
 proc postFooter(pubdate: Time): VNode =
@@ -300,9 +330,9 @@ proc postFooter(pubdate: Time): VNode =
                 text format(dt, "dd MMM yyyy")
 
 proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): VNode =
-    let crumbs = toUpper(&"/ {a.topic} / Page-{a.page} >")
+    let crumbs = toUpper(&"/ {a.topic} / Page-{a.page} /")
     let topic_uri = parseUri("/" & a.topic)
-    buildHtml(body(class = "", style = preline_style)):
+    buildHtml(body(class = "", topic = (a.topic), style = preline_style)):
         buildMenu(crumbs, topic_uri, a)
         buildMenuSmall(crumbs, topic_uri, a)
         main(class = "mdc-top-app-bar--fixed-adjust"):
@@ -320,14 +350,16 @@ proc pageTitle*(title: string; slug: string): VNode =
 proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
     let
         topic_path = "/" / topic
-        pn = pagenum.parseInt
+        pn = if pagenum == "s": -1
+             else: pagenum.parseInt
     buildHtml(tdiv(class = "post-footer")):
         nav(class = "page-crumbs"):
             if pn > 0:
                 span(class = "prev-page"):
                     a(href = (topic_path / (pn - 1).intToStr)):
                         text "<< Previous page"
-            if not home:
+            # we don't paginate searches because we only serve the first page per query
+            if pn != -1 and not home:
                 span(class = "next-page"):
                     a(href = (topic_path / (pn + 1).intToStr)):
                         text "Next page >>"
@@ -387,6 +419,7 @@ proc processHtml*(relpath: string; slug: string; data: VNode; ar = emptyArt) =
         else:
             page.writeHtml(SITE_PATH / pagepath)
 
+
 proc buildPost*(a: Article): VNode =
     buildHtml(html(lang = DEFAULT_LANG_CODE,
                    prefix = opgPrefix(@[Opg.article, Opg.website]))
@@ -397,14 +430,16 @@ proc buildPost*(a: Article): VNode =
 proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode = nil; topic = "";
         desc: string = ""): VNode {.gcsafe.} =
     let
-        crumbs = if topic != "": fmt"/ {topic} >"
+        crumbs = if topic != "": fmt"/ {topic.toUpper} /"
                  else: "/ "
-        topic_uri = parseUri("/ >")
+        topic_uri = parseUri("/" & topic)
         path = topic / slug
     result = buildHtml(html(lang = DEFAULT_LANG_CODE,
                             prefix = opgPrefix(@[Opg.article, Opg.website]))):
         buildHead(path, desc)
-        body(class = "", style = preline_style):
+        # NOTE: we use the topic attr for the body such that
+        # from browser JS we know which topic is the page about
+        body(class = "", topic = topic, style = preline_style):
             buildMenu(crumbs, topic_uri, path)
             buildMenuSmall(crumbs, topic_uri)
             main(class = "mdc-top-app-bar--fixed-adjust"):
@@ -429,3 +464,4 @@ proc ldjData*(el: VNode; filepath, relpath: string; lang: langPair; a: Article) 
         trgurl = pathLink(relpath, code = lang.trg, rel = false)
 
     let ldjTr = ldjTrans(relpath, srcurl, trgurl, lang, a)
+

@@ -5,7 +5,9 @@
 **/rust/target/
 **/site*.html
 **/data/*.db/
+**/data/sonic/**/
 **.nimcache
+**/vendor/**/
 
 # Added by cargo
 

@@ -1,6 +1,7 @@
 import { MDCRipple } from "@material/ripple";
 import { MDCTopAppBar } from "@material/top-app-bar";
 import { getCookie, $, $$ } from "./lib.js";
+import { setupSuggest } from "./suggest.js";
 
 function toggleTheme() {
   let el = document.body;
@@ -101,4 +102,5 @@ window.onload = function () {
   const menuBtn = $(".menu-btn");
 
   topAppBar.setScrollTarget(mainContentEl);
+  setupSuggest();
 };

@@ -46,8 +46,8 @@ def run_sources_job(topic):
     logger.info("Getting kw batch...")
     batch = get_kw_batch(topic)
     root = cfg.TOPICS_DIR / topic / "sources"
-    for kw in batch:
-        logger.info("Finding sources for keyword %s .", kw)
+    for (n, kw) in enumerate(batch):
+        logger.info("Finding sources for keyword %s (%d/%d).", kw, n, cfg.KW_SAMPLE_SIZE)
         results = sources.fromkeyword(kw, n_engines=3)
         if results:
             ut.save_file(results, ut.slugify(kw), root=root)

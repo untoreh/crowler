@@ -146,7 +146,7 @@ proc translate*[Q, T](q: var Q, el: T, srv: auto) =
             q.bucket.add(el)
             q.sz += length
 
-proc translate*[Q, T](q: T, el: T, srv: auto, finish: bool) =
+proc translate*[Q, T](q: var Q, el: T, srv: auto, finish: bool) =
     if finish:
         let (success, _) = setFromDB(q.pair, el)
         if not success:

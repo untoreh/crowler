@@ -22,6 +22,7 @@ zarr
 
 # for nim
 unidecode
+langcodes
 
 # sources/articles
 trafilatura

@@ -88,7 +88,7 @@ const countryLangs = {
 proc langToCountry(lang: string): string {.inline.} = countryLangs.getOrDefault(lang, lang)
 
 const langCssClasses = "flag flag-"
-proc langsList*(path: string): VNode {.gcsafe.} =
+proc langsList*(path: string): VNode =
     {.cast(gcsafe).}:
         buildHtml(ul(class = "lang-list")):
             for (name, code) in sortedLanguages[0]:

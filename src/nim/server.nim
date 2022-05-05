@@ -14,16 +14,19 @@ import strformat,
        fusion/matching,
        uri,
        lrucache,
-       hashes
+       hashes,
+       json
 
 {.experimental: "caseStmtMacros".}
 
 import
     types,
+    server_types,
     utils,
     cfg,
     quirks,
     html,
+    html_misc,
     publish,
     translate,
     translate_db,
@@ -31,66 +34,18 @@ import
     amp,
     opg,
     ldj,
-    imageflow_server
-
-from publish import ut
-
-type HtmlCache {.borrow: `.`.} = LRUTrans
-var htmlCache: ptr HtmlCache
-proc initHtmlCache(): HtmlCache =
-    translate_db.MAX_DB_SIZE = 40 * 1024 * 1024 * 1024
-    translate_db.DB_PATH = DATA_PATH / "html.db"
-    result = initLRUTrans()
-    openDB(result)
+    imageflow_server,
+    cache,
+    topics,
+    search
 
 # proc `[]`*[K: not int](c: HtmlCache, k: K): string {.inline.} = c[hash(k)]
 # proc `[]=`*[K: not int, V](c: HtmlCache, k: K, v: V) {.inline.} = c[hash(k)] = v
-proc `[]`*[K: not int](c: ptr HtmlCache, k: K): string {.inline.} =
-    c[][hash(k)]
-proc `[]=`*[K: not int, V](c: ptr HtmlCache, k: K, v: V) {.inline.} =
-    c[][hash(k)] = v
-
-type
-    TopicState = tuple[topdir: int, group: PyObject]
-    Topics = ptr LockTable[string, TopicState]
-let
-    topics = create LockTable[string, TopicState]
-    emptyTopic = (topdir: -1, group: PyObject())
-topics[] = initLockTable[string, TopicState]()
-proc len(t: Topics): int = t[].len
-proc `[]=`(t: Topics, k, v: auto) = t[][k] = v
-proc `[]`(t: Topics, k: string): TopicState = t[][k]
-proc contains(t: Topics, k: string): bool = k in t[]
-proc get(t: Topics, k: string, d: TopicState): TopicState = t[].get(k, d)
+# proc `[]`*[K](c: ptr HtmlCache, k: K): string {.inline.} =
+#     debug "accessing {k}, {hash(k)}"
+#     c[][k]
 
 const customPages = ["dmca", "tos", "privacy-policy"]
-
-proc syncTopics() {.gcsafe.} =
-    # NOTE: the [0] is required because quirky zarray `getitem`
-    try:
-        let
-            pytopics = initPySequence[string](ut.load_topics()[0])
-            n_topics = pytopics.len
-
-        if n_topics > topics.len:
-            for topic in pytopics.slice(topics.len, pytopics.len):
-                let
-                    tp = topic.to(string)
-                    tg = ut.topic_group(tp)
-                    td = tp.getState[0]
-                debug "synctopics: adding topic {tp} to global"
-                topics[tp] = (topdir: td, group: tg)
-    except Exception as e:
-        debug "could not sync topics {getCurrentExceptionMsg()}"
-
-
-proc fp*(relpath: string): string =
-    ## Full file path
-    SITE_PATH / (if relpath == "":
-        "index.html"
-    elif relpath.splitFile.ext == "":
-        relpath & ".html"
-    else: relpath)
 
 proc initThreadBase*() {.gcsafe, raises: [].} =
     initLogging()
@@ -103,6 +58,7 @@ proc initThread*() {.gcsafe, raises: [].} =
     initLDJ()
     initFeed()
     initWrapImageFlow()
+    initSonic()
     try:
         initAmp()
     except:
@@ -138,21 +94,24 @@ template handleAsset(fpath: string) {.dirty.} =
         page = readFile(fpath)
         if page != "":
             htmlCache[fpath] = page
-    ctx.reply(page)
+    # debug "ASSETS CACHING DISABLED"
+    # page = readFile(fpath)
+    ctx.reply(Http200, page, ["Cache-Control", "no-store"])
 
 template dispatchImg(relpath: var string, ctx: auto) {.dirty.} =
     try:
-        page = htmlCache[].get(relpath)
-    except KeyError:
         relpath.removePrefix("/i")
-        page = handleImg(relpath)
+        page = htmlCache[].get(relpath)
+    except KeyError, AssertionError:
+        try: page = handleImg(relpath)
+        except: debug "server: could not handle image {relpath}"
         if page != "":
-            htmlCache[relpath] = page
+            htmlCache[][relpath] = page
     ctx.reply(page)
 
 template handleTopic(fpath, capts: auto, ctx: HttpCtx) {.dirty.} =
     debug "topic: looking for {capts.topic}"
-    if capts.topic in topics:
+    if capts.topic in topicsCache:
         page = htmlCache[].lgetOrPut(fpath):
             let
                 pagenum = if capts.page == "": "0" else: capts.page
@@ -164,25 +123,14 @@ template handleTopic(fpath, capts: auto, ctx: HttpCtx) {.dirty.} =
     else:
         handle301($(WEBSITE_URL / capts.amp / capts.lang))
 
-proc articlePage(donearts: PyObject, capts: auto): string {.gcsafe.} =
-    # every article is under a page number
-    for pya in donearts[capts.page]:
-        if pya.pyget("slug") == capts.art:
-            let
-                a = initArticle(pya, parseInt(capts.page))
-                post = buildPost(a)
-            # htmlCache[SITE_PATH / capts.topic / capts.page / capts.art] = post.asHtml
-            return processPage(capts.lang, capts.amp, post).asHtml
-    return ""
-
 template handleArticle(fpath, capts: auto, ctx: HttpCtx) =
     ##
     debug "article: fetching article"
-    let tg = topics.get(capts.topic, emptyTopic)
+    let tg = topicsCache.get(capts.topic, emptyTopic)
     if tg.topdir != -1:
         page = htmlCache[].lgetOrPut(fpath):
             let donearts = tg.group[$topicData.done]
-            articlePage(donearts, capts)
+            articleHtml(donearts, capts)
         if page != "":
             ctx.reply(page)
         else:
@@ -190,35 +138,39 @@ template handleArticle(fpath, capts: auto, ctx: HttpCtx) =
     else:
         handle301($(WEBSITE_URL / capts.amp / capts.lang))
 
-const
-    rxend = "(?=/|$)"
-    rxAmp = fmt"(/amp{rxend})"
-    rxLang = "(/[a-z]{2}(?:-[A-Z]{2})?" & fmt"{rxend})" # split to avoid formatting regex `{}` usage
-    rxTopic = fmt"(/.*?{rxend})"
-    rxPage = fmt"(/[0-9]+{rxend})"
-    rxArt = fmt"(/.*?{rxend})"
-    rxPath = fmt"{rxAmp}?{rxLang}?{rxTopic}?{rxPage}?{rxArt}?"
+template handleSearch(relpath: string, ctx: HttpCtx) =
+    # extract the referer to get the correct language
+    var headers: array[1, string]
+    ctx.parseHeaders(["referer"], headers)
+    let
+        refuri = parseUri(headers[0])
+        refcapts = refuri.path.uriTuple
+    if capts.lang == "" and refcapts.lang != "":
+        handle301($(WEBSITE_URL / refcapts.lang / join(capts, n=1)))
+    else:
+        page = htmlCache[].lgetOrPut(fpath):
+            # there is no specialized capture for the query
+            let
+                searchq = something(parseUri(capts.art).query.getParam("q"), capts.art)
+                lang = something(capts.lang, refcapts.lang)
+            buildSearchPage(capts.topic, searchq, lang)
+        ctx.reply(page)
 
-proc uriTuple(match: seq[Option[string]]): tuple[amp, lang, topic, page, art: string] =
-    var i = 0
-    for v in result.fields:
-        v = match[i].get("")
-        v.removePrefix("/")
-        i += 1
-
+template handleSuggest(relpath: string, ctx: HttpCtx) =
+    # there is no specialized capture for the query
+    let searchq = something(parseUri(capts.art).query.getParam("q"), capts.art)
+    page = buildSuggestList(capts.topic, searchq)
+    ctx.reply(page)
 
 proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
-    assert ctx.parseRequestLine
+    doassert ctx.parseRequestLine
     var
         relpath = ctx.getUri()
         page: string
-        dowrite: bool
     relpath.removeSuffix('/')
     let fpath = relpath.fp
     try:
-        let
-            m = relpath.match(sre rxPath).get
-            capts = m.captures.toSeq.uriTuple
+        let capts = uriTuple(relpath)
         case capts:
             of (topic: ""):
                 debug "router: serving homepage rel: {relpath}, fp: {fpath}"
@@ -229,6 +181,12 @@ proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
             of (topic: "i"):
                 # debug "router: serving image {relpath}"
                 dispatchImg(relpath, ctx)
+            of (page: "s"):
+                debug "router: serving search {relpath}"
+                handleSearch(relpath, ctx)
+            of (page: "g"):
+                debug "router: serving suggestion {relpath}"
+                handleSuggest(relpath, ctx)
             of (art: ""):
                 debug "router: serving topic {relpath}"
                 # topic page
@@ -255,6 +213,7 @@ when isMainModule:
     htmlCache[].clear()
     registerThreadInitializer(initThread)
     server.initHeaderCtx(handleGet, 5050, false)
+
     echo "GuildenStern HTTP server serving at 5050"
     synctopics()
     server.serve(loglevel = INFO)

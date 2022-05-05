@@ -22,17 +22,22 @@ import
     locktpl,
     shorturls
 
-lockedStore(LruCache)
-
 const rxPathImg = "/([0-9]{1,3})x([0-9]{1,3})/(.+)(?=/|$)"
 
 let
     imgCache = initLockLruCache[string, string](10 * 1024)
     flwCache = initLockLruCache[string, string](30 * 1024)
 
+proc initWrapImageFlow*() {.gcsafe, raises: [].} =
+    try: initImageFlow()
+    except:
+        qdebug "Could not init imageflow"
+
 proc imgData(imgurl: string): string {.inline, gcsafe.} =
-    imgCache.lgetOrPut(imgurl):
-        getImg(imgurl, kind=urlsrc)
+    try:
+        result = imgCache.lgetOrPut(imgurl):
+            getImg(imgurl, kind=urlsrc)
+    except: discard
 
 proc handleImg*(relpath: string): auto =
     let
@@ -46,10 +51,14 @@ proc handleImg*(relpath: string): auto =
     var resp: string
     if url.isSomething:
         let decodedUrl = url.asBString.toString
-        doassert decodedUrl.imgData.addImg
-        let query = fmt"width={width}&height={height}&mode=max"
-        debug "ifl server: serving image rel: {decodedUrl}, size: {width}x{height}"
-        resp = processImg(query)
+        # block unused resize requests
+        if not (fmt"{width}x{height}" in IMG_SIZES):
+            resp = decodedUrl.imgData
+        else:
+            doassert decodedUrl.imgData.addImg
+            let query = fmt"width={width}&height={height}&mode=max"
+            debug "ifl server: serving image hash: {hash(decodedUrl.imgData)}, size: {width}x{height}"
+            resp = processImg(query)
         debug "ifl server: img processed"
     resp
 
@@ -73,10 +82,6 @@ proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
         qdebug "Router failed, {msg}"
         discard
 
-proc initWrapImageFlow*() {.gcsafe, raises: [].} =
-    try: initImageFlow()
-    except:
-        qdebug "Could not init imageflow"
 
 when isMainModule:
     var srv = new GuildenServer

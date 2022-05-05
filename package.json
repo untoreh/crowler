@@ -8,7 +8,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "webpack serve --allowed-hosts=wsl",
-    "build": "webpack"
+    "build": "webpack && scripts/site.sh -s"
   },
   "author": "",
   "license": "ISC",
@@ -28,6 +28,7 @@
     "webpack-dev-server": "^4.7.4"
   },
   "dependencies": {
+    "@babel/plugin-transform-runtime": "^7.17.10",
     "@material/button": "^13.0.0",
     "@material/icon-button": "^13.0.0",
     "@material/ripple": "^13.0.0",
@@ -35,6 +36,7 @@
     "@material/tooltip": "^13.0.0",
     "@material/top-app-bar": "^13.0.0",
     "esbuild": "^0.14.31",
+    "lighthouse": "^9.5.0",
     "material-components": "^0.5.0",
     "svgo": "^2.8.0"
   },

@@ -93,6 +93,14 @@ body {
     background: var(--surface);
     border-color: var(--light-secondary);
   }
+  .search-suggest {
+    background: var(--text-secondary-on-dark);
+    color: var(--text-primary-on-dark);
+    & li:hover,
+    li.selected {
+      background: var(--text-primary-on-light);
+    }
+  }
 }
 
 @mixin light {
@@ -118,6 +126,14 @@ body {
     color: var(--secondary);
     background: var(--light-background);
     border-color: var(--light-background);
+  }
+  .search-suggest {
+    background: var(--background);
+    color: var(--text-primary-on-light);
+    & li:hover,
+    li.selected {
+      background: var(--mdc-theme-on-secondary);
+    }
   }
 }
 

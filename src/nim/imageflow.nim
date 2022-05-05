@@ -8,7 +8,8 @@ import
     uri,
     os,
     unicode,
-    hashes
+    hashes,
+    locks
 
 import
     cfg,
@@ -30,12 +31,16 @@ type
         constrain,
         encode,
         decode
-    Source* = enum filesrc = "file", urlsrc = "url", bytesrc = "byte_array", buffersrc = "output_buffer"
+    Source* = enum filesrc = "file", urlsrc = "url", bytesrc = "byte_array",
+            buffersrc = "output_buffer"
 
 when defined(gcDestructors):
     proc `=destroy`(c: var IFLContext) =
         imageflow_context_destroy(c.p)
 
+const
+    outputIoId = 0
+    inputIoId = 1
 var
     ctx {.threadvar.}: IFLContext
     client {.threadvar.}: HttpClient
@@ -92,24 +97,27 @@ proc initCmd() =
     cmdSteps[0]["command_string"] = cmdStr
     cmdStr["kind"] = %cmdKind
     cmdStr["value"] = %cmdValue
-    cmdStr["decode"] = %0
-    cmdStr["encode"] = %1
+    # the input buffer always changes, it is incremental
+    cmdStr["decode"] = %1
+    # the first id is the `output_buffer`
+    cmdStr["encode"] = %0
 
-proc setIO*(u: string, kind=filesrc) =
-    cmd["io"] = %*[
-        {
-            "io_id": 0,
-            "direction": "in",
-            "io": {
-                $kind: $u
-                }
-        },
-        {
-            "io_id": 1,
-            "direction": "out",
-            "io": "output_buffer"
-        }
-    ]
+# not needed with endpoint `v1/execute`
+# proc setIO*(u: string, kind = filesrc) =
+#     cmd["io"] = %*[
+#         {
+#             "io_id": 0,
+#             "direction": "in",
+#             "io": {
+#                 $kind: $u
+#             }
+#         },
+#         {
+#             "io_id": 1,
+#             "direction": "out",
+#             "io": "output_buffer"
+#         }
+#     ]
 
 proc setCmd(v: string) {.inline.} = cmdStr["value"] = %v
 
@@ -119,7 +127,7 @@ proc initImageFlow*() =
     resPtr = create(ptr uint8)
     resLen = create(csize_t)
 
-    client = newHttpClient()
+    client = newHttpClient(timeout = 10_1000)
     initCmd()
     resBuffer = newSeq[uint8](RES_BUFFER_SIZE)
     resBufferLen = RES_BUFFER_SIZE
@@ -132,21 +140,31 @@ proc initImageFlow*() =
 
     ctx.p = imageflow_context_create(IF_VERSION_MAJOR, IF_VERSION_MINOR)
     # NOTE: only needed with method v1/execute (probably)
-    let b = imageflow_context_add_output_buffer(ctx.p, 1)
+    let b = imageflow_context_add_output_buffer(ctx.p, outputIoId)
     if not b: doassert ctx.check
     # discard imageflow_context_memory_allocate(ctx.p, BUFFER_SIZE.csize_t, "", 0)
     doassert ctx.check
 
+proc reset(c: IFLContext) =
+    imageflow_context_destroy(ctx.p)
+    ctx.p = imageflow_context_create(IF_VERSION_MAJOR, IF_VERSION_MINOR)
+    let b = imageflow_context_add_output_buffer(ctx.p, outputIoId)
+    if not b: doassert ctx.check
+
 proc addImg*(img: string): bool =
     if img == "": return false
+    reset(ctx)
+    doassert ctx.check
     let a = imageflow_context_add_input_buffer(
         ctx.p,
-        0,
+        inputIoId,
+        # NOTE: The image is held in cache, but it might be collected
         cast[ptr uint8](img[0].unsafeAddr),
         img.len.csize_t,
         imageflow_lifetime_lifetime_outlives_context)
     if not a:
         doassert ctx.check
+    cmdStr["decode"] = %inputIoId
     return true
 
 
@@ -167,28 +185,29 @@ proc processImg*(input: string, mtd = execMethod): string =
         cast[ptr uint8](c[0].unsafeAddr),
         c.len.csize_t
         )
-    defer: assert imageflow_json_response_destroy(ctx.p, json_res)
-
     discard imageflow_json_response_read(ctx.p, json_res,
                                          status.addr,
                                          resPtr,
                                          resLen)
+    defer: doassert imageflow_json_response_destroy(ctx.p, json_res)
 
     if status != 200:
         let msg = resPtr[].toString(resLen[].int)
         debug "imageflow: conversion failed {msg}"
         doassert ctx.check
-    discard imageflow_context_get_output_buffer_by_id(ctx.p, 1, outputBuffer, outputBufferLen)
+    discard imageflow_context_get_output_buffer_by_id(
+        ctx.p,
+        outputIoId,
+        outputBuffer,
+        outputBufferLen)
     doassert ctx.check
     result = outputBuffer[].toString(outputBufferLen[].int)
 
-when isMainModule:
-    initImageFlow()
-    let img = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fwww.nj.com%2Fresizer%2Fmg42jsVYwvbHKUUFQzpw6gyKmBg%3D%2F1280x0%2Fsmart%2Fadvancelocal-adapter-image-uploads.s3.amazonaws.com%2Fimage.nj.com%2Fhome%2Fnjo-media%2Fwidth2048%2Fimg%2Fsomerset_impact%2Fphoto%2Fsm0212petjpg-7a377c1c93f64d37.jpg&f=1&nofb=1"
-    # let img = PROJECT_PATH / "vendor" / "imageflow.dist" / "data" / "cat.jpg"
-    let data = getImg(img, kind=urlsrc)
-    doassert data.addImg
-    let query = "width=100&height=100&mode=max"
-    # cmd.delete("io")
-    # setIO(img, kind=filesrc)
-    echo processImg(query).len
+# when isMainModule:
+#     initImageFlow()
+#     let img = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fwww.nj.com%2Fresizer%2Fmg42jsVYwvbHKUUFQzpw6gyKmBg%3D%2F1280x0%2Fsmart%2Fadvancelocal-adapter-image-uploads.s3.amazonaws.com%2Fimage.nj.com%2Fhome%2Fnjo-media%2Fwidth2048%2Fimg%2Fsomerset_impact%2Fphoto%2Fsm0212petjpg-7a377c1c93f64d37.jpg&f=1&nofb=1"
+#     # let img = PROJECT_PATH / "vendor" / "imageflow.dist" / "data" / "cat.jpg"
+#     let data = getImg(img, kind=urlsrc)
+#     doassert data.addImg
+#     let query = "width=100&height=100&mode=max"
+#     echo processImg(query).len

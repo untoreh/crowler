@@ -3,7 +3,7 @@ import
     nimpy / py_lib,
     std / osproc,
     sets, locks, sequtils,
-    sharedtables
+    sharedtables, lrucache
 
 # Generics
 proc put*[T, K, V](t: T, k: K, v: V): V = (t[k] = v; v)
@@ -33,6 +33,9 @@ proc relpyImport*(relpath: string): PyObject =
     let loader = machinery.SourceFileLoader(name, abspath)
     return loader.load_module(name)
 
+# we have to load the config before utils, otherwise the module is "partially initialized"
+let pycfg* = relpyImport("../py/config")
+let ut* = relpyImport("../py/utils")
 
 type
     TS = enum
@@ -177,7 +180,7 @@ proc isa*(py: PyObject, tp: PyObject): bool =
 
 proc pyget*[T](py: PyObject, k: string, def: T = ""): T =
     try:
-        let v = py.get(k)
+        let v = py.callMethod("get", k)
         if pyisnone(v):
             return def
         else:
@@ -234,6 +237,7 @@ export tables,
        locks
 
 lockedStore(Table)
+lockedStore(LruCache)
 
 # Py
 proc contains*[K](v: PyObject, k: K): bool =
@@ -263,6 +267,10 @@ proc `[]=`*[S, K, V](s: PySequence[S], k: K, v: S) =
     s.setitem(k, v)
 
 proc `$`*(s: PySequence): string = $s.py
+
+iterator items*[S](s: PySequence[S]): PyObject =
+    for i in s.py:
+        yield i
 
 {.experimental: "dotOperators".}
 

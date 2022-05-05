@@ -85,3 +85,10 @@ const
     WEBSITE_URL_IMG* = initUri() / (WEBSITE_DOMAIN & WEBSITE_DEBUG_PORT)  / "i"
     IMG_VIEWPORT* = ["320w", "800w", "1920w"]
     IMG_SIZES* = ["122x122", "305x305", "733x733"]
+    TRENDS* = false
+    MENU_TOPICS* = 10 # max number of topics to display in menu
+    SONIC_PASS* = "dmdm"
+    SONIC_PORT* = 1491
+    SONIC_ADDR* = "localhost"
+    SONIC_BACKLOG* = DATA_PATH / "sonic" / "backlog.txt"
+    HTML_POST_SELECTOR* = "post-content"

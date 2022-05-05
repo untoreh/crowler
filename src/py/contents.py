@@ -4,6 +4,7 @@ from typing import List
 
 import articles as art
 import config as cfg
+from py.blacklist import exclude_blacklist
 import utils as ut
 from log import logger
 
@@ -25,6 +26,7 @@ def parsesource(url, topic):
     FEEDFINDER_DATA[url] = data = ut.fetch_data(url)
     if data:
         f = ff2.find_feeds(url)
+        f = exclude_blacklist(f)
         if f:
             logger.info("Adding %s feeds.", len(f))
             FEEDS.extend(f)

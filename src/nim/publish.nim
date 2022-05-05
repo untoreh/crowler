@@ -16,16 +16,14 @@ import cfg,
        types,
        utils,
        html,
-       rss
+       rss,
+       topics
 
 privateAccess(LocalitySensitive)
 var pageset = Table[string, bool]()
 
 include "pages"
 
-# we have to load the config before utils, otherwise the module is "partially initialized"
-let pycfg = relpyImport("../py/config")
-let ut* = relpyImport("../py/utils")
 
 proc getArticleUrl(a: Article): string {.inline.} = $(WEBSITE_URL / a.topic / a.slug)
 
@@ -198,7 +196,7 @@ proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
 
 proc publish(topic: string) =
     ##  Generates html for a list of `Article` objects and writes to file.
-    assert topic in ut.load_topics()[1]
+    doassert topic in ut.load_topics()[1]
     var pagenum = curPageNumber(topic)
     let newpage = pageSize(topic, pagenum) > cfg.MAX_DIR_FILES
     if newpage:
@@ -269,18 +267,9 @@ proc publish(topic: string) =
     # when cfg.YDX:
     #     writeFeed()
 
-
 proc resetTopic(topic: string) =
     discard ut.reset_topic(topic)
     saveLS(topic, initLS())
-
-proc getState*(topic: string): (int, int) =
-    ## Get the number of the top page, and the number of `done` pages.
-    let
-        grp = ut.topic_group(topic)
-        topdir = max(grp[$topicData.pages].shape[0].to(int)-1, 0)
-        numdone = max(len(grp[$topicData.done]) - 1, 0)
-    return (topdir, numdone)
 
 proc pubAllPages(topic: string, clear = true) =
     ## Starting from the homepage, rebuild all archive pages, and their articles
@@ -313,7 +302,7 @@ proc refreshPageSizes(topic: string) =
 
 import translate
 when isMainModule:
-    let topic = "web"
+    let topic = "dedi"
     # refreshPageSizes(topic)
     publish(topic)
     quit()

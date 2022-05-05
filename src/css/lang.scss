@@ -88,7 +88,7 @@
   .langs-dropdown-content {
     left: -100vw;
     &.show {
-      left: 0;
+      left: 3.25rem; // needed for avoiding to tune z-index in vertical menu
     }
   }
 }

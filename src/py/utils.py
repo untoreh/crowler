@@ -258,8 +258,13 @@ def topic_group(topic, root=cfg.TOPICS_DIR):
         return PUBCACHE[cache_key]
     except KeyError:
         file_path = get_file_path(Path(topic), root, ext=None, as_json=False)
-        g = PUBCACHE[cache_key] = za.open_group(file_path)
-        return g
+        if os.path.exists(file_path):
+            g = PUBCACHE[cache_key] = za.open_group(file_path)
+            return g
+        else:
+            return None
+
+def get_topic(tp, **kwargs): return topic_group(tp, **kwargs)
 
 def reset_topic(topic: str):
     grp = topic_group(topic)
@@ -282,9 +287,11 @@ def load_topics():
 def save_topics(tp):
     global TOPICS, TPSET
     if isinstance(tp, tuple):
-        topics = load_topics()
-        topics.append(tp[1])
-        TPSET.add(tp[1])
+        (topics, tpset) = load_topics()
+        for t in tp:
+            d = np.asarray(t)
+            topics.append(d)
+            tpset.add(d)
     elif isinstance(tp, list):
         save_zarr(tp, cfg.TOPICS_IDX, ZarrKey.topics, reset=True)
         TOPICS = None

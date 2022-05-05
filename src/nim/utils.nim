@@ -205,6 +205,7 @@ proc findel*(tree: XmlNode, t: string): XmlNode =
         if el.tag == t:
             return el
 
+
 proc key*(s: string): array[5, byte] =
     case s.len
         of 0: result = default(array[5, byte])
@@ -213,6 +214,10 @@ proc key*(s: string): array[5, byte] =
             result = cast[array[5, byte]]([s[0], s[ln /% 4], s[ln /% 3], s[ln /% 2], s[ln - 1]])
 
 
+proc getParam*(q: string, param: string): string =
+    for (k, v) in q.decodeQuery():
+        if k == param:
+            return v
 
 proc mergeUri*(dst: ref Uri, src: Uri): ref Uri =
     ## Assign parts of `src` Uri over to `dst` Uri.
@@ -268,12 +273,11 @@ iterator preorder*(tree: VNode): VNode =
                     stack.add(c)
                 yield node
 
-proc find*(node: VNode, kind: VNodeKind): VNode =
+proc last*(node: VNode, kind: VNodeKind): VNode =
     for n in node.preorder():
         if n.kind == kind:
             return n
     return node
-
 
 proc clear*(node: VNode) =
     privateAccess(VNode)
@@ -310,6 +314,23 @@ iterator flatorder*(tree: var XmlNode): XmlNode {.closure.} =
             for e in po(el):
                 yield e
         yield el
+
+iterator vflatorder*(tree: VNode): VNode {.closure.} =
+    for el in items(tree):
+        if len(el) > 0:
+            {.cast(gcsafe).}:
+                let po = vflatorder
+                for e in po(el):
+                    yield e
+        yield el
+
+proc first*(node: VNode, kind: VNodeKind): VNode {.gcsafe.} =
+    for n in node.vflatorder():
+        if n.kind == kind:
+            return n
+    return node
+
+template find*(node: VNode, kind: VNodeKind): VNode = first(node, kind)
 
 proc initStyle*(path: string): VNode =
     result = newVNode(VNodeKind.style)
@@ -359,6 +380,7 @@ proc setText*(el: VNode, v: auto) =
             else:
                 el.setAttr("title", v)
 
+{.push inline.}
 proc hasAttr*(el: VNode, k: string): bool =
     for (i, v) in el.attrs:
         if k == i:
@@ -367,7 +389,17 @@ proc hasAttr*(el: VNode, k: string): bool =
 
 proc hasAttr*(el: XmlNode, k: string): bool = (not el.attrs.isnil) and el.attrs.haskey k
 proc getAttr*(el: XmlNode, k: string): string = el.attrs[k]
+proc getAttr*(el: XmlNode, k: string, v: string): string =
+    if el.hasAttr(k):
+        el.getAttr(k)
+    else:
+        v
 proc setAttr*(el: XmlNode, k: string, v: auto) = el.attrs[k] = v
+proc findclass*(tree: XmlNode, cls: string): XmlNode =
+    for el in preorder(tree):
+        if el.kind == xnElement and cls in el.getAttr("class", ""):
+            return el
+{.pop inline.}
 
 import std/[macros, genasts]
 
@@ -398,6 +430,10 @@ type LDjson* = enum ldjson = "application/ld+json"
 proc isLink*(el: VNode, tp: Link): bool {.inline.} = el.getAttr("rel") == $tp
 
 proc isSomething*(s: string): bool {.inline.} = not s.isEmptyOrWhitespace
+proc something*[T](arr: varargs[T]): T =
+    for el in arr:
+        if el != default(T):
+            return el
 
 proc replaceTilNoChange(input: var auto, pattern, repl: auto): string =
     while pattern in input:

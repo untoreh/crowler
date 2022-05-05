@@ -9,7 +9,7 @@ template lockedStore*(name: untyped): untyped {.dirty.} =
         `Lock name`*[K, V] = ptr `Lock name Obj`[K, V]
 
     proc `lock name Impl`*[K, V](store: name[K, V]): `Lock name`[K, V] =
-        result = create(`Lock name Obj`[K, V])
+        result = createShared(`Lock name Obj`[K, V])
         initLock(result.lock)
         withLock(result.lock):
             result.storage = store

@@ -28,7 +28,7 @@ var tFuncCache* {.threadvar.}: ptr Table[(service, langpair), TFunc]
 
 proc initTFuncCache*() =
     if tFuncCache.isnil:
-        tFuncCache = create(Table[(service, langpair), TFunc])
+        tFuncCache = createShared(Table[(service, langpair), TFunc])
 
 proc ensurePy(srv: service): PyObject =
     try:
@@ -83,6 +83,16 @@ template pySafeCall(code: untyped): untyped =
         slator.lock.release()
     debug "pysafe: lock released"
 
+proc getProxies(srv: service = deep_translator): auto =
+    case srv:
+        of deep_translator:
+            if USE_PROXIES:
+                debug "trsrv: enabling proxies with endpoint {PROXY_EP}"
+                {"https": PROXY_EP, "http": PROXY_EP}.to_table
+            else:
+                {"https": "", "http": ""}.to_table
+
+
 proc initTranslator*(srv: service = default_service, provider: string = "", source: Lang = SLang,
         targets: HashSet[Lang] = TLangs): Translator =
     var py = ensurePy(srv)
@@ -96,15 +106,12 @@ proc initTranslator*(srv: service = default_service, provider: string = "", sour
             result.name = srv
             let prov = if provider == "": "GoogleTranslator" else: provider
             assert prov in result.apis
+            result.provider = prov
             let
                 provFn = result.py.getattr(prov)
                 src = source.code
                 cls = provFn()
-                proxies = if USE_PROXIES:
-                              debug "trsrv: enabling proxies with endpoint {PROXY_EP}"
-                              {"https": PROXY_EP, "http": PROXY_EP}.to_table
-                          else:
-                              {"https": "", "http": ""}.to_table
+                proxies = getProxies(srv)
             for l in targets:
                 for suplang in cls.languages.values():
                     let sl = suplang.to(string)
@@ -114,6 +121,7 @@ proc initTranslator*(srv: service = default_service, provider: string = "", sour
 
 let slatorObj = initTranslator()
 let slator* = slatorObj.unsafeAddr
+
 
 proc deepTranslatorFunc(src: string, lang: langPair): string {.gcsafe.} =
     # NOTE: using `slator` inside the closure is fine since it always outlives the closure
@@ -155,8 +163,16 @@ proc deepTranslatorFunc(src: string, lang: langPair): string {.gcsafe.} =
     except Exception as e:
         raise newException(ValueError, fmt"Translation failed with error: {e.msg}")
 
+proc setPairFun*(pair: langPair) =
+    case slator.name:
+        of deep_translator:
+            let provfn = slator.py.getattr(slator[].provider)
+            slator.tr[pair] = provfn(source = pair.src, target = pair.trg, proxies = getProxies(deep_translator))
+
 proc getTfun*(lang: langPair): TFunc =
     case slator.name:
         of deep_translator:
+            if not (lang in slator[].tr):
+                setPairFun(lang)
             deepTranslatorFunc
         else: (src: string, lang: langPair) => src

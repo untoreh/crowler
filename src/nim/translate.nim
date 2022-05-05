@@ -300,12 +300,12 @@ proc fileWise(path, exclusions, rx_file, langpairs: auto, target_path = "") =
 
 proc initThread*() =
     initPunctRgx()
-    initTrans()
     if vbtmcache.isnil:
         vbtmcache = newLRUCache[array[5, byte], XmlNode](32)
     initSentsRgx()
     initGlues()
     initQueueCache()
+    initSlations()
     dotsRgx = re"^\.?\.?"
 
 proc exitThread() =

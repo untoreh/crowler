@@ -4,7 +4,7 @@ from retry import retry
 import sys, os
 from multiprocessing.pool import ThreadPool
 from random import shuffle
-from log import logger, LoggerLevel
+from log import logger, LoggerLevel, logger_level
 
 from proxies import set_socket_timeout
 
@@ -70,11 +70,13 @@ def single_search(kw, engine, pages=1, timeout=cfg.REQ_TIMEOUT, category=""):
             if p == 0:
                 raise ValueError(engine)
         else:
-            RESULTS[engine].extend(res)
+            filtered = exclude_blacklist(res)
+            RESULTS[engine].extend(filtered)
 
 
 def try_search(*args, **kwargs):
     try:
+        logger.info("Processing single search...")
         with LoggerLevel():
             single_search(*args, **kwargs)
     except Exception as e:

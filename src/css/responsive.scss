@@ -20,10 +20,10 @@ html {
 }
 
 @media (min-width: 361px) and (max-width: 460px) {
-  .search-bar .search-field {
-    display: flex;
-    flex-direction: row-reverse;
-  }
+  // .search-bar .search-field {
+  //   display: flex;
+  //   flex-direction: row-reverse;
+  // }
   .app-bar-logo.right {
     display: initial;
   }
@@ -38,9 +38,6 @@ html {
   }
   .app-bar-logo.left {
     display: initial;
-  }
-  .menu-list li.search {
-    display: none;
   }
 }
 
@@ -68,6 +65,9 @@ html {
 }
 
 @media (min-width: 769px) {
+  .app-bar-topics {
+    display: flex;
+  }
   .light .app-bar-logo .logo-light-wrap,
   .dark .app-bar-logo .logo-dark-wrap {
     display: initial;

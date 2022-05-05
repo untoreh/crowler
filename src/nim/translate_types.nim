@@ -27,6 +27,7 @@ type
         py*: PyObject
         tr*: ServiceTable
         apis*: HashSet[string]
+        provider*: string # must belong in `apis`
         name*: service
         lock*: Lock
     Translator* = ref TranslatorObj
@@ -101,6 +102,7 @@ proc `$`*(t: Translator): string =
     let langs = collect(for k in keys(t.tr): k)
     fmt"Translator: {t.name}, to langs ({len(langs)}): {langs}"
 
+
 proc initLang*(name: string, code: string): Lang =
     result.name = name
     result.code = code
@@ -114,11 +116,9 @@ proc toLangTable(langs: HashSet[Lang]): Table[string, string] =
     for (name, code) in langs:
         result[code] = name
 
-
-
 const
     SLang* = initLang("English", "en")
-    TLangs* = toTLangs [
+    TLangs* = toTLangs [ ## TLangs are all the target languages, the Source language is not included
         ("German", "de"),
         ("Italian", "it"),
         ("Mandarin Chinese", "zh-CN"),
@@ -151,6 +151,9 @@ const
     TLangsCodes* = static(collect(for (name, code) in TLangs: code))
     RTL_LANGS* = ["yi", "he", "ar", "fa", "ur", "az", "dv", ].toHashSet
 
+proc initLang*(code: string): Lang =
+    result.code = code
+    result.name = TLangsTable[code]
 
 proc srcLangName*(lang: langPair): string = TLangsTable[lang.src]
 

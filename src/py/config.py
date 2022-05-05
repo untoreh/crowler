@@ -72,3 +72,5 @@ PROFANITY_THRESHOLD = 0.5
 # The maximum number of articles/feeds to store `unprocessed` for each topic
 # When cap is reached queue gets discarded as FIFO.
 MAX_BACKLOG_SIZE = 100
+
+BLACKLIST_PATH = DATA_DIR / "blacklist.txt"

@@ -4,12 +4,17 @@ import json
 import os
 import shutil
 import argparse
+import time
 from pathlib import Path
+
+from searx.shared.shared_simple import schedule
 
 import config as cfg
 import contents as cnt
 import sources
 import utils as ut
+import scheduler
+import blacklist
 from log import logger
 from datetime import datetime
 
@@ -44,14 +49,41 @@ def run_sources_job(topic):
     This function should never be called directly, instead `parse1` should use it when it runs out of sources.
     """
     logger.info("Getting kw batch...")
+    scheduler.initPool()
     batch = get_kw_batch(topic)
     root = cfg.TOPICS_DIR / topic / "sources"
+    results = dict()
+    jobs = dict()
+    ready = dict()
     for (n, kw) in enumerate(batch):
-        logger.info("Finding sources for keyword %s (%d/%d).", kw, n, cfg.KW_SAMPLE_SIZE)
-        results = sources.fromkeyword(kw, n_engines=3)
-        if results:
-            ut.save_file(results, ut.slugify(kw), root=root)
-
+        logger.info("Keywords: %d/%d.", n, cfg.KW_SAMPLE_SIZE)
+        kwjobs = sources.fromkeyword_async(kw, n_engines=3)
+        jobs[kw] = kwjobs
+        results[kw] = []
+        ready[kw] = 0
+    start = time.time()
+    while len(jobs) > 0:
+        logger.debug(f"Remaining kws: {len(jobs)}")
+        if time.time() - start > cfg.KW_SEARCH_TIMEOUT:
+            logger.debug("Timing out kw search..")
+            break
+        for kw in ready.keys():
+            if kw in jobs:
+                kwjobs = jobs[kw]
+                for (n, j) in enumerate(kwjobs):
+                    if j.ready():
+                        res = j.get()
+                        results[kw].extend(res)
+                        ready[kw] += 1
+            if ready[kw] == 3 and ready[kw] >= 0:
+                kwresults = blacklist.exclude_blacklist_sources(results[kw])
+                kwresults = sources.dedup_results(kwresults)
+                if kwresults:
+                    ut.save_file(kwresults, ut.slugify(kw), root=root)
+                del jobs[kw]
+                ready[kw] = -1
+                logger.debug(f"Processed kw: {kw}")
+            time.sleep(0.25)
 
 def get_kw_sources(topic, remove=cfg.REMOVE_SOURCES):
     root = cfg.TOPICS_DIR / topic / "sources"
@@ -169,7 +201,7 @@ if __name__ == "__main__":
     parser.add_argument("-workers", help="How many workers.", default=cfg.POOL_SIZE)
     parser.add_argument("-server", help="Start the server.", default=cfg.POOL_SIZE)
     args = parser.parse_args()
-    cfg.POOL_SIZE = args.workers
+    cfg.POOL_SIZE = int(args.workers)
     topics = args.topics.split(",")
     if topics:
         for tp in topics:

@@ -49,7 +49,7 @@ def setproxies(p=STATIC_PROXY_EP):
 
 REQ_TIMEOUT = 20
 # How many concurrent requests
-POOL_SIZE = 8
+POOL_SIZE = os.cpu_count()
 
 DATA_DIR = Path(os.path.realpath("../../data"))
 assert isdir(Path(dirname(DATA_DIR)) / ".venv")
@@ -59,8 +59,10 @@ TOPICS_IDX = TOPICS_DIR / "index"
 KW_HISTORY = "history"
 # how many keywords to try for extracting source links from search engines
 KW_SAMPLE_SIZE = 10
+# How much should a source job take
+KW_SEARCH_TIMEOUT = 60
 # how many source links to process for extracting feeds and articles
-SRC_MAX_TRIES = 5
+SRC_MAX_TRIES = 2
 REMOVE_SOURCES = json.loads(os.getenv("REMOVE_SOURCES", "true").lower())
 REQ_CACHE_DIR = DATA_DIR / "cache"
 

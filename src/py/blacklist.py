@@ -21,8 +21,12 @@ def exclude(k):
     else:
         return u.hostname not in BLACKLIST
 
+def exclude_sources(k): return exclude(k["url"])
 
-def exclude_blacklist(data: MutableSequence) -> MutableSequence:
+def exclude_blacklist(data: MutableSequence, f=exclude) -> MutableSequence:
     if BLACKLIST is None:
         load_blacklist()
-    return list(filter(exclude, data))
+    return list(filter(f, data))
+
+def exclude_blacklist_sources(*args):
+    return exclude_blacklist(*args, f=exclude_sources)

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 #
+from ctypes import ArgumentError
 from pathlib import Path
 import json
 import os
@@ -9,7 +10,8 @@ import numpy as np
 from re import finditer
 from enum import Enum
 from time import sleep
-from typing import MutableSequence, Optional, Set
+from typing import MutableSequence, Optional, TypeAlias, Union, Tuple, List, Dict
+from distutils.util import strtobool
 
 from cachetools import LRUCache
 import numcodecs
@@ -25,8 +27,10 @@ from zict import Func, LRU
 compressor = Blosc(cname="zstd", clevel=2, shuffle=Blosc.BITSHUFFLE)
 codec = numcodecs.Pickle()
 TOPICS: Optional[za.Array] = None
-TPSET: Set[str] = set()
+TPDICT: Dict[str, str] = dict()
 PUBCACHE = LRUCache(2**20)
+OVERWRITE_FLAG = strtobool(os.getenv("RESET_ARTICLES", "False"))
+
 
 def init_lru(n=1000):
     zict_storage = za.DirectoryStore(cfg.REQ_CACHE_DIR)
@@ -159,11 +163,12 @@ class ZarrKey(Enum):
 def _wrap_path(root):
     return os.path.normpath(os.path.sep + str(root) + os.path.sep)
 
+
 def save_zarr(
     contents,
     root,
     k: ZarrKey = ZarrKey.articles,
-    subk = "",
+    subk="",
     reset=False,
 ):
     if len(contents) > cfg.MAX_BACKLOG_SIZE:
@@ -175,10 +180,21 @@ def save_zarr(
     # append to existing array or create new one
     if not reset:
         # NOTE: there might be some recursion going on here :)
-        z = load_zarr(k, subk=subk, root=root)
+        try:
+            # print(f"loading zarr: {k}, subk: {subk}, root: {root}")
+            z = load_zarr(k, subk=subk, root=root)
+        except Exception as e:
+            if isinstance(e, TypeError):
+                # print("loading zarr: type error")
+                z = load_zarr(k, subk=subk, root=root, overwrite=True)
+            else:
+                # logger.warning(f"Couldn't save content root: '{root}', k: '{k}', subk: '{subk}'")
+                raise e
         max_append = cfg.MAX_BACKLOG_SIZE - len(z)
         if len(data) > max_append:
+            # print(f"loading zarr: resizing data to {max_append}")
             data = data[-max_append:]
+        # print(f"loading zarr: appending {len(data)} elements")
         z.append(data)
     else:
         store = za.DirectoryStore(_wrap_path(root))
@@ -195,14 +211,39 @@ def save_zarr(
         )
 
 
+def load_articles(topic_path=None, topic=None, k=ZarrKey.articles):
+    if topic_path is None:
+        if topic is None:
+            raise ArgumentError(
+                "Specify either topic or topic_path to load published articles."
+            )
+        else:
+            topic_path = cfg.TOPICS_DIR / topic
+    return load_zarr(k=k, subk="", root=topic_path)
+
+
+def load_done(*args, **kwargs):
+    kwargs["k"] = ZarrKey.done
+    return load_articles(*args, **kwargs)
+
+
 def save_done(topic: str, n_processed: int, done: MutableSequence, pagenum):
     """This function is called from nim, after publishing articles."""
+    assert topic != ""
     topic_path = cfg.TOPICS_DIR / topic
-    saved_articles = load_zarr(k=ZarrKey.articles, root=topic_path)
+    saved_articles = load_articles(topic_path)
     if saved_articles.shape is not None:
         n_saved = saved_articles.shape[0]
-        saved_articles.resize(n_saved - n_processed)
+        newsize = n_saved - n_processed
+        assert newsize >= 0
+        saved_articles.resize(newsize)
     save_zarr(done, k=ZarrKey.done, subk=pagenum, root=topic_path)
+
+
+def save_articles(arts: List[dict], topic: str, reset=False):
+    topic_path = cfg.TOPICS_DIR / topic
+    save_zarr(arts, k=ZarrKey.articles, root=topic_path, reset=reset)
+
 
 def update_page_size(topic: str, idx: int, val, final=False):
     assert idx >= 0
@@ -215,6 +256,7 @@ def update_page_size(topic: str, idx: int, val, final=False):
         pages.resize(idx + 1)
     pages[idx] = (val, final)
 
+
 def get_page_size(topic: str, idx: int):
     assert idx >= 0
     topic_path = cfg.TOPICS_DIR / topic
@@ -226,15 +268,10 @@ def get_page_size(topic: str, idx: int):
         return None
     return pages[idx]
 
-def get_top_page(topic: str):
-    topic_path = cfg.TOPICS_DIR / topic
-    pages = load_zarr(k=ZarrKey.pages, root=topic_path)
-    top = len(pages) - 1
-    if top == -1:
-        return 0
-    return top
 
-def load_zarr(k=ZarrKey.articles, subk="", root=cfg.DATA_DIR, dims=1):
+def load_zarr(
+    k=ZarrKey.articles, subk="", root=cfg.DATA_DIR, dims=1, overwrite=OVERWRITE_FLAG
+):
     path = ZarrKey(k).name
     if subk != "":
         path += f"/{subk}"
@@ -244,13 +281,19 @@ def load_zarr(k=ZarrKey.articles, subk="", root=cfg.DATA_DIR, dims=1):
     except KeyError:
         store = za.DirectoryStore(_wrap_path(root))
         try:
-            z = PUBCACHE[cache_key] = za.open_array(store=store, path=path)
+            z = PUBCACHE[cache_key] = za.open_array(store=store, path=path, mode="a")
             return z
-        except (OSError, ValueError, TypeError):
-            stub = np.empty(tuple(0 for _ in range(dims)))
-            save_zarr(stub, root, k, subk, reset=True)
-            z = PUBCACHE[cache_key] = za.open_array(store=store, path=path)
-            return z
+        except (OSError, ValueError, TypeError) as e:
+            if not overwrite:
+                raise e
+            else:
+                stub = np.empty(tuple(0 for _ in range(dims)))
+                save_zarr(stub, root, k, subk, reset=True)
+                z = PUBCACHE[cache_key] = za.open_array(
+                    store=store, path=path, mode="a"
+                )
+                return z
+
 
 def topic_group(topic, root=cfg.TOPICS_DIR):
     cache_key = (topic, root)
@@ -259,43 +302,100 @@ def topic_group(topic, root=cfg.TOPICS_DIR):
     except KeyError:
         file_path = get_file_path(Path(topic), root, ext=None, as_json=False)
         if os.path.exists(file_path):
-            g = PUBCACHE[cache_key] = za.open_group(file_path)
+            g = PUBCACHE[cache_key] = za.open_group(file_path, mode="a")
+            assert isinstance(g, za.Group)
             return g
         else:
-            return None
+            raise ValueError("topics: Could'nt fetch topic group")
 
-def get_topic(tp, **kwargs): return topic_group(tp, **kwargs)
 
-def reset_topic(topic: str):
+def get_topic(tp, **kwargs):
+    return topic_group(tp, **kwargs)
+
+
+def reset_topic_data(topic: str):
+    assert topic != ""
     grp = topic_group(topic)
-    done = grp["done"]
-    assert isinstance(done, za.Group)
-    done.clear()
-    pages = grp["pages"]
-    assert isinstance(pages, za.Array)
-    pages.resize(0)
+    assert isinstance(grp, za.Group)
+    if "done" in grp:
+        done = grp["done"]
+        assert isinstance(done, za.Group)
+        done.clear()
+    else:
+        save_zarr([], k=ZarrKey.done, subk="0", root=(cfg.TOPICS_DIR / topic))
+    if "pages" in grp:
+        pages = grp["pages"]
+        assert isinstance(pages, za.Array)
+        pages.resize(0)
+
 
 def load_topics():
-    global TOPICS, TPSET
+    global TOPICS, TPDICT
     if TOPICS is None:
         TOPICS = load_zarr(k=ZarrKey.topics, root=cfg.TOPICS_IDX, dims=2)
         if TOPICS is None:
             raise IOError("Couldn't load topics.")
-        TPSET = set(TOPICS[:].flatten())
-    return (TOPICS, TPSET)
+        TPDICT = dict(zip(TOPICS[:, 0], TOPICS[:, 1]))
+    return (TOPICS, TPDICT)
 
-def save_topics(tp):
-    global TOPICS, TPSET
-    if isinstance(tp, tuple):
-        (topics, tpset) = load_topics()
-        for t in tp:
-            d = np.asarray(t)
-            topics.append(d)
-            tpset.add(d)
-    elif isinstance(tp, list):
-        save_zarr(tp, cfg.TOPICS_IDX, ZarrKey.topics, reset=True)
-        TOPICS = None
-        TPSET = set()
+
+TopicsList: TypeAlias = List[Tuple[str, str]]
+
+
+def add_topics_idx(tp: TopicsList):
+    global TOPICS, TPDICT
+    assert isinstance(tp, list)
+    (topics, tpset) = load_topics()
+    for t in tp:
+        d = np.asarray(t)
+        topics.append(d)
+        tpset[t[0]] = t[1]
+
+
+def reset_topics_idx(tp):
+    global TOPICS, TPDICT
+    assert isinstance(tp, list)
+    tp = np.asarray(tp)
+    save_zarr(tp, cfg.TOPICS_IDX, ZarrKey.topics, reset=True)
+    TOPICS = None
+    TPDICT = dict()
+
+
+def _count_top_page(pages):
+    top = len(pages) - 1
+    if top == -1:
+        return 0
+    return top
+
+
+def get_top_page(topic: str):
+    topic_path = cfg.TOPICS_DIR / topic
+    pages = load_zarr(k=ZarrKey.pages, root=topic_path)
+    return _count_top_page(pages)
+
+
+def get_top_articles(topic: str):
+    t = topic_group(topic)
+    pages = t[ZarrKey.pages.name]
+    assert isinstance(pages, za.Array)
+    if len(pages) > 0:
+        n_articles = pages[-1][0]
+        return t[ZarrKey.articles.name][-n_articles:]
     else:
-        raise ValueError
+        return np.empty(0)
 
+
+def get_topic_desc(topic: str):
+    return TPDICT[topic]
+
+
+def iter_topic_articles(topic: str):
+    tg = topic_group(topic)
+    # previous pages
+    for pagenum in tg[ZarrKey.done.name]:
+        done = load_done()
+        for a in done:
+            yield a
+    # last page
+    for a in tg[ZarrKey.articles.name]:
+        yield a

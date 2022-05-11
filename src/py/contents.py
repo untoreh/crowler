@@ -4,7 +4,8 @@ from typing import List
 
 import articles as art
 import config as cfg
-from py.blacklist import exclude_blacklist
+from blacklist import exclude_blacklist
+import scheduler as sched
 import utils as ut
 from log import logger
 
@@ -58,23 +59,23 @@ def parsefeed(f):
 def fromsources(sources, topic, n=cfg.POOL_SIZE, use_proxies=True):
     """Create list of feeds from a subset of links found in the source file, according to SRC_SAMPLE_SIZE."""
     global FEEDS, ARTICLES
+    sched.initPool()
     FEEDS = []
     ARTICLES = []
     if use_proxies:
         cfg.setproxies()
     jobs = []
     logger.info("Starting to collect articles/feeds from %d sources.", len(sources))
-    with ThreadPool(processes=n) as pool:
-        for entry in sources:
-            url = entry.get("url")
-            if not url:
-                continue
-            logger.info("Fetching articles/feeds from %s", url)
-            j = pool.apply_async(parsesource, args=(url, topic))
-            jobs.append(j)
-        for n, j in enumerate(jobs):
-            j.wait()
-            logger.info("Waiting for job: %s.", n)
+    for entry in sources:
+        url = entry.get("url")
+        if not url:
+            continue
+        logger.info("Fetching articles/feeds from %s", url)
+        j = sched.apply(parsesource, url, topic)
+        jobs.append(j)
+    for n, j in enumerate(jobs):
+        j.wait()
+        logger.info("Waiting for job: %s.", n)
 
     if use_proxies:
         cfg.setproxies()
@@ -92,22 +93,22 @@ def fromsources(sources, topic, n=cfg.POOL_SIZE, use_proxies=True):
 def fromfeeds(sources, n=cfg.POOL_SIZE, use_proxies=True):
     """Create list of feeds from a subset of links found in the source file, according to SRC_SAMPLE_SIZE."""
     global ARTICLES
+    sched.initPool()
     ARTICLES = []
     if use_proxies:
         cfg.setproxies()
     jobs = []
-    with ThreadPool(processes=n) as pool:
-        for entry in sources:
-            url = entry.get("url")
-            topic = entry.get("topic")
-            if not url:
-                continue
-            logger.info("Fetching articles from %s", url)
-            j = pool.apply_async(parsearticle, args=(url, topic))
-            jobs.append(j)
-        for n, j in enumerate(jobs):
-            j.wait()
-            logger.info("Waiting for job: %s.", n)
+    for entry in sources:
+        url = entry.get("url")
+        topic = entry.get("topic")
+        if not url:
+            continue
+        logger.info("Fetching articles from %s", url)
+        j = pool.apply(parsearticle, url, topic)
+        jobs.append(j)
+    for n, j in enumerate(jobs):
+        j.wait()
+        logger.info("Waiting for job: %s.", n)
 
     if use_proxies:
         cfg.setproxies()

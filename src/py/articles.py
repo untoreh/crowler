@@ -16,10 +16,18 @@ with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     from profanity_check import predict_prob
 
-if not spacy.util.get_installed_models():
-    cfg.setproxies(None)
-    spacy.cli.download(cfg.SPACY_MODEL)
-    cfg.setproxies()
+def check_spacy_model():
+    info: dict = spacy.info()
+    pp = info.get("pipelines", dict())
+    model_version = pp.get(cfg.SPACY_MODEL, "")
+    spacy_version = info.get("spacy_version", "")
+    assert spacy_version != ""
+    if model_version != spacy_version:
+        cfg.setproxies(None)
+        spacy.cli.download(cfg.SPACY_MODEL)
+        cfg.setproxies()
+
+check_spacy_model()
 
 gs = Goose()
 

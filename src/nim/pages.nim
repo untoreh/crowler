@@ -20,7 +20,9 @@ import cfg,
        translate,
        translate_lang,
        amp,
-       search
+       search,
+       topics,
+       articles
 
 const tplRep = @{"WEBSITE_DOMAIN": WEBSITE_DOMAIN}
 const ppRep = @{"WEBSITE_URL": $WEBSITE_URL.combine(),
@@ -129,6 +131,24 @@ proc buildShortPosts*(arts: seq[Article], homepage = false): string =
     for a in arts:
         result.add $articleEntry(a)
 
+proc homePage(): VNode =
+    syncTopics()
+    # for (k, t) in topicsCache:
+    #     echo t.group[$topicData.pages]
+
+template topicPage*(topic: string, pagenum: string, istop = false) {.dirty.} =
+    ## Writes a single page (fetching its related articles, if its not a template) to storage
+    let arts = getDoneArticles(topic, pagenum = pagenum.parseInt)
+    let content = buildShortPosts(arts)
+    # if the page is not finalized, it is the homepage
+    let
+        footer = pageFooter(topic, pagenum, istop)
+        pagetree = buildPage(title = "",
+                         content = content,
+                         slug = pagenum,
+                         pagefooter = footer,
+                         topic = topic)
+
 {.push gcsafe.}
 proc processPage*(lang, amp: string, tree: VNode): VNode =
     if lang in TLangsCodes:
@@ -146,7 +166,41 @@ proc processPage*(lang, amp: string, tree: VNode): VNode =
         debug "page: amping"
         result = result.ampPage
 
-proc articleHtml*(donearts: PyObject, capts: auto): string {.gcsafe.} =
+proc fromSearchResult(topic: string, pslug: string): Article =
+    let
+        s = pslug.split("/")
+        page = s[0]
+        slug = s[1]
+
+    getArticle(topic, page, slug)
+
+proc buildRelated*(a: Article): VNode =
+    var kws: seq[string]
+    for tag in a.tags:
+        kws.add strutils.split(tag)
+    kws.add(strutils.split(a.title))
+    result = newVNode(VNodeKind.ul)
+    result.setAttr("class", "related-posts")
+    var c = 0
+    for kw in kws:
+        if kw.len < 3:
+            continue
+        let sgs = query(a.topic, kw.toLower, limit=1)
+        if sgs.len > 0:
+            let ar = a.topic.fromSearchResult(sgs[0])
+            let
+                entry = newVNode(li)
+                link = newVNode(VNodeKind.a)
+                img = buildImgUrl(a.imageUrl, a.url, "related-img")
+            link.setAttr("href", getArticleUrl(ar))
+            entry.add img
+            entry.add link
+            result.add entry
+            c += 1
+        if c > cfg.N_RELATED:
+            break
+
+proc articleHtml*(capts: auto): string {.gcsafe.} =
     # every article is under a page number
     let py = getArticlePy(capts.topic, capts.page, capts.art)
     if not pyisnone(py):
@@ -161,6 +215,7 @@ proc buildHomePage*(lang, amp: string): (VNode, VNode) =
     let tree = buildPage("Home Page", "")
     (tree, processPage(lang, amp, tree))
 
+
 proc buildSearchPage*(topic: string, kws: string, lang: string): string =
     ## Builds a search page with 10 entries
     debug "search: lang:{lang}, topic:{topic}, kws:{kws}"
@@ -174,11 +229,7 @@ proc buildSearchPage*(topic: string, kws: string, lang: string): string =
         content.add $r
     else:
         for pslug in pslugs:
-            let
-                s = pslug.split("/")
-                page = s[0]
-                slug = s[1]
-                ar = getArticle(topic, page, slug)
+            let ar = topic.fromSearchResult(pslug)
             content.add $articleEntry(ar)
     let
         footer = pageFooter(topic, "s", false)
@@ -202,3 +253,13 @@ proc buildSuggestList*(topic, input: string): string =
 
 
 {.pop gcsafe.}
+
+when isMainModule:
+    discard
+    # echo homePage()
+    # let topic = "vps"
+    # let page = buildHomePage("en", "")
+    # page.writeHtml(SITE_PATH / "index.html")
+    # initSonic()
+    # let argt = getLastArticles(topic)
+    # echo buildRelated(argt[0])

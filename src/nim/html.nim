@@ -29,7 +29,9 @@ import cfg,
        ldj,
        shorturls,
        topics,
-       quirks # PySequence requires quirks
+       quirks, # PySequence requires quirks
+       cache,
+       articles
 
 static: echo "loading html..."
 
@@ -42,8 +44,6 @@ proc initHtml*() =
     try:
         preline_style = style(preline)
         rtime = $now()
-        wsRgx = re"[^\w\s-]"
-        hypRgx = re"[-\s]+"
         initZstd()
     except:
         qdebug "Could not initialize html vars {getCurrentExceptionMsg()}"
@@ -54,20 +54,12 @@ template kxi*(): int = 0
 template addEventHandler*(n: VNode; k: EventKind; action: string; kxi: int) =
     n.setAttr($k, action)
 
-const stripchars = ["-".runeAt(0), "_".runeAt(0)]
-
 proc icon*(name: string; txt = ""; cls = ""): VNode =
-    buildHtml(span(class = ("mdc-ripple-surface " & cls))):
+    buildHtml(span(class = cls)):
         italic(class = "material-icons"):
             text name
         text txt
 
-proc slugify*(value: string): string =
-    ## Slugifies an unicode string
-
-    result = toNFKC(value).toLower()
-    result = result.replace(wsRgx, "")
-    result = result.replace(hypRgx, "-").strip(runes = stripchars)
 
 const mdc_button_classes = "material-icons mdc-top-app-bar__action-item mdc-icon-button"
 
@@ -178,20 +170,19 @@ proc buildDrawer(a: Article; site: VNode): VNode =
             site
         label(class = "pure-overlay", `for` = "pure-toggle-left", data_overlay = "left")
 
-proc buildImgUrl*(url: string; cls = "image-link"): VNode =
+proc buildImgUrl*(url: string; origin: string; cls = "image-link"): VNode =
     var srcsetstr, bsrc: string
     if url != "":
-        let burl = url.toBstring
+        # add `?` because chromium doesn't treat it as a string otherwise
+        let burl = "?" & url.toBString(true)
         bsrc = $(WEBSITE_URL_IMG / IMG_SIZES[1] / burl)
         for (view, size) in zip(IMG_VIEWPORT, IMG_SIZES):
-            srcsetstr.add "///" & $(WEBSITE_URL_IMG / size / burl)
+            srcsetstr.add "//" & $(WEBSITE_URL_IMG / size / burl)
             srcsetstr.add " " & view & ","
-    buildHtml(a(class = cls, href = url, alt = "post image source")):
+    buildHtml(a(class = cls, href = origin, target="_blank", alt = "post image source")):
         # the `alt="image"` is used to display the material-icons placeholder
         img(class = "material-icons", src = bsrc, srcset = srcsetstr, alt = "image",
                 loading = "lazy")
-
-
 
 proc buildSearch(action: string; withButton = true): VNode =
     buildHtml(form(`method` = "get", action = (action & "/s/"), class = "search")):
@@ -220,11 +211,12 @@ proc buildMenuSmall*(crumbs: string; topic_uri: Uri; path: string): VNode {.gcsa
             # Topics
             ul(class = "menu-list-topics"):
                 for tpc in loadTopics(MENU_TOPICS):
+                    let topic_name = $tpc[0]
                     li(class = "menu-topic-item mdc-icon-button"):
                         tdiv(class = "mdc-icon-button__ripple")
-                        a(href = ($(WEBSITE_URL / $tpc)), title = ($tpc)):
+                        a(href = ($(WEBSITE_URL / topic_name)), title = ($tpc)):
                             # only use the first letter
-                            text $($tpc).runeAt(0).toUpper # loadTopics iterator returns pyobjects
+                            text $topic_name.runeAt(0).toUpper # loadTopics iterator returns pyobjects
                         br()
 
 proc buildMenuSmall*(crumbs: string; topic_uri: Uri; a = emptyArt): VNode =
@@ -255,16 +247,18 @@ proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): VNode =
                 buildButton("brightness_4", "dk-toggle", aria_label = "toggle dark theme",
                             title = "Switch website color between dark and light theme.")
                 # Page location
-                a(class = "page mdc-top-app-bar__title mdc-ripple-surface",
+                a(class = "page mdc-ripple-button mdc-top-app-bar__title",
                   href = pathLink(path.parentDir, rel = false)):
-                    text crumbs
+                      tdiv(class="mdc-ripple-surface")
+                      text crumbs
                 # Topics list
                 ul(class = "app-bar-topics"):
                     for tpc in loadTopics(MENU_TOPICS):
+                        let topic_name = $tpc[0]
                         li(class = "topic-item mdc-icon-button"):
                             tdiv(class = "mdc-icon-button__ripple")
-                            a(href = ($(WEBSITE_URL / $tpc))):
-                                text $tpc # loadTopics iterator returns pyobjects
+                            a(href = ($(WEBSITE_URL / topic_name))):
+                                text topic_name # loadTopics iterator returns pyobjects
                             span(class = "separator")
             section(class = "mdc-top-app-bar__section mdc-top-app-bar__section--align-end",
                     role = "toolbar"):
@@ -279,14 +273,14 @@ proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): VNode =
 template buildMenu*(crumbs: string; topic_uri: Uri; a: Article): untyped =
     buildMenu(crumbs, topic_uri, a.getArticlePath)
 
-proc buildFooter*(): VNode =
+proc buildFooter*(topic: string = ""): VNode =
     buildHtml(tdiv(class = "site-footer container max border medium no-padding")):
         footer(class = "padding absolute blue white-text primary left bottom"):
             tdiv(class = "footer-links"):
-                a(href = "/sitemap.xml"):
+                a(href = ("/" & topic & "/sitemap.xml")):
                     text("Sitemap")
                 text " - "
-                a(href = "/feed.xml"):
+                a(href = ("/" & topic & "/feed.xml")):
                     text("RSS")
                 text " - "
                 a(href = "/dmca.html"):
@@ -314,7 +308,7 @@ proc postTitle(a: Article): VNode =
                     a(href = a.url):
                         img(src = a.icon, loading = "lazy", alt = "web", class = "material-icons")
                         text a.getAuthor
-        buildImgUrl(a.imageUrl)
+        buildImgUrl(a.imageUrl, origin=a.url)
 
 proc postContent(article: string): VNode =
     buildHtml(article(class = "post-wrapper")):
@@ -339,7 +333,9 @@ proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): VNode =
             postTitle(a)
             postContent(a.content)
             postFooter(a.pubdate)
-        buildFooter()
+        buildFooter(a.topic)
+        when defined(buildRelated):
+            buildRelated(a)
 
 proc pageTitle*(title: string; slug: string): VNode =
     buildHtml(tdiv(class = "title-wrap")):
@@ -366,13 +362,16 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
 
 const pageContent* = postContent
 
-proc asHtml*(data: auto): string {.inline.} = fmt"<!doctype html>{'\n'}{data}"
+proc asHtml*(data: auto): string {.inline.} = "<!doctype html>"&"\n" & $data
 
 proc writeHtml*(data: auto; path: string) {.inline.} =
     debug "writing html file to {path}"
     let dir = path.parentDir
     if not dir.existsDir:
-        createDir(dir)
+        try:
+            createDir(dir)
+        except IOError:
+            debug "Could not create directory {dir}, make sure sitepath '{SITE_PATH}' is not a dangling symlink"
     writeFile(path, data.asHtml)
 
 
@@ -382,15 +381,16 @@ proc processHtml*(relpath: string; slug: string; data: VNode; ar = emptyArt) =
     let
         path = SITE_PATH
         pagepath = relpath / slug & ".html"
-        fullpath = path / pagepath
+        fpath = path / pagepath
     when cfg.SERVER_MODE:
-        data.writeHtml(SITE_PATH / pagepath)
+        pageCache[fpath] = data.asHtml
+        # data.writeHtml(SITE_PATH / pagepath)
         return
     when cfg.TRANSLATION_ENABLED:
         withWeave(false):
             setupTranslation()
-            debug "calling translation with path {fullpath} and rx {rx_file.pattern}"
-            translateTree(data, fullpath, rx_file, langpairs, ar = ar)
+            debug "calling translation with path {fpath} and rx {rx_file.pattern}"
+            translateTree(data, fpath, rx_file, langpairs, ar = ar)
         for (code, n) in trOut:
             o.add (code / pagepath, n)
         trOut.clear()
@@ -413,7 +413,7 @@ proc processHtml*(relpath: string; slug: string; data: VNode; ar = emptyArt) =
         when cfg.YDX:
             turboItem(page, ar)
         when cfg.MINIFY:
-            ppage.minifyHtml.writeHtml(fullpath)
+            ppage.minifyHtml.writeHtml(fpath)
             when cfg.AMP:
                 ppage.minifyHtml.writeHtml(SITE_PATH / "amp" / pagepath)
         else:
@@ -448,7 +448,7 @@ proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode 
                 pageContent(content)
                 if not pagefooter.isNil():
                     pageFooter
-            buildFooter()
+            buildFooter(topic)
 
 proc buildPage*(title: string; content: string; pagefooter: VNode = static(VNode())): VNode =
     let slug = slugify(title)

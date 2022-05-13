@@ -1,7 +1,8 @@
 import
     zstd / [compress, decompress],
     hashes,
-    uri
+    uri,
+    os
 
 type BString* = string
 
@@ -28,11 +29,27 @@ proc toBString*(s: string): BString {.gcsafe.} =
     let v = compress(z.c, s, clevel)
     encodeUrl(cast[string](v))
 
+proc toBString*(s: string, _: static[bool]): BString {.gcsafe.} =
+    ## Keep file extension
+    let pos =  s.searchExtPos
+    if unlikely(pos == -1):
+        s.toBString
+    else:
+        let v = compress(z.c, s[0..<pos], clevel)
+        encodeUrl(cast[string](v) & s[pos..^1])
+
 proc toString*(s: BString): string {.gcsafe.} =
     let
         v = decodeUrl(s)
         dv = decompress(z.d, v)
     cast[string](dv)
+
+proc toString*(s: BString, _: static[bool]): string {.gcsafe.} =
+    let
+        v = decodeUrl(s)
+        pos = v.searchExtPos
+    let dv = decompress(z.d, v[0..<pos])
+    cast[string](dv) & v[pos..^1]
 
 converter asBString*(s: string): BString {.gcsafe.} = result = s
 

@@ -7,26 +7,35 @@ import
     sugar,
     os,
     lists,
-    std/enumerate
+    std/enumerate,
+    strformat
 
 import
     cfg,
     types,
     utils,
-    html_misc
+    html_misc,
+    cache,
+    articles,
+    topics
 
 type Feed = XmlNode
 
 template `attrs=`(node: XmlNode, code: untyped) =
     node.attrs = code.toXmlAttributes
 
-pragmaVars(XmlNode, threadvar, feed, rss, chann, channTitle, channLink, channDesc)
+var feed* {.threadvar.}: Feed
+threadVars((rss, chann, channTitle, channLink, channDesc, XmlNode))
 
 var feedLinkEl {.threadvar.}: VNode
+var topicFeeds* {.threadvar.}: LockLruCache[string, Feed]
+
+proc newFeed(): Feed = newElement("xml")
 
 proc initFeed*() {.gcsafe.} =
-    feed = newElement("xml")
-    feed.attrs = {"version": "1.0", "encoding": "UTF-8"}
+    topicFeeds = initLockLruCache[string, Feed](RSS_N_CACHE)
+    initCache()
+    feed = newFeed()
 
     rss = newElement("rss")
     rss.attrs = {"version": "2.0"}
@@ -50,82 +59,133 @@ proc initFeed*() {.gcsafe.} =
     feedLinkEl = newVNode(VNodeKind.link)
     feedLinkEl.setAttr("rel", "alternate")
 
-initFeed()
+proc drainChannel(chann: XmlNode): seq[XmlNode] {.sideEffect.} =
+    var n = 0
+    while chann.len > n:
+        let node = chann[n]
+        if node.tag == "item":
+            result.add node
+            chann.delete(n)
+        else:
+            n += 1
+
+proc clearChannel(chann: XmlNode) {.sideEffect.} =
+    var n = 0
+    while chann.len > n:
+        if chann[n].tag == "item":
+            chann.delete(n)
+        else:
+            n += 1
 
 proc articleItem(ar: Article): XmlNode =
     let item = newElement("item")
     let itemTitle = newElement("title")
-    itemTitle.add ar.title
+    itemTitle.add ar.title.escape
     item.add itemTitle
     let itemLink = newElement("link")
-    itemLink.add getArticleUrl(ar)
+    itemLink.add getArticleUrl(ar).escape
     item.add itemLink
     let itemDesc = newElement("description")
-    itemDesc.add ar.desc
+    itemDesc.add ar.desc.escape
     item.add itemDesc
     return item
 
-proc initFeed(path: string, title: string, description: string, arts: seq[Article]): XmlNode =
-    let topic = arts[0].topic
-    channTitle[0].text = title
-    channLink[0].text = $(WEBSITE_URL / path)
-    channDesc[0].text = description
+proc getTopicFeed*(topic: string, title: string, description: string, arts: seq[Article]): Feed =
+    chann.clearChannel()
+    channTitle[0].text = title.escape
+    channLink[0].text = ($(WEBSITE_URL / topic)).escape
+    channDesc[0].text = description.escape
     for ar in arts:
         chann.add articleItem(ar)
     deepCopy(feed)
-
-proc writeFeed*(path: string, fd: XmlNode = feed) =
-    debug "rss: writing feed to {path}/feed.xml"
-    writeFile(path / "feed.xml", $fd)
-
 
 proc feedLink*(title, path: string): VNode {.gcsafe.} =
     feedLinkEl.setAttr("title", title)
     feedLinkEl.setAttr("href", $(WEBSITE_URL / path))
     deepCopy(feedLinkEl)
 
-var topicFeeds: SharedTable[string, XmlNode]
-init(topicFeeds)
+proc feedKey*(topic: string): string = topic & "-feed.xml"
 
-proc fetchFeed(topic: string): XmlNode =
-    var tfeed: XmlNode
-    tfeed = topicFeeds.lgetOrPut(topic):
-        try:
-            loadXml(SITE_PATH / topic / "feed.xml")
-        except IOError:
-            initFeed()
-            deepcopy(feed)
-    topicFeeds.put(topic, tfeed)
-
-proc feedItems(chann: XmlNode): seq[XmlNode] {.sideEffect.} =
-    result = collect:
-        for (n, node) in enumerate(chann.items):
-            if node.tag == "item":
-                chann.delete(n)
-                node
-
-proc updateFeed*(topic: string, newArts: seq[Article], dowrite = false) =
+proc update*(tfeed: Feed, topic: string, newArts: seq[Article], dowrite = false) =
     ## Load existing feed for given topic and update the feed (in-memory)
     ## with the new articles provided, it does not write to storage.
+    assert not tfeed.isnil
     let
-        feed = topic.fetchFeed()
-        chann = feed.findel("channel")
-        itms = chann.feedItems
+        chann = tfeed.findel("channel")
+        itms = chann.drainChannel
         arl = itms.len
         narl = newArts.len
         fill = RSS_N_ITEMS - arl
         rem = newArts.len - fill
-        shrinked = if rem > 0:
-                       itms[0..arl-rem]
+        shrinked = if rem > 0 and arl > 0:
+                       itms[0..<arl-rem]
                    else: itms
-    assert shrinked.len + narl <= RSS_N_ITEMS
+    debug "rss: articles tail len {len(shrinked)}, newarts: {len(newArts)}"
+    assert shrinked.len + narl <= RSS_N_ITEMS, fmt"shrinked: {shrinked.len}, newarticles: {narl}"
     for a in newArts:
         chann.add articleItem(a)
-    for item in shrinked:
-        chann.add item
+    for itm in shrinked:
+        chann.add itm
     if dowrite:
-        writeFeed(SITE_PATH / topic)
+        debug "rss: writing feed for topic: {topic}"
+        pageCache[][topic.feedKey] = tfeed.toXmlString
 
 template updateFeed*(a: Article) =
     if a.title != "":
-        updateFeed(a.topic, @[a])
+        feed.update(a.topic, @[a])
+
+proc fetchFeedString*(topic: string): string =
+    pageCache[].lgetOrPut(topic.feedKey):
+        let
+            topPage = topic.lastPageNum
+            prevPage = max(0, topPage - 1)
+        var
+            arts = getDoneArticles(topic, prevPage)
+            tfeed = getTopicFeed(topic, topic, topicDesc(topic), arts)
+        if topPage > prevPage:
+            arts = getLastArticles(topic)
+            tfeed.update(topic, arts, dowrite = false)
+        topicFeeds[topic] = tfeed
+        tfeed.toXmlString
+
+proc fetchFeed*(topic: string): Feed =
+    try:
+        topicFeeds[topic]
+    except KeyError:
+        let feedStr = fetchFeedString(topic)
+        try:
+            topicFeeds[topic]
+        except KeyError:
+            topicFeeds.put(topic, parseXml(feedStr))
+
+proc fetchFeedString*(): string =
+    pageCache[].lgetOrPut(static(WEBSITE_TITLE.feedKey)):
+        var arts: seq[Article]
+        for topic in loadTopics(cfg.MENU_TOPICS):
+            let topicName = topic[0].to(string) ## topic holds topic name and description
+            let ta = getLastArticles(topicName)
+            if ta.len > 0:
+                arts.add ta[^1]
+        let sfeed = getTopicFeed("", WEBSITE_TITLE, WEBSITE_DESCRIPTION, arts)
+        topicFeeds[WEBSITE_TITLE] = sfeed
+        sfeed.toXmlString
+
+proc fetchFeed*(): Feed =
+    try:
+        topicFeeds[WEBSITE_TITLE]
+    except:
+        let feedStr = fetchFeedString()
+        try:
+            topicFeeds[WEBSITE_TITLE]
+        except KeyError:
+            topicFeeds.put(WEBSITE_TITLE, parseXml(feedStr))
+
+
+initFeed()
+
+when isMainModule:
+    syncTopics()
+    let topic = "dedi"
+    # pageCache[].del(topic)
+    # pageCache[].del(WEBSITE_TITLE)
+    echo fetchFeed(topic)

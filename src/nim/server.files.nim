@@ -98,7 +98,7 @@ registerThreadInitializer(initThread)
 
 template setPage(code: string): untyped {.dirty.} =
     try:
-        page = htmlCache.lgetOrPut(fpath, readFile(fpath))
+        page = pageCache.lgetOrPut(fpath, readFile(fpath))
         dowrite = false
     except IOError:
         debug "router: file not found...generating"
@@ -107,12 +107,12 @@ template setPage(code: string): untyped {.dirty.} =
         if qPages.acquireOrWait(fpath):
             debug "setpage: lock acquired, generating page {fpath}"
             defer: qPages[fpath][].release()
-            page = htmlCache.put(fpath, code)
+            page = pageCache.put(fpath, code)
             dowrite = true
         else:
             debug "setpage: lock waited, fetching page {fpath}"
             try:
-                page = htmlCache.lgetOrPut(fpath, readFile(fpath))
+                page = pageCache.lgetOrPut(fpath, readFile(fpath))
             except:
                 # invalidate the pageLock if the file isn't present on storage
                 # to force re-generation
@@ -120,7 +120,7 @@ template setPage(code: string): untyped {.dirty.} =
             dowrite = false
 
 let qPages = initPathLock()
-let htmlCache = initLockTable[string, string]()
+let pageCache = initLockTable[string, string]()
 
 template handle301(loc: string = $WEBSITE_URL) {.dirty.} =
     # the 404 is actually a redirect
@@ -134,7 +134,7 @@ template handleHomePage(relpath: string, capts: auto, ctx: HttpCtx) {.dirty.} =
         # in case of translations, we to generate the base page first
         # which we cache too (`setPage only caches the page that should be served)
         let (tocache, toserv) = buildHomePage(capts.lang, capts.amp)
-        htmlCache[homePath] = tocache.asHtml
+        pageCache[homePath] = tocache.asHtml
         toserv.asHtml
     ctx.reply(page)
     if dowrite:
@@ -160,7 +160,7 @@ template handleTopic(fpath, capts: auto, ctx: HttpCtx) {.dirty.} =
                 pagenum = if capts.page == "": "0" else: capts.page
                 topic = capts.topic
             topicPage(topic, pagenum, false)
-            htmlCache[SITE_PATH / capts.topic / capts.page] = pagetree.asHtml
+            pageCache[SITE_PATH / capts.topic / capts.page] = pagetree.asHtml
             processPage(capts.lang, capts.amp, pagetree).asHtml
         ctx.reply(page)
         if dowrite:
@@ -176,7 +176,7 @@ proc articlePage(donearts: PyObject, capts: auto): string =
             let
                 a = initArticle(pya, parseInt(capts.page))
                 post = buildPost(a)
-            htmlCache[SITE_PATH / capts.topic / capts.page / capts.art] = post.asHtml
+            pageCache[SITE_PATH / capts.topic / capts.page / capts.art] = post.asHtml
             return processPage(capts.lang, capts.amp, post).asHtml
     return ""
 

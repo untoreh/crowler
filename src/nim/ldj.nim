@@ -14,7 +14,8 @@ import
     cfg,
     types,
     utils,
-    html_misc
+    html_misc,
+    articles
 
 export utils, tables, html_misc
 

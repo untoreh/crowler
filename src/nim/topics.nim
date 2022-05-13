@@ -1,28 +1,31 @@
-import nimpy, uri
+import nimpy, uri, strformat
 import
     cfg,
     types,
     utils,
-    quirks
+    quirks,
+    articles
+
 type
     TopicState* = tuple[topdir: int, group: PyObject]
-    Topics* = ptr LockTable[string, TopicState]
+    Topics* = LockTable[string, TopicState]
 let
-    topicsCache* = initLockTable[string, TopicState]()
+    topicsCache*: Topics = initLockTable[string, TopicState]()
     emptyTopic* = (topdir: -1, group: PyObject())
 
-proc len*(t: Topics): int = t[].len
-proc `[]=`*(t: Topics, k, v: auto) = t[][k] = v
-proc `[]`*(t: Topics, k: string): TopicState = t[][k]
-proc contains*(t: Topics, k: string): bool = k in t[]
-proc get*(t: Topics, k: string, d: TopicState): TopicState = t[].get(k, d)
+proc lastPageNum*(topic: string): int = ut.get_top_page(topic).to(int)
+
+proc fetch*(t: Topics, k: string): TopicState =
+    t.lgetOrPut(k):
+        (topdir: lastPageNum(k), group: ut.topic_group(k))
 
 proc getState*(topic: string): (int, int) =
     ## Get the number of the top page, and the number of `done` pages.
     let
-        grp = ut.topic_group(topic)
+        grp = topicsCache.fetch(topic).group
         topdir = max(grp[$topicData.pages].shape[0].to(int)-1, 0)
         numdone = max(len(grp[$topicData.done]) - 1, 0)
+    assert topdir == lastPageNum(topic)
     return (topdir, numdone)
 
 proc syncTopics*() {.gcsafe.} =
@@ -35,11 +38,11 @@ proc syncTopics*() {.gcsafe.} =
         if n_topics > topicsCache.len:
             for topic in pytopics.slice(topicsCache.len, pytopics.len):
                 let
-                    tp = topic.to(string)
+                    tp = topic[0].to(string)
                     tg = ut.topic_group(tp)
                     td = tp.getState[0]
-                debug "synctopics: adding topic {tp} to global"
-                topicsCache[tp] = (topdir: td, group: tg)
+                # debug "synctopics: adding topic {tp} to global"
+                # topicsCache[tp] = (topdir: td, group: tg)
     except Exception as e:
         debug "could not sync topics {getCurrentExceptionMsg()}"
 
@@ -48,5 +51,18 @@ export nimpy
 proc loadTopics*(): PySequence[string] = initPySequence[string](ut.load_topics()[0])
 proc loadTopics*(n: int): PySequence[string] = initPySequence[string](loadTopics().slice(0, n))
 
-proc topicDesc*(topic: string): string = ""
+proc topicDesc*(topic: string): string = ut.get_topic_desc(topic).to(string)
 proc topicUrl*(topic: string, lang: string): string = $(WEBSITE_URL / lang / topic)
+
+proc pageSize*(topic: string, pagenum: int): int =
+    let py = ut.get_page_size(topic, pagenum)
+    if pyisnone(py):
+        error fmt"Page number: {pagenum} not found for topic: {topic} ."
+        return 0
+    py[0].to(int)
+
+
+when isMainModule:
+    # synctopics()
+    echo "vps".getState[0]
+    # echo typeof(topicsCache.fetch("vps"))

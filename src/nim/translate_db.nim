@@ -224,6 +224,7 @@ proc del*(c: CollectionNotNil, k: int64) =
             ct.commit()
 
 proc del*[T: not int64](c: CollectionNotNil, k: T) = c.del(hash(k).int64)
+proc del*[T](t: LRUTrans, k: T) = t.coll.del(k)
 
 when isMainModule:
     import strutils, sequtils, sugar

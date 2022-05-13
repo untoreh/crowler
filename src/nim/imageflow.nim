@@ -13,7 +13,8 @@ import
 
 import
     cfg,
-    utils
+    utils,
+    lazyjson
 
 const
     IF_VERSION_MAJOR: uint32 = 3
@@ -175,7 +176,12 @@ proc getImg*(src: string, kind: Source): string =
         else:
             readFile(src)
 
-proc processImg*(input: string, mtd = execMethod): string =
+proc getMime(): string =
+    ($resPtr[].toOA(resLen[].int).getJsonVal(
+        "data.job_result.encodes[0].preferred_mime_type")).strip(
+            chars = {'"'})
+
+proc processImg*(input: string, mtd = execMethod): (string, string) =
     setCmd(input)
     let c = $cmd
     # debug "{hash(c)} - {c}"
@@ -191,23 +197,28 @@ proc processImg*(input: string, mtd = execMethod): string =
                                          resLen)
     defer: doassert imageflow_json_response_destroy(ctx.p, json_res)
 
+    var mime: string
     if status != 200:
         let msg = resPtr[].toString(resLen[].int)
         debug "imageflow: conversion failed {msg}"
         doassert ctx.check
+    else:
+        mime = getMime()
     discard imageflow_context_get_output_buffer_by_id(
         ctx.p,
         outputIoId,
         outputBuffer,
         outputBufferLen)
     doassert ctx.check
-    result = outputBuffer[].toString(outputBufferLen[].int)
+    result = (outputBuffer[].toString(outputBufferLen[].int), mime)
 
-# when isMainModule:
-#     initImageFlow()
-#     let img = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fwww.nj.com%2Fresizer%2Fmg42jsVYwvbHKUUFQzpw6gyKmBg%3D%2F1280x0%2Fsmart%2Fadvancelocal-adapter-image-uploads.s3.amazonaws.com%2Fimage.nj.com%2Fhome%2Fnjo-media%2Fwidth2048%2Fimg%2Fsomerset_impact%2Fphoto%2Fsm0212petjpg-7a377c1c93f64d37.jpg&f=1&nofb=1"
-#     # let img = PROJECT_PATH / "vendor" / "imageflow.dist" / "data" / "cat.jpg"
-#     let data = getImg(img, kind=urlsrc)
-#     doassert data.addImg
-#     let query = "width=100&height=100&mode=max"
-#     echo processImg(query).len
+when isMainModule:
+    initImageFlow()
+    let img = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fwww.nj.com%2Fresizer%2Fmg42jsVYwvbHKUUFQzpw6gyKmBg%3D%2F1280x0%2Fsmart%2Fadvancelocal-adapter-image-uploads.s3.amazonaws.com%2Fimage.nj.com%2Fhome%2Fnjo-media%2Fwidth2048%2Fimg%2Fsomerset_impact%2Fphoto%2Fsm0212petjpg-7a377c1c93f64d37.jpg&f=1&nofb=1"
+    # let img = PROJECT_PATH / "vendor" / "imageflow.dist" / "data" / "cat.jpg"
+    let data = getImg(img, kind = urlsrc)
+    doassert data.addImg
+    let query = "width=100&height=100&mode=max"
+    let (i, mime) = processImg(query)
+    echo i.len
+    echo mime

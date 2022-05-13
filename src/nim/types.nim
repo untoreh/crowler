@@ -8,13 +8,6 @@ import
 # Generics
 proc put*[T, K, V](t: T, k: K, v: V): V = (t[k] = v; v)
 
-template lgetOrPut*[T, K](c: T, k: K, v: untyped): untyped =
-    ## Lazy `mgetOrPut`
-    try:
-        c.get(k)
-    except KeyError:
-        c.put(k, v)
-
 proc setPyLib() =
     var (pylibpath, success) = execCmdEx("python3 -c 'import find_libpython; print(find_libpython.find_libpython())'")
     if success != 0:
@@ -35,6 +28,7 @@ proc relpyImport*(relpath: string): PyObject =
 
 # we have to load the config before utils, otherwise the module is "partially initialized"
 let pycfg* = relpyImport("../py/config")
+# let pylog* = relpyImport("../py/log")
 let ut* = relpyImport("../py/utils")
 
 type
@@ -72,14 +66,18 @@ let
     PyNoneClass = builtins.None.getattr("__class__")
     PyDateTimeClass = pyimport("datetime").datetime
     PyStrClass = builtins.str.getattr("__class__")
+    PyDictClass = builtins.dict.getattr("__class__")
     PyZArray = za.getAttr("Array")
     PyNone* = builtins.None
     pySlice = builtins.slice
 
 var emptyArt* {.threadvar.}: Article
 
+proc pyclass(py: PyObject): PyObject {.inline.} =
+    builtins.type(py)
+
 proc pytype*(py: PyObject): string =
-    builtins.type(py).getattr("__name__").to(string)
+    py.pyclass.getattr("__name__").to(string)
 
 proc pyisbool*(py: PyObject): bool {.exportpy.} =
     return builtins.isinstance(py, PyBoolClass).to(bool)
@@ -199,23 +197,26 @@ type
         pages = "pages"
 
 proc initArticle*(data: PyObject, pagenum: int): Article =
-    let a = new(Article)
-    a.title = pyget(data, "title")
-    a.desc = pyget(data, "desc")
-    a.content = pyget(data, "content")
-    a.author = pyget(data, "author")
-    a.pubDate = pydate(data.pyget("pubDate", PyNone), getTIme())
-    a.imageUrl = pyget(data, "imageUrl")
-    a.icon = pyget(data, "icon")
-    a.url = pyget(data, "url")
-    a.slug = pyget(data, "slug")
-    a.lang = pyget(data, "lang")
-    a.topic = pyget(data, "topic")
-    a.page = pyget(data, "page", pagenum)
-    a.slug = pyget(data, "slug")
-    a.tags = pyget(data, "tags", emptyseq)
-    a.py = data
-    a
+    try:
+        let a = new(Article)
+        a.title = pyget(data, "title")
+        a.desc = pyget(data, "desc")
+        a.content = pyget(data, "content")
+        a.author = pyget(data, "author")
+        a.pubDate = pydate(data.pyget("pubDate", PyNone), getTIme())
+        a.imageUrl = pyget(data, "imageUrl")
+        a.icon = pyget(data, "icon")
+        a.url = pyget(data, "url")
+        a.slug = pyget(data, "slug")
+        a.lang = pyget(data, "lang")
+        a.topic = pyget(data, "topic")
+        a.page = pyget(data, "page", pagenum)
+        a.slug = pyget(data, "slug")
+        a.tags = pyget(data, "tags", emptyseq)
+        a.py = data
+        a
+    except ValueError as e:
+        raise newException(ValueError, fmt"Couldn't create Article from {data}, {e.msg}")
 
 proc default*(_: typedesc[Article]): Article = initArticle(PyNone, 0)
 emptyArt = default(Article)
@@ -233,11 +234,14 @@ import
     locktpl,
     tables
 
-export tables,
-       locks
+
+proc get*[K, V](t: Table[K, V], k: K): V = t[k] # the table module doesn't have this
 
 lockedStore(Table)
 lockedStore(LruCache)
+
+export tables,
+       locks
 
 # Py
 proc contains*[K](v: PyObject, k: K): bool =

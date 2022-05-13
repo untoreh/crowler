@@ -16,7 +16,8 @@ import os,
        weave,
        weave/[runtime, contexts],
        karax / vdom,
-       std/importutils
+       std/importutils,
+       normalize
 
 export weave
 
@@ -28,6 +29,15 @@ type kstring = string
 
 var loggingLock: Lock
 initLock(loggingLock)
+
+template lgetOrPut*[T, K](c: T, k: K, v: untyped): untyped =
+    ## Lazy `mgetOrPut`
+    mixin get
+    mixin put
+    try:
+        c.get(k)
+    except KeyError:
+        c.put(k, v)
 
 proc isWeaveOff*(): bool {.inline.} = globalCtx.numWorkers == 0 or workerContext.signaledTerminate
 
@@ -77,28 +87,28 @@ macro toggle*(flag: static[bool], code: untyped): untyped =
             discard
 
 macro apply*(fun, args: typed): untyped =
-  result = newCall(fun)
-  var funArgLen = getType(fun).len - 2
-  case args.kind:
-    of nnkBracket:
-      for a in args:
-        result.add a
-    of nnkPrefix:
-      if args[0].repr == "@":
-        for a in args[1]:
-          result.add a
-    of nnkTupleConstr:
-      for a in args:
-        result.add a
-    of nnkSym:
-      for i in 0..<funArgLen:
-        var b = newTree(nnkBracketExpr)
-        b.add args
-        b.add newLit(i)
-        result.add b
-    else:
-      error("unsupported kind: " & $args.kind & ", " & args.repr)
-      discard
+    result = newCall(fun)
+    var funArgLen = getType(fun).len - 2
+    case args.kind:
+        of nnkBracket:
+            for a in args:
+                result.add a
+        of nnkPrefix:
+            if args[0].repr == "@":
+                for a in args[1]:
+                    result.add a
+        of nnkTupleConstr:
+            for a in args:
+                result.add a
+        of nnkSym:
+            for i in 0..<funArgLen:
+                var b = newTree(nnkBracketExpr)
+                b.add args
+                b.add newLit(i)
+                result.add b
+        else:
+            error("unsupported kind: " & $args.kind & ", " & args.repr)
+            discard
 
 
 type StringSet = HashSet[string]
@@ -342,6 +352,14 @@ proc initStyleStr*(s: sink string): VNode =
     result.add newVNode(VNodeKind.text)
     result[0].text = s
 
+proc xmlHeader*(version: static[string] = "1.0", encoding: static[string] = "UTF-8"): string =
+    fmt"""<?xml version="{version}" encoding="{encoding}" ?>"""
+
+proc toXmlString*(node: XmlNode): string =
+    result.add xmlHeader()
+    result.add "\n"
+    result.add $node
+
 proc getText*(el: XmlNode): string =
     case el.kind:
         of xnText, xnVerbatimText:
@@ -404,12 +422,12 @@ proc findclass*(tree: XmlNode, cls: string): XmlNode =
 import std/[macros, genasts]
 
 macro threadVars*(args: varargs[untyped]) =
-  result = newStmtList()
-  for i, arg in args:
-    for name in arg[0..^2]:
-      result.add:
-        genast(name, typ = arg[^1]):
-          var name {.threadVar.}: typ
+    result = newStmtList()
+    for i, arg in args:
+        for name in arg[0..^2]:
+            result.add:
+                genast(name, typ = arg[^1]):
+                    var name {.threadVar.}: typ
 
 macro pragmaVars*(tp, pragma: untyped, vars: varargs[untyped]): untyped =
     ## Apply a pragma to multiple variables (push/pop doesn't work in nim 1.6.4)
@@ -588,9 +606,21 @@ proc readBytes*(f: string): seq[uint8] =
     discard readBytes(s, result, 0, result.len)
 
 proc toString*(bytes: openarray[byte | char]): string =
-  result = newString(bytes.len)
-  copyMem(result[0].addr, bytes[0].unsafeAddr, bytes.len)
+    result = newString(bytes.len)
+    copyMem(result[0].addr, bytes[0].unsafeAddr, bytes.len)
+
+template toOA*(p: ptr uint8, len: int): openarray[byte] =
+    let ua = cast[ptr UncheckedArray[byte]](p)
+    ua.toOpenArray(0, len - 1)
 
 proc toString*(p: ptr uint8, len: int): string =
-    let ua = cast[ptr UncheckedArray[char]](p)
-    ua.toOpenArray(0, len - 1).toString()
+    p.toOA(len).toString
+
+import unicode
+const stripchars = ["-".runeAt(0), "_".runeAt(0)]
+proc slugify*(value: string): string =
+    ## Slugifies an unicode string
+
+    result = toNFKC(value).toLower()
+    result = result.replace(sre("[^\\w\\s-]"), "")
+    result = result.replace(sre("[-\\s]+"), "-").strip(runes = stripchars)

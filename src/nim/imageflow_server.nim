@@ -22,7 +22,7 @@ import
     locktpl,
     shorturls
 
-const rxPathImg = "/([0-9]{1,3})x([0-9]{1,3})/(.+)(?=/|$)"
+const rxPathImg = "/([0-9]{1,3})x([0-9]{1,3})/\\?(.+)(?=/|$)"
 
 let
     imgCache = initLockLruCache[string, string](10 * 1024)
@@ -39,7 +39,7 @@ proc imgData(imgurl: string): string {.inline, gcsafe.} =
             getImg(imgurl, kind=urlsrc)
     except: discard
 
-proc handleImg*(relpath: string): auto =
+proc parseImgUrl*(relpath: string): (string, string, string) =
     let
         m = relpath.match(sre rxPathImg).get
         imgCapts = m.captures.toSeq
@@ -47,10 +47,14 @@ proc handleImg*(relpath: string): auto =
         url = imgCapts[2].get
         width = imgCapts[0].get
         height = imgCapts[1].get
+    return (url, width, height)
 
-    var resp: string
+
+proc handleImg*(relpath: string): auto =
+    let (url, width, height) = parseImgUrl(relpath)
+    var resp, decodedUrl, mime: string
     if url.isSomething:
-        let decodedUrl = url.asBString.toString
+        decodedUrl = url.asBString.toString(true)
         # block unused resize requests
         if not (fmt"{width}x{height}" in IMG_SIZES):
             resp = decodedUrl.imgData
@@ -58,9 +62,9 @@ proc handleImg*(relpath: string): auto =
             doassert decodedUrl.imgData.addImg
             let query = fmt"width={width}&height={height}&mode=max"
             debug "ifl server: serving image hash: {hash(decodedUrl.imgData)}, size: {width}x{height}"
-            resp = processImg(query)
+            (resp, mime) = processImg(query)
         debug "ifl server: img processed"
-    resp
+    (resp, mime)
 
 proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
     assert ctx.parseRequestLine
@@ -70,7 +74,7 @@ proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
         dowrite: bool
     # relpath.removePrefix('/')
     try:
-        let resp = handleImg(relpath)
+        let (resp, mime) = handleImg(relpath)
         if resp.isSomething:
             ctx.reply(resp)
         else:

@@ -9,7 +9,6 @@ handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(logging.Formatter("%(name)s - %(levelname)s - %(message)s"))
 logger.addHandler(handler)
 
-
 def setloglevel(logger=logger, lvl=logger_level):
     logger.setLevel(lvl)
     for h in logger.handlers:

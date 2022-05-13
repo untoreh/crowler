@@ -17,48 +17,15 @@ import cfg,
        utils,
        html,
        rss,
-       topics
+       topics,
+       articles,
+       cache,
+       search
 
 privateAccess(LocalitySensitive)
 var pageset = Table[string, bool]()
 
 include "pages"
-
-
-proc getArticleUrl(a: Article): string {.inline.} = $(WEBSITE_URL / a.topic / a.slug)
-
-proc getArticles*(topic: string, n = 3, pagenum: int = -1): seq[Article] =
-    let
-        grp = ut.topic_group(topic)
-        arts = grp[$topicData.articles]
-    assert pyiszarray(arts)
-    var
-        parsed: seq[Article]
-        data: PyObject
-    let
-        total = arts.shape[0].to(int)
-        count = min(n, total)
-        start = total - count
-
-    info "Fetching {count}(total:{total}) unpublished articles for {topic}/page:{pagenum}"
-    for i in start..total - 1:
-        data = arts[i]
-        parsed.add(initArticle(data, pagenum))
-    return parsed
-
-proc getDoneArticles*(topic: string, pagenum: int): seq[Article] =
-    let
-        grp = ut.topic_group(topic)
-        arts = pyget(grp, $topicData.done / pagenum.intToStr, PyNone)
-
-    if pyisnone(arts):
-        return @[]
-
-    info "Fetching {arts.shape[0]} published articles for {topic}/{pagenum}"
-    for data in arts:
-        result.add(initArticle(data, pagenum))
-
-
 
 proc ensureDir(dir: string) =
     if not dirExists(dir):
@@ -67,7 +34,6 @@ proc ensureDir(dir: string) =
             removeFile(dir)
         info "Creating directory {dir}"
         createDir(dir)
-
 
 proc initLS(): LocalitySensitive[uint64] =
     let hasher = initMinHasher[uint64](64)
@@ -93,7 +59,6 @@ proc loadLS(topic: string): LocalitySensitive[uint64] =
     else:
         initLS()
 
-
 proc addArticle(lsh: LocalitySensitive[uint64], a: Article): bool =
     if not isDuplicate(lsh, a.content):
         lsh.add(a.content, $(len(lsh.fingerprints) + 1))
@@ -115,30 +80,10 @@ proc pubInfoPages() =
     pubPageFromTemplate("privacy-policy.html", "Privacy Policy", ppRep,
             desc = "Privacy Policy for {WEBSITE_DOMAIN}")
 
-proc pageSize(topic: string, pagenum: int): int =
-    let py = ut.get_page_size(topic, pagenum)
-    if pyisnone(py):
-        error fmt"Page number: {pagenum} not found for topic: {topic} ."
-        return 0
-    py[0].to(int)
 
 proc curPageNumber(topic: string): int =
     return ut.get_top_page(topic).to(int)
     # return getSubdirNumber(topic, curdir)
-
-template topicPage*(topic: string, pagenum: string, istop = false) {.dirty.} =
-    ## Writes a single page (fetching its related articles, if its not a template) to storage
-    let arts = getDoneArticles(topic, pagenum = pagenum.parseInt)
-    let content = buildShortPosts(arts)
-    # if the page is not finalized, it is the homepage
-    let
-        footer = pageFooter(topic, pagenum, istop)
-        pagetree = buildPage(title = "",
-                         content = content,
-                         slug = pagenum,
-                         pagefooter = footer,
-                         topic = topic)
-
 
 proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, istop = false,
         with_arts = false) =
@@ -194,19 +139,13 @@ proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
 #         let pagedone = done[k]
 #         newdone.add()
 
-proc publish(topic: string) =
-    ##  Generates html for a list of `Article` objects and writes to file.
-    doassert topic in ut.load_topics()[1]
-    var pagenum = curPageNumber(topic)
-    let newpage = pageSize(topic, pagenum) > cfg.MAX_DIR_FILES
-    if newpage:
-        pagenum += 1
-    # The subdir (at $pagenum) at this point must be already present on storage
+proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
+                      posts: var seq[(VNode, Article)],
+                      donePy: var seq[PyObject],
+                      doneArts: var seq[Article]): bool =
     var arts = getArticles(topic, pagenum = pagenum)
-    let pagedir = topic / $pagenum
-
-    let lsh = loadLS(topic)
-    var posts: seq[(VNode, Article)]
+    if arts.len == 0:
+        return false
     clear(pageset)
     for a in arts:
         if addArticle(lsh, a):
@@ -222,15 +161,36 @@ proc publish(topic: string) =
             a.slug = uslug
             a.py["title"] = utitle
             a.title = utitle
+            a.py["page"] = pagenum
+            a.page = pagenum
             posts.add((buildPost(a), a))
     # update done articles after uniqueness checks
-    var
-        donePy: seq[PyObject]
-        doneArts: seq[Article]
     for (_, a) in posts:
         donePy.add a.py
         doneArts.add a
     discard ut.save_done(topic, len(arts), donePy, pagenum)
+    true
+
+proc publish(topic: string) =
+    ##  Generates html for a list of `Article` objects and writes to file.
+    doassert topic in ut.load_topics()[1]
+    var pagenum = curPageNumber(topic)
+    let newpage = pageSize(topic, pagenum) > cfg.MAX_DIR_FILES
+    if newpage:
+        pagenum += 1
+    # The subdir (at $pagenum) at this point must be already present on storage
+    let pagedir = topic / $pagenum
+
+    let lsh = loadLS(topic)
+    let startTime = getTime()
+    var
+        posts: seq[(VNode, Article)]
+        donePy: seq[PyObject]
+        doneArts: seq[Article]
+    while posts.len == 0 and (getTime() - startTime).inSeconds < cfg.PUBLISH_TIMEOUT:
+        if not filterDuplicates(topic, lsh, pagenum, posts, donePy, doneArts):
+            break
+
     if newpage:
         ensureDir(SITE_PATH / pagedir)
     let newposts = len(posts)
@@ -262,13 +222,20 @@ proc publish(topic: string) =
     finalizePages(topic, pagenum, newpage, pagecount)
     # update feed file
     when cfg.RSS:
-        updateFeed(topic, doneArts, dowrite = true)
+        let tfeed = topic.fetchFeed
+        tfeed.update(topic, doneArts, dowrite = true)
+    when cfg.SEARCH_ENABLED:
+        for ar in doneArts:
+            var relpath = topic / $pagenum / ar.slug
+            search.push(relpath)
+
     # update ydx turbo items
     # when cfg.YDX:
     #     writeFeed()
 
 proc resetTopic(topic: string) =
-    discard ut.reset_topic(topic)
+    discard ut.reset_topic_data(topic)
+    pageCache[].del(topic.feedKey)
     saveLS(topic, initLS())
 
 proc pubAllPages(topic: string, clear = true) =
@@ -300,32 +267,17 @@ proc refreshPageSizes(topic: string) =
         discard ut.update_page_size(topic, pagenum, len(donearts[$pagenum]), final = true)
     discard ut.update_page_size(topic, topdir, len(donearts[$topdir]), final = false)
 
-import translate
+# import translate
 when isMainModule:
-    let topic = "dedi"
+    let topic = "vps"
     # refreshPageSizes(topic)
+    # resetTopic("web")
+    # resetTopic("vps")
+    # resetTopic("dedi")
     publish(topic)
     quit()
     let
-        # (topdir, _) = topic.getState()
         topdir = 0
         pagecount = pageSize(topic, topdir)
     # pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true)
     # pubPageFromTemplate("dmca.html", "DMCA")
-
-    # import amp
-    # import html_minify_c
-    # let
-    #     tpl = "dmca.html"
-    #     title = "DMCA"
-    # var txt = readfile(ASSETS_PATH / "templates" / tpl)
-    # let slug = slugify(title)
-    # let mn = minifyHtml(p)
-    # echo $mn
-    # let p = buildPage(title = title, content = txt)
-    # echo $p
-    # writeHtml(p, "/tmp/out")
-    # echo mn
-
-    # var path = SITE_PATH / "index.html"
-    # writeFile(path, &("<!doctype html>\n{buildPost()}"))

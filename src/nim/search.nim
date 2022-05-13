@@ -31,14 +31,16 @@ var
     sncc {.threadvar.}: Sonic
     sncq {.threadvar.}: Sonic
 let Language = pyImport("langcodes").Language
+const defaultLimit = 10
 
 proc closeSonic() =
     debug "sonic: closing"
-    try:
-        discard snc.quit()
-        discard sncc.quit()
-        discard sncq.quit()
-    except: discard
+    if not snc.isnil:
+        try:
+            discard snc.quit()
+            discard sncc.quit()
+            discard sncq.quit()
+        except: discard
 addExitProc(closeSonic)
 
 proc isopen(): bool =
@@ -64,25 +66,26 @@ proc sanitize*(s: string): string =
     ## Replace new lines for search queries and ingestion
     s.replace(sre "\n|\r", "")
 
-proc push(capts: UriCaptures, content: string) =
+proc push*(capts: UriCaptures, content: string) =
     ## Push the contents of an article page to the search database
     if not snc.push(WEBSITE_DOMAIN,
              capts.topic,
              join([capts.page, capts.art], "/"),
              content,
-             lang = capts.lang.toISO3):
+             lang = if capts.lang != "en": capts.lang.toISO3
+                    else: ""):
         let f = open(SONIC_BACKLOG, fmAppend)
         defer: f.close()
         let l = join([capts.topic, capts.page, capts.art, capts.lang], ",")
         writeLine(f, l)
 
-proc push(relpath: var string) =
+proc push*(relpath: var string) =
     relpath.removeSuffix('/')
     let
         fpath = relpath.fp
         capts = uriTuple(relpath)
-        content = if htmlCache[][fpath] != "":
-                      let page = htmlCache[].get(fpath).parseHtml
+        content = if pageCache[][fpath] != "":
+                      let page = pageCache[].get(fpath).parseHtml
                       assert capts.lang == "" or page.findel("html").getAttr("lang") == (capts.lang)
                       page.findclass(HTML_POST_SELECTOR).innerText()
                   else:
@@ -107,7 +110,7 @@ proc resume() =
         push(relpath)
     writeFile(SONIC_BACKLOG, "")
 
-proc query*(topic: string, keywords: string, lang: string = SLang.code): seq[string] =
+proc query*(topic: string, keywords: string, lang: string = SLang.code, limit=defaultLimit): seq[string] =
     ## translate the query to source language, because we only index
     ## content in source language
     ## the resulting entries are in the form {page}/{slug}
@@ -120,14 +123,14 @@ proc query*(topic: string, keywords: string, lang: string = SLang.code): seq[str
                   something translate(keywords, lp), keywords
               else: keywords
     debug "KWS: {kws}, KEYS: {keywords}"
-    sncq.query(WEBSITE_DOMAIN, topic, kws, lang = SLang.code.toISO3, limit = 10)
+    sncq.query(WEBSITE_DOMAIN, topic, kws, lang = SLang.code.toISO3, limit = limit)
 
-proc suggest*(topic, input: string): seq[string] =
+proc suggest*(topic, input: string, limit=defaultLimit): seq[string] =
     # Partial inputs language can't be handled if we
     # only injest the source language into sonic
     debug "suggest: topic: {topic}, input: {input}"
     try:
-        return sncq.suggest(WEBSITE_DOMAIN, topic, input)
+        return sncq.suggest(WEBSITE_DOMAIN, topic, input, limit=limit)
     except:
         debug "suggest: {getCurrentExceptionMsg()}, {getCurrentException().name}"
         closeSonic()
@@ -139,7 +142,7 @@ when isMainModule:
     initSonic()
     let hc = initHtmlCache()
     discard snc.flush(WEBSITE_DOMAIN)
-    htmlCache = hc.unsafeAddr
+    pageCache = hc.unsafeAddr
     push(relpath)
     discard sncc.trigger("consolidate")
     echo suggest("web", "web host")

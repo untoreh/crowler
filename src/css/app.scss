@@ -168,10 +168,18 @@ footer {
   padding: 0 0.25rem 0 0.25rem;
 }
 
+.mdc-ripple-button {
+  position: relative;
+}
+
 .mdc-ripple-surface {
+  // parent selectors only at the top
   @include ripple.surface;
   @include ripple.radius-bounded;
   @include ripple.states;
+  width: 100%;
+  height: 100%;
+  position: absolute;
 }
 
 .social-share .mdc-icon-button {

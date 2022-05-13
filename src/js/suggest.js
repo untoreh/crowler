@@ -2,7 +2,7 @@ import regeneratorRuntime from "regenerator-runtime";
 
 const Http = new XMLHttpRequest();
 var suggestUrl
-var form, sug, sel, cursel, suggest, sugLast
+var form, sug, sel, cursel, suggest, sugLast, closebtn
 import { $, $$ } from "./lib.js";
 const sugThrottle = 333
 
@@ -28,6 +28,19 @@ function querySuggest(e) {
     }
 }
 
+function visible(el, t = true) {
+    let disp = el.style.display
+    if (t) {
+        if (disp != "initial") {
+            el.style.display = "initial"
+        }
+    } else {
+        if (disp != "none") {
+            el.style.display = "none"
+        }
+    }
+}
+
 const waitFor = delay => new Promise(resolve => setTimeout(resolve, delay));
 async function delayedSuggest(e) {
     await waitFor(sugThrottle)
@@ -39,6 +52,7 @@ async function delayedSuggest(e) {
 
 function updateValue(e) {
     let now = Date.now()
+    visible(closebtn, e.target.value != "")
     if ((now - sugLast) < sugThrottle) {
         delayedSuggest(e)
     } else {
@@ -98,6 +112,7 @@ export function setupSuggest() {
     sugLast = new Date().getTime()
     form = $("form.search")
     suggest = $(".search-suggest", form)
+    closebtn = $(".clear-search-btn", form)
     const topic = $("body").getAttribute("topic")
     suggestUrl = "/" + topic + "/g/suggest?";
     form.addEventListener("input", updateValue);
@@ -105,13 +120,12 @@ export function setupSuggest() {
     $("html,body").addEventListener("click", (e) => {
         let el = e.target
         if (!el.classList.contains("selected")) {
-            if (suggest.style.display !== "none") {
-                suggest.style.display = "none";
-            }
+            visible(suggest, false)
         }
     })
-    $(".clear-search-btn", form).addEventListener("click", (e) => {
+    closebtn.addEventListener("click", (e) => {
         $(".search-input", form).value = ""
         e.preventDefault()
+        visible(closebtn, false)
     })
 }

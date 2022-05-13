@@ -11,9 +11,11 @@ import
     topics
 
 proc getArticlePy*(topic: string, page: string | int, slug: string): PyObject =
+
     let
-        tg = ut.topic_group(topic)
+        tg = topicsCache.fetch(topic).group
         pg = string(page)
+
     if topic.getState[0] != -1:
         let donearts = tg[$topicData.done]
         for pya in donearts[page]:
@@ -32,9 +34,7 @@ proc getArticle*(topic, page, slug: auto): Article =
     else:
         emptyArt
 
-proc getArticlePath*(a: Article): string {.inline.} = "/" / $a.topic / $a.page / a.slug
 
-proc getArticleUrl*(a: Article): string = $WEBSITE_URL / getArticlePath(a)
 
 proc getAuthor*(a: Article): string {.inline.} =
     if a.author.isEmptyOrWhitespace:

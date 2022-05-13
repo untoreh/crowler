@@ -75,7 +75,7 @@ proc rewriteUrl*(el, rewrite_path, hostname: auto) =
     # remove initial dots from links
     uriVar.path = uriVar.path.replace(dotsRgx, "")
     if uriVar.hostname == "" or (uriVar.hostname == hostname and
-        uriVar.hostname.startsWith("/")):
+        uriVar.path.startsWith("/")):
         uriVar.path = joinpath(rewrite_path, uriVar.path)
     el.setAttr("href", $uriVar)
     # debug "old: {prev} new: {$uriVar}, {rewrite_path}"

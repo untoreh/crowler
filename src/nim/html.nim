@@ -277,10 +277,10 @@ proc buildFooter*(topic: string = ""): VNode =
     buildHtml(tdiv(class = "site-footer container max border medium no-padding")):
         footer(class = "padding absolute blue white-text primary left bottom"):
             tdiv(class = "footer-links"):
-                a(href = ("/" & topic & "/sitemap.xml")):
+                a(href = ("/" & topic & "/sitemap.xml"), class="sitemap"):
                     text("Sitemap")
                 text " - "
-                a(href = ("/" & topic & "/feed.xml")):
+                a(href = ("/" & topic & "/feed.xml"), class="rss"):
                     text("RSS")
                 text " - "
                 a(href = "/dmca.html"):

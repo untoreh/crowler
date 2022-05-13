@@ -406,13 +406,13 @@ proc hasAttr*(el: VNode, k: string): bool =
     return false
 
 proc hasAttr*(el: XmlNode, k: string): bool = (not el.attrs.isnil) and el.attrs.haskey k
-proc getAttr*(el: XmlNode, k: string): string = el.attrs[k]
+proc getAttr*(el: XmlNode, k: string): lent string = el.attrs[k]
 proc getAttr*(el: XmlNode, k: string, v: string): string =
     if el.hasAttr(k):
         el.getAttr(k)
     else:
         v
-proc setAttr*(el: XmlNode, k: string, v: auto) = el.attrs[k] = v
+proc setAttr*(el: XmlNode, k: string, v: sink auto) = el.attrs[k] = v
 proc findclass*(tree: XmlNode, cls: string): XmlNode =
     for el in preorder(tree):
         if el.kind == xnElement and cls in el.getAttr("class", ""):

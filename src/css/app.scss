@@ -116,6 +116,7 @@ main {
   padding: 0.5rem;
   background: var(--mdc-theme-primary);
   border-radius: 4px 0 0 4px;
+  display: inline-block;
   & a {
     text-decoration: none;
     text-align: center;
@@ -157,6 +158,9 @@ footer {
 .footer-copyright {
   font-family: Times;
   padding: 1rem 0 0 0.25rem;
+  & a {
+    margin-left: 1rem;
+}
 }
 
 .footer-links {

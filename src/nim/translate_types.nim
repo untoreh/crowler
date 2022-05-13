@@ -86,7 +86,7 @@ const
     skip_nodes* = static(["code", "style", "script", "address", "applet", "audio", "canvas",
             "embed", "time", "video", "svg"])
     skip_vnodes* = static([VNodeKind.code, style, script, address, audio, canvas, embed, time, video, svg])
-    skip_class* = ["menu-lang-btn", "material-icons"].static
+    skip_class* = ["menu-lang-btn", "material-icons", "rss", "sitemap"].static
 
 let
     pybi = pyBuiltinsModule()

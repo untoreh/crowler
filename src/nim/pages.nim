@@ -166,39 +166,6 @@ proc processPage*(lang, amp: string, tree: VNode): VNode =
         debug "page: amping"
         result = result.ampPage
 
-proc fromSearchResult(topic: string, pslug: string): Article =
-    let
-        s = pslug.split("/")
-        page = s[0]
-        slug = s[1]
-
-    getArticle(topic, page, slug)
-
-proc buildRelated*(a: Article): VNode =
-    var kws: seq[string]
-    for tag in a.tags:
-        kws.add strutils.split(tag)
-    kws.add(strutils.split(a.title))
-    result = newVNode(VNodeKind.ul)
-    result.setAttr("class", "related-posts")
-    var c = 0
-    for kw in kws:
-        if kw.len < 3:
-            continue
-        let sgs = query(a.topic, kw.toLower, limit=1)
-        if sgs.len > 0:
-            let ar = a.topic.fromSearchResult(sgs[0])
-            let
-                entry = newVNode(li)
-                link = newVNode(VNodeKind.a)
-                img = buildImgUrl(a.imageUrl, a.url, "related-img")
-            link.setAttr("href", getArticleUrl(ar))
-            entry.add img
-            entry.add link
-            result.add entry
-            c += 1
-        if c > cfg.N_RELATED:
-            break
 
 proc articleHtml*(capts: auto): string {.gcsafe.} =
     # every article is under a page number

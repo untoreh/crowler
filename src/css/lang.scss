@@ -26,6 +26,12 @@
   right: -1rem;
 }
 
+[dir=rtl] .langs-dropdown-content.show {
+  display: block;
+  left: -1rem;
+  right: 0;
+}
+
 .langs-dropdown-content a {
   display: block;
   font-variant: petite-caps;

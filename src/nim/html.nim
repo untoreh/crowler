@@ -170,20 +170,6 @@ proc buildDrawer(a: Article; site: VNode): VNode =
             site
         label(class = "pure-overlay", `for` = "pure-toggle-left", data_overlay = "left")
 
-proc buildImgUrl*(url: string; origin: string; cls = "image-link"): VNode =
-    var srcsetstr, bsrc: string
-    if url != "":
-        # add `?` because chromium doesn't treat it as a string otherwise
-        let burl = "?" & url.toBString(true)
-        bsrc = $(WEBSITE_URL_IMG / IMG_SIZES[1] / burl)
-        for (view, size) in zip(IMG_VIEWPORT, IMG_SIZES):
-            srcsetstr.add "//" & $(WEBSITE_URL_IMG / size / burl)
-            srcsetstr.add " " & view & ","
-    buildHtml(a(class = cls, href = origin, target="_blank", alt = "post image source")):
-        # the `alt="image"` is used to display the material-icons placeholder
-        img(class = "material-icons", src = bsrc, srcset = srcsetstr, alt = "image",
-                loading = "lazy")
-
 proc buildSearch(action: string; withButton = true): VNode =
     buildHtml(form(`method` = "get", action = (action & "/s/"), class = "search")):
         label(class = "search-field", `for` = "search-input")
@@ -214,7 +200,7 @@ proc buildMenuSmall*(crumbs: string; topic_uri: Uri; path: string): VNode {.gcsa
                     let topic_name = $tpc[0]
                     li(class = "menu-topic-item mdc-icon-button"):
                         tdiv(class = "mdc-icon-button__ripple")
-                        a(href = ($(WEBSITE_URL / topic_name)), title = ($tpc)):
+                        a(href = ($(WEBSITE_URL / topic_name)), title = topic_name):
                             # only use the first letter
                             text $topic_name.runeAt(0).toUpper # loadTopics iterator returns pyobjects
                         br()
@@ -333,9 +319,9 @@ proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): VNode =
             postTitle(a)
             postContent(a.content)
             postFooter(a.pubdate)
-        buildFooter(a.topic)
-        when defined(buildRelated):
+            hr()
             buildRelated(a)
+        buildFooter(a.topic)
 
 proc pageTitle*(title: string; slug: string): VNode =
     buildHtml(tdiv(class = "title-wrap")):
@@ -350,8 +336,8 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
              else: pagenum.parseInt
     buildHtml(tdiv(class = "post-footer")):
         nav(class = "page-crumbs"):
-            if pn > 0:
-                span(class = "prev-page"):
+            span(class = "prev-page"):
+                if pn > 0:
                     a(href = (topic_path / (pn - 1).intToStr)):
                         text "<< Previous page"
             # we don't paginate searches because we only serve the first page per query
@@ -362,7 +348,7 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
 
 const pageContent* = postContent
 
-proc asHtml*(data: auto): string {.inline.} = "<!doctype html>"&"\n" & $data
+proc asHtml*(data: auto): string {.inline.} = ("<!doctype html>"&"\n" & $data).minifyHtml
 
 proc writeHtml*(data: auto; path: string) {.inline.} =
     debug "writing html file to {path}"
@@ -418,7 +404,6 @@ proc processHtml*(relpath: string; slug: string; data: VNode; ar = emptyArt) =
                 ppage.minifyHtml.writeHtml(SITE_PATH / "amp" / pagepath)
         else:
             page.writeHtml(SITE_PATH / pagepath)
-
 
 proc buildPost*(a: Article): VNode =
     buildHtml(html(lang = DEFAULT_LANG_CODE,

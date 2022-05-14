@@ -3,8 +3,7 @@ import
     cfg,
     types,
     utils,
-    quirks,
-    articles
+    quirks
 
 type
     TopicState* = tuple[topdir: int, group: PyObject]

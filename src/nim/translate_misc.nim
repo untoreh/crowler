@@ -15,7 +15,6 @@ import
     types,
     utils,
     translate_types,
-    html_misc,
     ldj
 
 var langTmpUri {.threadvar.}: Uri

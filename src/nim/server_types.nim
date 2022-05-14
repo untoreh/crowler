@@ -1,4 +1,4 @@
-import nimpy, options, nre, strutils, strformat, os, std/enumerate, std/mimetypes
+import nimpy, options, nre, strutils, strformat, os, std/enumerate, std/mimetypes, uri
 import cfg, quirks, utils
 
 const
@@ -74,8 +74,9 @@ proc addHeaders*(headers: seq[(Header, string)]) =
     for (h, s) in headers:
         h.add(s)
 
+
 when isMainModule:
     initMimes()
-    var s = @[""]
-    mimeHeader("asd.json", s)
+    # var s = @[""]
+    # mimeHeader("asd.json", s)
     echo s

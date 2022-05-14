@@ -26,6 +26,7 @@ import translate_types
 static: echo "loading utils..."
 
 type kstring = string
+const baseUri* = initUri()
 
 var loggingLock: Lock
 initLock(loggingLock)

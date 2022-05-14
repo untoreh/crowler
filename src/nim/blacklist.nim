@@ -34,4 +34,6 @@ proc clearPage*(url: string) =
     #         break
 
 when isMainModule:
-    let url = "http://wsl:5050/vps/0/"
+    initCache()
+    let url = "http://wsl:5050/web/0/6-best-shared-web-hosting-services-companies-2022"
+    clearPage(url)

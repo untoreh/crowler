@@ -67,18 +67,6 @@ proc isTranslatable*(el: XmlNode | vdom.VNode): bool = isTranslatable(el.text)
 proc isTranslatable*(el: XmlNode, attr: string): bool = isTranslatable(el.attrs[attr])
 proc isTranslatable*(el: vdom.VNode, attr: string): bool = isTranslatable(vdom.getAttr(el, attr))
 
-var dotsRgx {.threadvar.}: Regex
-var uriVar {.threadVar.}: URI
-
-proc rewriteUrl*(el, rewrite_path, hostname: auto) =
-    parseURI(el.getAttr("href"), uriVar)
-    # remove initial dots from links
-    uriVar.path = uriVar.path.replace(dotsRgx, "")
-    if uriVar.hostname == "" or (uriVar.hostname == hostname and
-        uriVar.path.startsWith("/")):
-        uriVar.path = joinpath(rewrite_path, uriVar.path)
-    el.setAttr("href", $uriVar)
-    # debug "old: {prev} new: {$uriVar}, {rewrite_path}"
 
 macro defIfDom*(kind: static[FcKind]): untyped =
     case kind:
@@ -306,7 +294,7 @@ proc initThread*() =
     initGlues()
     initQueueCache()
     initSlations()
-    dotsRgx = re"^\.?\.?"
+    initTforms()
 
 proc exitThread() =
     saveToDB(force = true)

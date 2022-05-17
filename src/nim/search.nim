@@ -128,15 +128,19 @@ proc query*(topic: string, keywords: string, lang: string = SLang.code, limit = 
                   # echo "?? ", translate(keywords, lp)
                   something translate(keywords, lp), keywords
               else: keywords
-    debug "KWS: {kws}, KEYS: {keywords}"
-    sncq.query(WEBSITE_DOMAIN, "default", kws, lang = SLang.code.toISO3, limit = limit)
+    debug "query: kws -- {kws}, keys -- {keywords}"
+    try:
+        return sncq.query(WEBSITE_DOMAIN, "default", kws, lang = SLang.code.toISO3, limit = limit)
+    except:
+        debug "query: failed {getCurrentExceptionMsg()} "
+        discard
 
 proc suggest*(topic, input: string, limit = defaultLimit): seq[string] =
     # Partial inputs language can't be handled if we
     # only injest the source language into sonic
     debug "suggest: topic: {topic}, input: {input}"
     try:
-        return sncq.suggest(WEBSITE_DOMAIN, "default", input.split().join(","), limit = limit)
+        return sncq.suggest(WEBSITE_DOMAIN, "default", input.split[^1], limit = limit)
     except:
         debug "suggest: {getCurrentExceptionMsg()}, {getCurrentException().name}"
         closeSonic()

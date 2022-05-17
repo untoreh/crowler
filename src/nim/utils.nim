@@ -57,6 +57,10 @@ macro debug*(code: untyped): untyped =
         quote do:
             discard
 
+template sdebug*(code) =
+    try: debug code
+    except: discard
+
 template qdebug*(code) =
     try: debug code
     except: quit()
@@ -335,13 +339,27 @@ iterator vflatorder*(tree: VNode): VNode {.closure.} =
                     yield e
         yield el
 
+
 proc first*(node: VNode, kind: VNodeKind): VNode {.gcsafe.} =
     for n in node.vflatorder():
         if n.kind == kind:
             return n
     return node
 
+proc hasAttr*(el: VNode, k: string): bool =
+    for (i, v) in el.attrs:
+        if k == i:
+            return true
+    return false
+
 template find*(node: VNode, kind: VNodeKind): VNode = first(node, kind)
+proc find*(node: VNode, kind: VNodeKind, attr: (string, string)): VNode =
+    for n in node.vflatorder():
+        if n.kind == kind and
+        n.hasAttr(attr[0]) and
+        n.getAttr(attr[0]) == attr[1]:
+            return n
+    return node
 
 proc initStyle*(path: string): VNode =
     result = newVNode(VNodeKind.style)
@@ -400,11 +418,6 @@ proc setText*(el: VNode, v: auto) =
                 el.setAttr("title", v)
 
 {.push inline.}
-proc hasAttr*(el: VNode, k: string): bool =
-    for (i, v) in el.attrs:
-        if k == i:
-            return true
-    return false
 
 proc hasAttr*(el: XmlNode, k: string): bool = (not el.attrs.isnil) and el.attrs.haskey k
 proc getAttr*(el: XmlNode, k: string): lent string = el.attrs[k]
@@ -443,7 +456,14 @@ macro pragmaVars*(tp, pragma: untyped, vars: varargs[untyped]): untyped =
     idefs.add newEmptyNode()
     result = nnkVarSection.newTree(idefs)
 
-type Link* = enum canonical, stylesheet, jscript = "script"
+proc sre*(pattern: static string): Regex {.gcsafe.} =
+    ## Static regex expression
+    var rx {.threadvar.}: Regex
+    rx = re(pattern)
+    return rx
+
+
+type Link* = enum canonical, stylesheet, amphtml, jscript = "script", alternate
 type LDjson* = enum ldjson = "application/ld+json"
 
 proc isLink*(el: VNode, tp: Link): bool {.inline.} = el.getAttr("rel") == $tp
@@ -459,11 +479,6 @@ proc replaceTilNoChange(input: var auto, pattern, repl: auto): string =
         input = input.replace(pattern, repl)
     input
 
-proc sre*(pattern: static string): Regex {.gcsafe.} =
-    ## Static regex expression
-    var rx {.threadvar.}: Regex
-    rx = re(pattern)
-    return rx
 
 pragmaVars(Regex, threadvar, sentsRgx1, sentsRgx2, sentsRgx3, sentsRgx4, sentsRgx5, sentsRgx6,
         sentsRgx7, sentsRgx8, sentsRgx9, sentsRgx10, sentsRgx11, sentsRgx12, sentsRgx13, sentsRgx14,
@@ -625,3 +640,14 @@ proc slugify*(value: string): string =
     result = toNFKC(value).toLower()
     result = result.replace(sre("[^\\w\\s-]"), "")
     result = result.replace(sre("[-\\s]+"), "-").strip(runes = stripchars)
+
+var uriVar {.threadVar.}: URI
+proc rewriteUrl*(el, rewrite_path: auto, hostname = WEBSITE_DOMAIN) =
+    parseURI(string(el.getAttr("href")), uriVar)
+    # remove initial dots from links
+    uriVar.path = uriVar.path.replace(sre("^\\.?\\.?"), "")
+    if uriVar.hostname == "" or (uriVar.hostname == hostname and
+        uriVar.path.startsWith("/")):
+        uriVar.path = joinpath(rewrite_path, uriVar.path)
+    el.setAttr("href", $uriVar)
+    # debug "old: {prev} new: {$uriVar}, {rewrite_path}"

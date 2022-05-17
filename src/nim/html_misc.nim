@@ -4,6 +4,7 @@ import os,
        strutils,
        nimpy,
        karax/[vdom, karaxdsl],
+       sets,
        sequtils # zip
 
 import
@@ -48,7 +49,6 @@ proc fromSearchResult*(topic: string, pslug: string): Article =
 
     getArticle(topic, page, slug)
 
-import sets
 proc buildRelated*(a: Article): VNode =
     ## Get a list of related articles by querying search db with tags and title words
     # try a full tag (or title) search first, then try word by word

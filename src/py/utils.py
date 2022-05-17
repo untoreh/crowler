@@ -12,6 +12,7 @@ from enum import Enum
 from time import sleep
 from typing import MutableSequence, Optional, TypeAlias, Union, Tuple, List, Dict
 from distutils.util import strtobool
+from random import choice
 
 from cachetools import LRUCache
 import numcodecs
@@ -146,7 +147,6 @@ def dirsbydate(path):
     dirs = list(os.scandir(path))
     return sorted(dirs, key=lambda d: d.stat().st_ctime)
 
-
 class ZarrKey(Enum):
     # articles to be published
     articles = "articles"
@@ -158,7 +158,6 @@ class ZarrKey(Enum):
     pages = "pages"
     # stores the topics list and the last update timestamp for each one
     topics = "topics"
-
 
 def _wrap_path(root):
     return os.path.normpath(os.path.sep + str(root) + os.path.sep)
@@ -399,3 +398,7 @@ def iter_topic_articles(topic: str):
     # last page
     for a in tg[ZarrKey.articles.name]:
         yield a
+
+def get_random_topic():
+    assert TOPICS is not None
+    return choice(TOPICS)[0]

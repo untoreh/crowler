@@ -97,3 +97,4 @@ const
     HTML_POST_SELECTOR* = "post-content"
     PUBLISH_TIMEOUT* = 10 ## In seconds
     N_RELATED* = 3 # how many related articles to display at the bottom of an article page
+    N_TOPICS* = 10 # Number of articles (1 per topic) to display on the homepage

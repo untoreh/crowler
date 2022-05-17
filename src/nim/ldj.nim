@@ -74,14 +74,15 @@ template withSchema(json: JsonNode): JsonNode =
 
 
 proc asVNode*[T](data: T, wrap = true, id = "", class = ""): VNode {.gcsafe.} =
+    ldjElement.clearChildren
     case wrap:
         of true:
-            if id != "":
-                ldjElement.setAttr("id", id)
-            if class != "":
-                ldjElement.setAttr("class", class)
-                ldjElement.text = $data
             result = deepCopy(ldjElement)
+            if id != "":
+                result.setAttr("id", id)
+            if class != "":
+                result.setAttr("class", class)
+            result.add text($data)
         else:
             result = deepCopy(ldjElement)
 

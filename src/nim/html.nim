@@ -30,8 +30,8 @@ import cfg,
        shorturls,
        topics,
        quirks, # PySequence requires quirks
-       cache,
-       articles
+    cache,
+    articles
 
 static: echo "loading html..."
 
@@ -72,7 +72,7 @@ proc buildButton(txt: string; custom_classes: string = ""; aria_label: string = 
             text txt
 
 template ldjWebsite(): VNode {.dirty.} =
-    ldj.website(url = ($WEBSITE_URL / topic),
+    ldj.website(url = $(WEBSITE_URL / topic),
                 author = ar.author,
                 year = now().year,
                 image = LOGO_URL).asVNode
@@ -120,7 +120,11 @@ proc buildHead*(path: string; description = ""; topic = ""; ar = emptyArt): VNod
         link(rel = "stylesheet", href = CSS_REL_URL)
         title:
             text ar.title
-        meta(name = "description", content = description)
+        meta(name = "title", content = ar.title)
+        meta(name = "keywords", content = ar.tags.join(","))
+        meta(name = "description", content = something(description, ar.desc))
+        meta(name = "image", content = ar.imageUrl)
+        meta(name = "date", content = something($ar.pubDate, $now()))
         link(rel = "icon", href = FAVICON_PNG_URL, type = "image/x-icon")
         link(rel = "icon", href = FAVICON_SVG_URL, type = "image/svg+xml")
         # https://stackoverflow.com/questions/21147149/flash-of-unstyled-content-fouc-in-firefox-only-is-ff-slow-renderer
@@ -235,8 +239,8 @@ proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): VNode =
                 # Page location
                 a(class = "page mdc-ripple-button mdc-top-app-bar__title",
                   href = pathLink(path.parentDir, rel = false)):
-                      tdiv(class="mdc-ripple-surface")
-                      text crumbs
+                    tdiv(class = "mdc-ripple-surface")
+                    text crumbs
                 # Topics list
                 ul(class = "app-bar-topics"):
                     for tpc in loadTopics(MENU_TOPICS):
@@ -263,10 +267,10 @@ proc buildFooter*(topic: string = ""): VNode =
     buildHtml(tdiv(class = "site-footer container max border medium no-padding")):
         footer(class = "padding absolute blue white-text primary left bottom"):
             tdiv(class = "footer-links"):
-                a(href = ("/" & topic & "/sitemap.xml"), class="sitemap"):
+                a(href = ("/" & topic & "/sitemap.xml"), class = "sitemap"):
                     text("Sitemap")
                 text " - "
-                a(href = ("/" & topic & "/feed.xml"), class="rss"):
+                a(href = ("/" & topic & "/feed.xml"), class = "rss"):
                     text("RSS")
                 text " - "
                 a(href = "/dmca.html"):
@@ -294,11 +298,12 @@ proc postTitle(a: Article): VNode =
                     a(href = a.url):
                         img(src = a.icon, loading = "lazy", alt = "web", class = "material-icons")
                         text a.getAuthor
-        buildImgUrl(a.imageUrl, origin=a.url)
+        buildImgUrl(a.imageUrl, origin = a.url)
 
 proc postContent(article: string): VNode =
     buildHtml(article(class = "post-wrapper")):
-        tdiv(class = HTML_POST_SELECTOR):
+        # NOTE: use `code` tag to avoid minification to collapse whitespace
+        code(class = HTML_POST_SELECTOR):
             verbatim(article)
 
 proc postFooter(pubdate: Time): VNode =
@@ -348,7 +353,11 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
 
 const pageContent* = postContent
 
-proc asHtml*(data: auto): string {.inline.} = ("<!doctype html>"&"\n" & $data).minifyHtml
+proc asHtml*(data: auto): string {.inline.} =
+    let html = "<!doctype html>"&"\n" & $data
+    sdebug "html: raw size {len(html)}"
+    result = html.minifyHtml
+    sdebug "html: minified size {len(result)}"
 
 proc writeHtml*(data: auto; path: string) {.inline.} =
     debug "writing html file to {path}"
@@ -409,7 +418,7 @@ proc buildPost*(a: Article): VNode =
     buildHtml(html(lang = DEFAULT_LANG_CODE,
                    prefix = opgPrefix(@[Opg.article, Opg.website]))
     ):
-        buildHead(getArticlePath(a), a.desc, a.topic)
+        buildHead(getArticlePath(a), a.desc, a.topic, ar = a)
         buildBody(a)
 
 proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode = nil; topic = "";

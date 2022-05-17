@@ -10,7 +10,8 @@ import
     algorithm,
     strformat,
     xmltree,
-    nimpy
+    nimpy,
+    random
 
 import cfg,
        types,
@@ -166,22 +167,45 @@ proc processPage*(lang, amp: string, tree: VNode): VNode =
         debug "page: amping"
         result = result.ampPage
 
-
-proc articleHtml*(capts: auto): string {.gcsafe.} =
+proc articleTree*(capts: auto): VNode =
     # every article is under a page number
     let py = getArticlePy(capts.topic, capts.page, capts.art)
     if not pyisnone(py):
+        debug "article: building post"
         let
             a = initArticle(py, parseInt(capts.page))
             post = buildPost(a)
-        return processPage(capts.lang, capts.amp, post).asHtml
+        debug "article: processing"
+        return processPage(capts.lang, capts.amp, post)
+    else:
+        debug "article: could not fetch python article"
+
+proc articleHtml*(capts: auto): string {.gcsafe.} = articleTree(capts).asHtml
 
 proc buildHomePage*(lang, amp: string): (VNode, VNode) =
+    syncTopics()
     var a = default(Article)
-    a.content = "this is homepage"
-    let tree = buildPage("Home Page", "")
-    (tree, processPage(lang, amp, tree))
+    var
+        n_topics = len(topicsCache)
+        content: string
+        processed: HashSet[string]
 
+    for _ in 0..<cfg.N_TOPICS:
+        let topic = ut.get_random_topic().to(string)
+        if topic in processed:
+            continue
+        else:
+            processed.incl topic
+        let arts =  getLastArticles(topic)
+        if len(arts) > 0:
+            content.add $articleEntry(arts[^1])
+        if len(processed) == n_topics:
+            break
+    let pagetree = buildPage(title = "",
+                         content = content,
+                         slug = "",
+                         topic = "")
+    (pagetree, processPage(lang, amp, pagetree))
 
 proc buildSearchPage*(topic: string, kws: string, lang: string): string =
     ## Builds a search page with 10 entries
@@ -223,9 +247,9 @@ proc buildSuggestList*(topic, input: string): string =
 
 when isMainModule:
     discard
-    # echo homePage()
-    # let topic = "vps"
-    # let page = buildHomePage("en", "")
+    echo homePage()
+    let topic = "vps"
+    let page = buildHomePage("en", "")
     # page.writeHtml(SITE_PATH / "index.html")
     # initSonic()
     # let argt = getLastArticles(topic)

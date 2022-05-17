@@ -83,10 +83,12 @@ template setEncoding() {.dirty.} =
         hencoding.add("deflate")
         resp = resp.compress(dataFormat=dfDeflate)
 
-proc doReply[T](ctx: HttpCtx, body: T, code = Http200, headers: openarray[string] = @[]) {.raises: []} =
+proc doReply[T](ctx: HttpCtx, body: T, scode = Http200, headers: openarray[string] = @[]) {.raises: []} =
     baseHeaders.add headers
-    var resp = if likely(body != ""):
-                        body else: nobody
+    var resp = if likely(body != ""): body
+               else:
+                   sdebug "reply: body is empty!"
+                   nobody
     if reqMime == "":
         reqMime = mimePath(reqFile)
     hcontent.add reqMime
@@ -99,13 +101,14 @@ proc doReply[T](ctx: HttpCtx, body: T, code = Http200, headers: openarray[string
         try:
             warn "reply: troubles serving page {reqFile}"
         except: discard
-    ctx.reply(code, resp, baseHeaders)
+    sdebug "reply: sending: {len(resp)}"
+    ctx.reply(scode, resp, baseHeaders)
 
 template handle301*(loc: string = $WEBSITE_URL) {.dirty.} =
-    ctx.doReply(nobody, code = Http301, headers = ["Location:"&loc])
+    ctx.doReply(nobody, scode = Http301, headers = ["Location:"&loc])
 
 template handle404*(body: var string) =
-    ctx.doReply(body, code = Http404, headers = ["Location:"&loc])
+    ctx.doReply(body, scode = Http404, headers = ["Location:"&loc])
 
 template handleHomePage(relpath: string, capts: auto, ctx: HttpCtx) {.dirty.} =
     const homePath = SITE_PATH / "index.html"
@@ -163,10 +166,12 @@ template handleArticle(capts: auto, ctx: HttpCtx) =
     let tg = topicsCache.get(capts.topic, emptyTopic)
     if tg.topdir != -1:
         page = pageCache[].lgetOrPut(reqKey):
+            debug "article: generating article"
             articleHtml(capts)
         if page != "":
             ctx.doReply(page)
         else:
+            debug "article: redirecting to topic because page is empty"
             handle301($(WEBSITE_URL / capts.amp / capts.lang / capts.topic))
     else:
         handle301($(WEBSITE_URL / capts.amp / capts.lang))
@@ -277,7 +282,7 @@ proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
             handle301()
             debug "Router failed, {msg}, \n {getStacktrace()}"
         except:
-            ctx.doReply("", code = Http501)
+            ctx.doReply("", scode = Http501)
             discard
         discard
 
@@ -288,7 +293,6 @@ when isMainModule:
     pageCache[].clear()
     registerThreadInitializer(initThread)
     server.initHeaderCtx(handleGet, 5050, false)
-
     echo "GuildenStern HTTP server serving at 5050"
     synctopics()
     server.serve(loglevel = INFO)

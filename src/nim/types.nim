@@ -2,34 +2,45 @@ import
     times, nimpy, os, strutils, strformat,
     nimpy / py_lib,
     std / osproc,
-    sets, locks, sequtils,
+    sets, locks,
     sharedtables, lrucache
 
 # Generics
 proc put*[T, K, V](t: T, k: K, v: V): V = (t[k] = v; v)
 
-proc setPyLib() =
-    var (pylibpath, success) = execCmdEx("python3 -c 'import find_libpython; print(find_libpython.find_libpython())'")
-    if success != 0:
-        let (_, pipsuccess) = execCmdEx("pip3 install find_libpython")
-        assert pipsuccess == 0
-    (pylibpath, success) = execCmdEx("python3 -c 'import find_libpython; print(find_libpython.find_libpython())'")
-    assert success == 0
-    pylibpath.stripLineEnd
-    pyInitLibPath pylibpath
+when false:
+    proc setPyLib() =
+        var (pylibpath, success) = execCmdEx("python3 -c 'import find_libpython; print(find_libpython.find_libpython())'")
+        if success != 0:
+            let (_, pipsuccess) = execCmdEx("pip3 install find_libpython")
+            assert pipsuccess == 0
+        (pylibpath, success) = execCmdEx("python3 -c 'import find_libpython; print(find_libpython.find_libpython())'")
+        assert success == 0
+        pylibpath.stripLineEnd
+        pyInitLibPath pylibpath
+    setPyLib()
 
-# setPyLib()
-let machinery = pyImport("importlib.machinery")
-proc relpyImport*(relpath: string): PyObject =
-    let abspath = os.expandFilename(relpath & ".py")
-    let name = abspath.splitFile[1]
-    let loader = machinery.SourceFileLoader(name, abspath)
-    return loader.load_module(name)
+# in release mode cwd is not src/nim
+let
+    prefixPy = if dirExists "py": "py"
+               elif dirExists "lib/py": "lib/py"
+               elif dirExists "../py": "../py"
+               else: raise newException(Defect, "could not find python library path. in {getAppFileName.parentDir}")
+    machinery = pyImport("importlib.machinery")
+
+proc relpyImport*(relpath: string, prefix=prefixPy): PyObject =
+    let abspath = os.expandFilename(prefix / relpath & ".py")
+    try:
+        let name = abspath.splitFile[1]
+        let loader = machinery.SourceFileLoader(name, abspath)
+        return loader.load_module(name)
+    except:
+        raise newException(ValueError, fmt"Cannot import python module, pwd is {getCurrentDir()}, trying to load {abspath}")
 
 # we have to load the config before utils, otherwise the module is "partially initialized"
-let pycfg* = relpyImport("../py/config")
-# let pylog* = relpyImport("../py/log")
-let ut* = relpyImport("../py/utils")
+let pycfg* = relpyImport("config")
+# let pylog* = relpyImport("log")
+let ut* = relpyImport("utils")
 
 type
     TS = enum
@@ -60,39 +71,39 @@ const emptyseq*: seq[string] = @[]
 
 # https://github.com/yglukhov/nimpy/issues/164
 let
-    builtins = pyBuiltinsModule()
+    pybi* = pyBuiltinsModule()
     za = pyimport("zarr")
-    PyBoolClass = builtins.True.getattr("__class__")
-    PyNoneClass = builtins.None.getattr("__class__")
+    PyBoolClass = pybi.True.getattr("__class__")
+    PyNoneClass = pybi.None.getattr("__class__")
     PyDateTimeClass = pyimport("datetime").datetime
-    PyStrClass = builtins.str.getattr("__class__")
-    PyDictClass = builtins.dict.getattr("__class__")
+    PyStrClass = pybi.str.getattr("__class__")
+    PyDictClass = pybi.dict.getattr("__class__")
     PyZArray = za.getAttr("Array")
-    PyNone* = builtins.None
-    pySlice = builtins.slice
+    PyNone* = pybi.None
+    pySlice = pybi.slice
 
 var emptyArt* {.threadvar.}: Article
 
 proc pyclass(py: PyObject): PyObject {.inline.} =
-    builtins.type(py)
+    pybi.type(py)
 
 proc pytype*(py: PyObject): string =
     py.pyclass.getattr("__name__").to(string)
 
 proc pyisbool*(py: PyObject): bool {.exportpy.} =
-    return builtins.isinstance(py, PyBoolClass).to(bool)
+    return pybi.isinstance(py, PyBoolClass).to(bool)
 
 proc pyisnone*(py: PyObject): bool {.exportpy.} =
-    return builtins.isinstance(py, PyNoneClass).to(bool)
+    return pybi.isinstance(py, PyNoneClass).to(bool)
 
 proc pyisdatetime*(py: PyObject): bool {.exportpy.} =
-    return builtins.isinstance(py, PyDateTimeClass).to(bool)
+    return pybi.isinstance(py, PyDateTimeClass).to(bool)
 
 proc pyisstr*(py: PyObject): bool {.exportpy.} =
-    return builtins.isinstance(py, PyStrClass).to(bool)
+    return pybi.isinstance(py, PyStrClass).to(bool)
 
 proc pyiszarray*(py: PyObject): bool {.exportpy.} =
-    return builtins.isinstance(py, PyZArray).to(bool)
+    return pybi.isinstance(py, PyZArray).to(bool)
 
 proc `$`*(a: Article): string =
     "\ptitle: " &
@@ -171,10 +182,10 @@ proc pysome*(pys: varargs[PyObject], default = new(PyObject)): PyObject =
     raise e
 
 proc len*(py: PyObject): int =
-    builtins.len(py).to(int)
+    pybi.len(py).to(int)
 
 proc isa*(py: PyObject, tp: PyObject): bool =
-    builtins.isinstance(py, tp).to(bool)
+    pybi.isinstance(py, tp).to(bool)
 
 proc pyget*[T](py: PyObject, k: string, def: T = ""): T =
     try:
@@ -249,7 +260,6 @@ proc contains*[K](v: PyObject, k: K): bool =
 
 
 # PySequence
-import quirks
 type PySequence*[T] = ref object
     py: PyObject
     getitem: PyObject

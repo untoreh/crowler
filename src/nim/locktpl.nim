@@ -1,5 +1,5 @@
-import macros,
-       locks
+import locks
+export locks
 
 template lockedStore*(name: untyped): untyped {.dirty.} =
     type

@@ -1,8 +1,7 @@
 import strformat,
        xmltree,
        uri,
-       sugar,
-       std/enumerate
+       sugar
 
 import cfg,
        types,

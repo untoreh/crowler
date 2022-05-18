@@ -2,14 +2,11 @@ import
     karax / [karaxdsl, vdom, vstyles],
     os,
     strformat,
-    htmlgen,
-    xmlparser,
     xmltree,
     sugar,
     strutils,
     times,
     uri,
-    sequtils,
     normalize,
     unicode,
     nre,
@@ -23,32 +20,33 @@ import cfg,
        html_misc,
        html_minify_c,
        amp,
-       yandex,
        opg,
        rss,
        ldj,
        shorturls,
        topics,
        quirks, # PySequence requires quirks
-    cache,
-    articles
+       cache,
+       articles
 
 static: echo "loading html..."
 
 const ROOT = initUri() / "/"
-const preline = [(white_space, "pre-line")]
+const wsPreline = [(white_space, "pre-line")]
+const wsBreak = [(white_space, "break-spaces")]
 
-threadVars((preline_style, VStyle), (rtime, string), (wsRgx, hypRgx, Regex))
+threadVars((preline_style, break_style, VStyle), (rtime, string))
 
 proc initHtml*() =
     try:
-        preline_style = style(preline)
+        preline_style = style(wsPreline)
+        break_style = style(wsBreak)
         rtime = $now()
         initZstd()
     except:
-        qdebug "Could not initialize html vars {getCurrentExceptionMsg()}"
+        qdebug "Could not initialize html vars {getCurrentExceptionMsg()}, {getStacktrace()}"
 
-initHtml()
+# initHtml()
 
 template kxi*(): int = 0
 template addEventHandler*(n: VNode; k: EventKind; action: string; kxi: int) =
@@ -303,7 +301,7 @@ proc postTitle(a: Article): VNode =
 proc postContent(article: string): VNode =
     buildHtml(article(class = "post-wrapper")):
         # NOTE: use `code` tag to avoid minification to collapse whitespace
-        code(class = HTML_POST_SELECTOR):
+        pre(class = HTML_POST_SELECTOR, style=break_style):
             verbatim(article)
 
 proc postFooter(pubdate: Time): VNode =
@@ -348,8 +346,12 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
             # we don't paginate searches because we only serve the first page per query
             if pn != -1 and not home:
                 span(class = "next-page"):
-                    a(href = (topic_path / (pn + 1).intToStr)):
-                        text "Next page >>"
+                    if pn == ut.get_top_page(topic).to(int):
+                        a:
+                            text "Next page >>"
+                    else:
+                        a(href = (topic_path / (pn + 1).intToStr)):
+                            text "Next page >>"
 
 const pageContent* = postContent
 

@@ -1,13 +1,9 @@
 import
     vendor/imageflow_plumbing,
     strformat,
-    std/cpuinfo,
     json,
     tables,
     std/httpclient,
-    uri,
-    os,
-    unicode,
     hashes,
     locks
 

@@ -10,8 +10,10 @@ type PageCache {.borrow: `.`.} = LRUTrans
 var pageCache*: ptr PageCache
 
 proc initPageCache*(): PageCache =
+    let dbpath = DATA_PATH / (WEBSITE_DOMAIN & ".page.db")
     translate_db.MAX_DB_SIZE = 40 * 1024 * 1024 * 1024
-    translate_db.DB_PATH[] = DATA_PATH / (WEBSITE_DOMAIN & ".page.db")
+    debug "cache: storing cache at {dbpath}"
+    translate_db.DB_PATH[] = dbpath
     result = initLRUTrans()
     openDB(result)
 

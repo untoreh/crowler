@@ -1,7 +1,8 @@
 import uri,
        strutils,
        nimpy,
-       os
+       os,
+       algorithm
 
 import cfg,
        types,
@@ -53,8 +54,9 @@ proc getDoneArticles*(topic: string, pagenum: int): seq[Article] =
         return @[]
 
     info "Fetching {arts.shape[0]} published articles for {topic}/{pagenum}"
-    for data in arts:
-        result.add(initArticle(data, pagenum))
+    for data in pybi.reversed(arts):
+        if not pyisnone(data): # blacklisted articles are set to None
+            result.add(initArticle(data, pagenum))
 
 proc getLastArticles*(topic: string): seq[Article] =
     let topPage = ut.get_top_page(topic).to(int)
@@ -69,7 +71,7 @@ proc getArticlePy*(topic: string, page: string | int, slug: string): PyObject =
     if topic.getState[0] != -1:
         let donearts = tg[$topicData.done]
         for pya in donearts[page]:
-            if pya.pyget("slug") == slug:
+            if (not pyisnone(pya)) and pya.pyget("slug") == slug:
                 return pya
     else:
         return PyNone

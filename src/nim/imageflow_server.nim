@@ -1,13 +1,9 @@
 import
        httpcore,
        guildenstern/[ctxheader, ctxbody],
-       strutils,
        nre,
-       json,
        uri,
        os,
-       std/tempfiles,
-       std/exitprocs,
        lruCache,
        httpclient,
        strformat,
@@ -18,7 +14,6 @@ import
     types,
     imageflow,
     utils,
-    server,
     locktpl,
     shorturls
 
@@ -68,13 +63,10 @@ proc handleImg*(relpath: string): auto =
 
 proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
     assert ctx.parseRequestLine
-    var
-        relpath = ctx.getUri()
-        page: string
-        dowrite: bool
+    var relpath = ctx.getUri()
     # relpath.removePrefix('/')
     try:
-        let (resp, mime) = handleImg(relpath)
+        let (resp, _) = handleImg(relpath)
         if resp.isSomething:
             ctx.reply(resp)
         else:

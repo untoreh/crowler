@@ -1,16 +1,6 @@
-import tables,
-       karax / [karaxdsl, vdom, vstyles],
-       sequtils,
-       strutils,
-       strformat,
-       os,
-       std/with,
-       std/httpclient,
-       hashes,
-       htmlparser,
+import
+       karax / [vdom],
        xmltree,
-       nre,
-       uri,
        lrucache,
        hashes,
        strtabs

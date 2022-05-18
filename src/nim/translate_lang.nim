@@ -2,8 +2,7 @@ import
     os,
     karax/vdom,
     strutils,
-    xmltree,
-    threadpool
+    xmltree
 
 import
     cfg,

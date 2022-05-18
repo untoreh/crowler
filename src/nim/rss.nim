@@ -2,19 +2,14 @@ import
     xmltree,
     karax/vdom,
     uri,
-    sharedtables,
     std/xmlparser,
-    sugar,
-    os,
     lists,
-    std/enumerate,
     strformat
 
 import
     cfg,
     types,
     utils,
-    html_misc,
     cache,
     articles,
     topics

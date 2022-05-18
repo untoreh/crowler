@@ -1,13 +1,11 @@
 import
     algorithm,
     json,
-    std/streams,
     json_serialization,
     json_serialization/lexer,
     faststreams/inputs,
     std/enumerate,
     strutils,
-    sugar,
     std/options,
     nre
 

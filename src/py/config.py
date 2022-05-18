@@ -19,6 +19,8 @@ PROXY_DICT = {"http": STATIC_PROXY_EP, "https": STATIC_PROXY_EP}
 
 if "CURL_CLASS" not in globals():
     CURL_CLASS = copy.deepcopy(pycurl.Curl)
+
+
 def curlproxy():
     c = CURL_CLASS()
     ua = generate_user_agent()
@@ -34,6 +36,7 @@ def curlproxy():
 
 
 PROXY_VARS = ("HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy")
+
 
 def setproxies(p=STATIC_PROXY_EP):
     if p:
@@ -51,8 +54,14 @@ REQ_TIMEOUT = 20
 # How many concurrent requests
 POOL_SIZE = os.cpu_count()
 
-DATA_DIR = Path(os.path.realpath("../../data"))
-assert isdir(Path(dirname(DATA_DIR)) / ".venv")
+DATA_DIR = Path(os.path.realpath(
+    "./data"
+    if os.path.exists("./data")
+    else "../../data"
+    if os.path.exists("../../data")
+    else ""
+))
+assert (DATA_DIR is not None) and isdir(Path(dirname(DATA_DIR)) / ".venv")
 
 TOPICS_DIR = DATA_DIR / "topics"
 TOPICS_IDX = TOPICS_DIR / "index"

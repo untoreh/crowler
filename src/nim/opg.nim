@@ -14,13 +14,13 @@ import cfg,
        html_misc,
        articles
 
-const basePrefix = "og: https://ogp.me/ns#"
+const basePrefix* = "og: https://ogp.me/ns#"
 
 
 type Opg* = enum
     article, website, book, profile, video, music
 
-let prefixCache = initTable[static seq[Opg], static string]()
+let prefixCache* = initTable[static seq[Opg], static string]()
 var opgTags {.threadvar.}: seq[XmlNode]
 proc initOpg*() =
     opgTags = newSeq[XmlNode]()
@@ -70,7 +70,7 @@ proc fillOpgTags(title, tp, url, image: string, description = "", siteName = "",
     opgTagsToString().verbatim
 
 
-proc opgStructure(prop, url, secureUrl, mime, width, height, alt: string) =
+proc opgStructure*(prop, url, secureUrl, mime, width, height, alt: string) =
     ## Writes the additional metadata structures to the specified PROP.
     addMetaTag(fmt"{prop}:url", url)
     if secureUrl.isSomething: addMetaTag(fmt"{prop}:secure_url", secureUrl)
@@ -80,7 +80,7 @@ proc opgStructure(prop, url, secureUrl, mime, width, height, alt: string) =
     if height.isSomething: addMetaTag(fmt"{prop}:height", height)
     if alt.isSomething: addMetaTag(fmt"{prop}:alt", alt)
 
-proc opgArticle(title, tp, url, image, author: string, tag: seq[string] = @[], section = "", ctime,
+proc opgArticle*(title, tp, url, image, author: string, tag: seq[string] = @[], section = "", ctime,
         mtime, etime = "") =
     ## Write meta tags for an article object type.
     opgBasic(title, tp, url, image, prefix = "article")
@@ -98,7 +98,7 @@ proc twitterMeta(prop, content: string) =
                        "content": content}.toXmlAttributes()
     opgTags.add(tag)
 
-proc opgTwitter(prop, content: string) =
+proc opgTwitter*(prop, content: string) =
     ## Twitter card meta tags
     addMetaTag(prop, content, base = "twitter")
 

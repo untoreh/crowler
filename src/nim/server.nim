@@ -6,7 +6,7 @@ import strformat,
        weave,
        locks,
        karax/vdom,
-       cgi, strtabs,
+       strtabs,
        httpcore,
        guildenstern/[ctxheader, ctxbody],
        nre,
@@ -26,9 +26,7 @@ import
     topics,
     utils,
     cfg,
-    quirks,
     html,
-    html_misc,
     publish,
     translate,
     translate_db,
@@ -42,7 +40,7 @@ import
     sitemap,
     articles
 
-const customPages = ["dmca", "tos", "privacy-policy"]
+const customPages* = ["dmca", "tos", "privacy-policy"]
 const nobody = ""
 var
     reqMime {.threadvar.}: string
@@ -121,15 +119,17 @@ template handleHomePage(relpath: string, capts: auto, ctx: HttpCtx) {.dirty.} =
     ctx.doReply(page)
 
 template handleAsset() {.dirty.} =
-    # try:
-    #     page = pageCache[].get(reqKey)
-    # except KeyError:
-    #     page = readFile(reqFile)
-    #     if page != "":
-    #         pageCache[reqKey] = page
-    debug "ASSETS CACHING DISABLED"
-    reqMime = mimePath(reqFile)
-    page = readFile(reqFile)
+    when releaseMode:
+        try:
+            page = pageCache[].get(reqKey)
+        except KeyError:
+            page = readFile(reqFile)
+            if page != "":
+                pageCache[reqKey] = page
+    else:
+        debug "ASSETS CACHING DISABLED"
+        reqMime = mimePath(reqFile)
+        page = readFile(reqFile)
     ctx.doReply(page)
 
 template dispatchImg(relpath: var string, ctx: auto) {.dirty.} =
@@ -227,7 +227,6 @@ proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
     reset(reqFile)
     reset(reqKey)
     resetHeaders()
-
     var
         relpath = ctx.getUri()
         page: string
@@ -273,9 +272,13 @@ proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
                 # topic page
                 handleTopic(capts, ctx)
             else:
-                debug "router: serving article {relpath}, {capts}"
-                # article page
-                handleArticle(capts, ctx)
+                # Avoid other potential bad urls
+                if capts.art[^1] == relpath[^1]:
+                    debug "router: serving article {relpath}, {capts}"
+                    # article page
+                    handleArticle(capts, ctx)
+                else:
+                    handle301()
     except:
         try:
             let msg = getCurrentExceptionMsg()
@@ -286,13 +289,20 @@ proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
             discard
         discard
 
-when isMainModule:
-
+proc start*(doclear=false, port=5050) =
     var server = new GuildenServer
     initCache()
-    pageCache[].clear()
+    if doclear:
+        if os.getenv("DO_SERVER_CLEAR", "") == "1":
+            echo fmt"Clearing pageCache at {pageCache[].path}"
+            pageCache[].clear()
+        else:
+            echo "Ignoring doclear flag because 'DO_SERVER_CLEAR' env var is not set to '1'."
     registerThreadInitializer(initThread)
-    server.initHeaderCtx(handleGet, 5050, false)
-    echo "GuildenStern HTTP server serving at 5050"
+    server.initHeaderCtx(handleGet, port, false)
+    echo fmt"HTTP server listening on port {port}"
     synctopics()
     server.serve(loglevel = INFO)
+
+when isMainModule:
+    start()

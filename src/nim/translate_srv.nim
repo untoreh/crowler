@@ -22,7 +22,6 @@ import
 
 static: echo "loading translate_srv"
 
-let pybi = pyBuiltinsModule()
 let pyGlo = pyGlobals()
 var tFuncCache* {.threadvar.}: ptr Table[(service, langpair), TFunc]
 
@@ -59,10 +58,9 @@ def tryWrapper(fn, n: int, def_val=""):
             return def_val
     return wrappedFn
 """
-discard relpyImport("../py/config")
 let
     tryWrapper = pyglo["tryWrapper"]
-    pySched = relpyImport("../py/scheduler")
+    pySched = relpyImport("scheduler")
 
 discard pySched.initPool()
 

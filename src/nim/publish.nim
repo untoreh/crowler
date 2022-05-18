@@ -168,10 +168,11 @@ proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
     for (_, a) in posts:
         donePy.add a.py
         doneArts.add a
+    updateTopicPubdate()
     discard ut.save_done(topic, len(arts), donePy, pagenum)
     true
 
-proc publish(topic: string) =
+proc pubTopic(topic: string) =
     ##  Generates html for a list of `Article` objects and writes to file.
     doassert topic in ut.load_topics()[1]
     var pagenum = curPageNumber(topic)
@@ -191,13 +192,16 @@ proc publish(topic: string) =
         if not filterDuplicates(topic, lsh, pagenum, posts, donePy, doneArts):
             break
 
-    if newpage:
-        ensureDir(SITE_PATH / pagedir)
+    # At this point articles "state" is updated on python side
+    # new articles are "published" and the state (pagecache, rss, search) has to be synced
+    when not cfg.SERVER_MODE:
+        if newpage:
+            ensureDir(SITE_PATH / pagedir)
     let newposts = len(posts)
     if newposts == 0:
         info "No new posts written for topic: {topic}"
         return
-    # only write articles after having saved LSH
+    # only write articles after having saved LSH (within `filterDuplicates)
     # to avoid duplicates. It is fine to add articles to the set
     # even if we don't publish them, but we never want duplicates
     saveLS(topic, lsh)
@@ -206,8 +210,9 @@ proc publish(topic: string) =
     for (tree, a) in posts:
         processHtml(pagedir, a.slug, tree, a)
     # after writing the new page, ensure home points to the new page
-    if newpage:
-        ensureHome(topic, pagenum)
+    when not cfg.SERVER_MODE:
+        if newpage:
+            ensureHome(topic, pagenum)
     # if its a new page, the page posts count is equivalent to the just published count
     var pagecount: int
     pagecount = newposts
@@ -228,10 +233,26 @@ proc publish(topic: string) =
         for ar in doneArts:
             var relpath = topic / $pagenum / ar.slug
             search.push(relpath)
-
     # update ydx turbo items
-    # when cfg.YDX:
-    #     writeFeed()
+    when cfg.YDX:
+        writeFeed()
+
+let lastPubTime = create(Time)
+var pubLock: Lock
+initLock(pubLock)
+lastPubTime[] = getTime()
+proc pub*() =
+    let t = getTime()
+    if pubLock.tryacquire:
+        defer: pubLock.release
+        # Only publish one topic every `CRON_TOPIC`
+        if inSeconds(t - lastPubTime) > cfg.CRON_TOPIC:
+            let
+                lastPubTime = t
+                topic = nextTopic()
+            # Don't publish each topic more than `CRON_TOPIC_FREQ`
+            if inHours(t - topicPubdate) > cfg.CRON_TOPIC_FREQ:
+                pubTopic(topic)
 
 proc resetTopic(topic: string) =
     discard ut.reset_topic_data(topic)
@@ -274,7 +295,7 @@ when isMainModule:
     # resetTopic("web")
     # resetTopic("vps")
     # resetTopic("dedi")
-    publish(topic)
+    dopublish(topic)
     quit()
     let
         topdir = 0

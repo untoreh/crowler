@@ -144,6 +144,7 @@ proc clear*(t: LRUTrans) =
             ct.commit
 
 proc delete*(t: LRUTrans) = removeDir(t.db.path)
+proc path*(t: LRUTrans): string = t.db.path
 
 proc save*(t: LRUTrans, c: Table[int64, string]) {.gcsafe.} =
     withLock(tLock):

@@ -1,29 +1,15 @@
 import
-    karax / [karaxdsl, vdom, vstyles],
-    strutils,
-    os,
+    karax / [karaxdsl, vstyles],
     uri,
-    sugar,
     sequtils,
-    times,
     unicode,
-    algorithm,
-    strformat,
     xmltree,
-    nimpy,
     random
 
-import cfg,
-       types,
-       utils,
-       html,
-       html_misc,
+import html_misc,
        translate,
        translate_lang,
-       amp,
-       search,
-       topics,
-       articles
+       amp
 
 const tplRep = @{"WEBSITE_DOMAIN": WEBSITE_DOMAIN}
 const ppRep = @{"WEBSITE_URL": $WEBSITE_URL.combine(),
@@ -132,34 +118,28 @@ proc buildShortPosts*(arts: seq[Article], homepage = false): string =
     for a in arts:
         result.add $articleEntry(a)
 
-proc homePage(): VNode =
-    syncTopics()
-    # for (k, t) in topicsCache:
-    #     echo t.group[$topicData.pages]
-
 template topicPage*(topic: string, pagenum: string, istop = false) {.dirty.} =
     ## Writes a single page (fetching its related articles, if its not a template) to storage
     let arts = getDoneArticles(topic, pagenum = pagenum.parseInt)
     let content = buildShortPosts(arts)
     # if the page is not finalized, it is the homepage
     let
-        footer = pageFooter(topic, pagenum, istop)
-        pagetree = buildPage(title = "",
+        footer = pageFooter(topic, pagenum, home=istop)
+        pagetree = buildPage(title = "", # this is NOT a `title` tag
                          content = content,
                          slug = pagenum,
                          pagefooter = footer,
                          topic = topic)
 
 {.push gcsafe.}
-proc processPage*(lang, amp: string, tree: VNode): VNode =
+proc processPage*(lang, amp: string, tree: VNode, relpath="index"): VNode =
     if lang in TLangsCodes:
         let
             filedir = SITE_PATH
-            relpath = "index.html"
             tpath = filedir / lang / relpath
         var fc = initFileContext(tree, filedir, relpath,
             (src: SLang.code, trg: lang), tpath)
-        debug "page: translating home to {lang}"
+        debug "page: translating page to {lang}"
         result = translateLang(fc)
     else:
         result = tree
@@ -176,11 +156,15 @@ proc articleTree*(capts: auto): VNode =
             a = initArticle(py, parseInt(capts.page))
             post = buildPost(a)
         debug "article: processing"
-        return processPage(capts.lang, capts.amp, post)
+        return processPage(capts.lang, capts.amp, post, relpath=capts.art)
     else:
         debug "article: could not fetch python article"
 
-proc articleHtml*(capts: auto): string {.gcsafe.} = articleTree(capts).asHtml
+proc articleHtml*(capts: auto): string {.gcsafe.} =
+    let t = articleTree(capts)
+    if not t.isnil:
+        t.asHtml
+    else: ""
 
 proc buildHomePage*(lang, amp: string): (VNode, VNode) =
     syncTopics()
@@ -223,7 +207,7 @@ proc buildSearchPage*(topic: string, kws: string, lang: string): string =
             let ar = topic.fromSearchResult(pslug)
             content.add $articleEntry(ar)
     let
-        footer = pageFooter(topic, "s", false)
+        footer = pageFooter(topic, "s", home=false)
     let tree = buildPage(title = fmt"""Search results for: "{keywords}" (from category: {topic})""",
                          content = content,
                          slug = "/s/" & kws,

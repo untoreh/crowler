@@ -5,6 +5,7 @@ from pathlib import Path
 import json
 import os
 import re
+import time
 import unicodedata
 import numpy as np
 from re import finditer
@@ -330,10 +331,11 @@ def reset_topic_data(topic: str):
 
 def load_topics():
     global TOPICS, TPDICT
+
     if TOPICS is None:
         TOPICS = load_zarr(k=ZarrKey.topics, root=cfg.TOPICS_IDX, dims=2)
         if TOPICS is None:
-            raise IOError("Couldn't load topics.")
+            raise IOError(f"Couldn't load topics. for root {cfg.TOPICS_IDX}")
         TPDICT = dict(zip(TOPICS[:, 0], TOPICS[:, 1]))
     return (TOPICS, TPDICT)
 
@@ -352,6 +354,11 @@ def add_topics_idx(tp: TopicsList):
 
 
 def reset_topics_idx(tp):
+    """The Topics index holds ordered topics metadata:
+    - 0: name
+    - 1: descritpion
+    - 2: last publication date
+    """
     global TOPICS, TPDICT
     assert isinstance(tp, list)
     tp = np.asarray(tp)
@@ -368,8 +375,8 @@ def _count_top_page(pages):
 
 
 def get_top_page(topic: str):
-    topic_path = cfg.TOPICS_DIR / topic
-    pages = load_zarr(k=ZarrKey.pages, root=topic_path)
+    tg = topic_group(topic)
+    pages = tg[ZarrKey.pages.name]
     return _count_top_page(pages)
 
 
@@ -387,6 +394,13 @@ def get_top_articles(topic: str):
 def get_topic_desc(topic: str):
     return TPDICT[topic]
 
+def get_topic_pubDate(idx: int):
+    assert TOPICS is not None
+    return TOPICS[idx, 2]
+
+def set_topic_pubDate(idx):
+    assert TOPICS is not None
+    TOPICS[idx, 2] = int(time.time())
 
 def iter_topic_articles(topic: str):
     tg = topic_group(topic)

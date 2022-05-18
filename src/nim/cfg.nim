@@ -3,7 +3,9 @@ import os,
        uri,
        strutils
 
-const cfg_path = currentSourcePath().splitPath()[0]
+const releaseMode* = os.getenv("NIM", "") == "release"
+const cfg_path = when releaseMode: "./"
+                 else: currentSourcePath().splitPath()[0]
 
 let loggerObj = newConsoleLogger(fmtStr = "[$time] - $levelname: ")
 let logger* = loggerObj.unsafeAddr
@@ -84,7 +86,7 @@ const
     SERVER_MODE* = true
     # WEBSITE_IMG_PORT* = ":5051"
     # WEBSITE_URL_IMG* = initUri() / ("img" & "." & WEBSITE_DOMAIN) / WEBSITE_IMG_PORT
-    WEBSITE_URL_IMG* = parseUri(WEBSITE_DOMAIN & WEBSITE_DEBUG_PORT)  / "i"
+    WEBSITE_URL_IMG* = parseUri(WEBSITE_DOMAIN & WEBSITE_DEBUG_PORT) / "i"
     IMG_VIEWPORT* = ["320w", "800w", "1920w"]
     IMG_SIZES* = ["122x122", "305x305", "733x733"]
     TRENDS* = false
@@ -98,3 +100,7 @@ const
     PUBLISH_TIMEOUT* = 10 ## In seconds
     N_RELATED* = 3 # how many related articles to display at the bottom of an article page
     N_TOPICS* = 10 # Number of articles (1 per topic) to display on the homepage
+    CRON_TOPIC = 60 # Seconds between a `pub` job run
+    CRON_TOPIC_FREQ = 8 # Hours between a specific topic `pub` job run
+
+static: echo "Data Path is " & PROJECT_PATH

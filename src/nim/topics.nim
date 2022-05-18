@@ -1,4 +1,4 @@
-import nimpy, uri, strformat
+import nimpy, uri, strformat, times
 import
     cfg,
     types,
@@ -40,8 +40,8 @@ proc syncTopics*() {.gcsafe.} =
                     tp = topic[0].to(string)
                     tg = ut.topic_group(tp)
                     td = tp.getState[0]
-                # debug "synctopics: adding topic {tp} to global"
-                # topicsCache[tp] = (topdir: td, group: tg)
+                debug "synctopics: adding topic {tp} to global"
+                topicsCache[tp] = (topdir: td, group: tg)
     except Exception as e:
         debug "could not sync topics {getCurrentExceptionMsg()}"
 
@@ -60,8 +60,24 @@ proc pageSize*(topic: string, pagenum: int): int =
         return 0
     py[0].to(int)
 
+var curTopicIdx = 0
+var nextTopicIdx = 0
+proc nextTopic*(): string =
+    let topics = ut.load_topics()[0]
+    if len(topics) < nextTopicIdx:
+        nextTopicIdx = 0
+    result = topics[nextTopicIdx][0].to(string)
+    curTopicIdx = nextTopicIdx
+    nextTopicIdx += 1
+
+proc topicPubdate*(idx: int): Time =
+    ut.get_topic_pubDate(idx).to(int).fromUnix
+proc topicPubdate*(): Time = topicPubdate(curTopicIdx)
+proc updateTopicPubdate*(idx: int) =
+    discard ut.set_topic_pubDate(idx)
+proc updateTopicPubdate*() =  updateTopicPubdate(curTopicIdx)
 
 when isMainModule:
-    # synctopics()
-    echo "vps".getState[0]
+    synctopics()
+    echo inHours(getTime() - topicPubDate())
     # echo typeof(topicsCache.fetch("vps"))

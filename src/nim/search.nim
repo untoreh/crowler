@@ -30,18 +30,20 @@ var
     snc {.threadvar.}: Sonic
     sncc {.threadvar.}: Sonic
     sncq {.threadvar.}: Sonic
-let Language = pyImport("langcodes").Language
+
+let Language = withPyLock:
+    pyImport("langcodes").Language
+
 const defaultLimit = 10
 const bufsize = 20000 - 128 # FIXME: snc.bufsize returns 0...
 
 proc closeSonic() =
     debug "sonic: closing"
-    if not snc.isnil:
-        try:
-            discard snc.quit()
-            discard sncc.quit()
-            discard sncq.quit()
-        except: discard
+    for c in [snc, sncc, sncq]:
+        if not c.isnil:
+            try: discard c.quit()
+            except: discard
+
 addExitProc(closeSonic)
 
 proc isopen(): bool =
@@ -61,8 +63,9 @@ proc initSonic*() {.gcsafe.} =
     assert not snc.isnil
 
 proc toISO3(lang: string): string =
-    Language.get(if lang == "": SLang.code
-                 else: lang).to_alpha3().to(string)
+    withPyLock:
+        return Language.get(if lang == "": SLang.code
+                    else: lang).to_alpha3().to(string)
 
 proc sanitize*(s: string): string =
     ## Replace new lines for search queries and ingestion
@@ -165,10 +168,10 @@ proc pushall() =
 
 when isMainModule:
     var relpath = "/web/0/is-hosting-your-wordpress-website-on-aws-a-good-idea"
-    initSonic()
-    initCache()
+    # initSonic()
+    # initCache()
     # sncc.flush()
-    pushall()
+    # pushall()
 
     # push(relpath)
     # discard sncc.trigger("consolidate")

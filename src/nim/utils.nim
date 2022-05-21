@@ -43,10 +43,10 @@ template lgetOrPut*[T, K](c: T, k: K, v: untyped): untyped =
 proc isWeaveOff*(): bool {.inline.} = globalCtx.numWorkers == 0 or workerContext.signaledTerminate
 
 template logstring(code: untyped): untyped =
-    if isWeaveOff():
+    when not compileOption("threads"):
         fmt code
     else:
-        fmt"{getThreadId(Weave)} - " & fmt code
+        fmt"{getThreadId()} - " & fmt code
 
 macro debug*(code: untyped): untyped =
     if not defined(release) and logLevelMacro != lvlNone:

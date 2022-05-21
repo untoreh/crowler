@@ -29,7 +29,7 @@ type
         apis*: HashSet[string]
         provider*: string # must belong in `apis`
         name*: service
-        lock*: Lock
+        lock*: Lock # NOTE: Lock is currently unused
     Translator* = ref TranslatorObj
     Queue* = object of RootObj ## An instance of a translation run
         pair*: langPair

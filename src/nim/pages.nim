@@ -107,7 +107,7 @@ proc articleEntry(a: Article): VNode =
                 span(class = "entry-tag-name"):
                     icon("tag")
                     text t
-        buildImgUrl(a.imageUrl, "entry-image")
+        buildImgUrl(a.imageUrl, origin = a.url)
         tdiv(class = "entry-content"):
             verbatim(articleExcerpt(a))
             a(class = "entry-more", href = relpath):
@@ -123,16 +123,15 @@ template topicPage*(topic: string, pagenum: string, istop = false) {.dirty.} =
     let arts = getDoneArticles(topic, pagenum = pagenum.parseInt)
     let content = buildShortPosts(arts)
     # if the page is not finalized, it is the homepage
-    let
-        footer = pageFooter(topic, pagenum, home=istop)
-        pagetree = buildPage(title = "", # this is NOT a `title` tag
-                         content = content,
-                         slug = pagenum,
-                         pagefooter = footer,
-                         topic = topic)
+    let footer = pageFooter(topic, pagenum, home = istop)
+    let pagetree = buildPage(title = "", # this is NOT a `title` tag
+            content = content,
+            slug = pagenum,
+            pagefooter = footer,
+            topic = topic)
 
 {.push gcsafe.}
-proc processPage*(lang, amp: string, tree: VNode, relpath="index"): VNode =
+proc processPage*(lang, amp: string, tree: VNode, relpath = "index"): VNode =
     if lang in TLangsCodes:
         let
             filedir = SITE_PATH
@@ -150,15 +149,19 @@ proc processPage*(lang, amp: string, tree: VNode, relpath="index"): VNode =
 proc articleTree*(capts: auto): VNode =
     # every article is under a page number
     let py = getArticlePy(capts.topic, capts.page, capts.art)
+    pyLock.acquire()
     if not pyisnone(py):
+        pyLock.release()
         debug "article: building post"
-        let
+        var a: Article
+        withPyLock:
             a = initArticle(py, parseInt(capts.page))
-            post = buildPost(a)
+        let post = buildPost(a)
         debug "article: processing"
-        return processPage(capts.lang, capts.amp, post, relpath=capts.art)
+        return processPage(capts.lang, capts.amp, post, relpath = capts.art)
     else:
         debug "article: could not fetch python article"
+        pyLock.release()
 
 proc articleHtml*(capts: auto): string {.gcsafe.} =
     let t = articleTree(capts)
@@ -175,12 +178,14 @@ proc buildHomePage*(lang, amp: string): (VNode, VNode) =
         processed: HashSet[string]
 
     for _ in 0..<cfg.N_TOPICS:
-        let topic = ut.get_random_topic().to(string)
+        var topic: string
+        withPyLock:
+            topic = ut.get_random_topic().to(string)
         if topic in processed:
             continue
         else:
             processed.incl topic
-        let arts =  getLastArticles(topic)
+        let arts = getLastArticles(topic)
         if len(arts) > 0:
             content.add $articleEntry(arts[^1])
         if len(processed) == n_topics:
@@ -207,7 +212,7 @@ proc buildSearchPage*(topic: string, kws: string, lang: string): string =
             let ar = topic.fromSearchResult(pslug)
             content.add $articleEntry(ar)
     let
-        footer = pageFooter(topic, "s", home=false)
+        footer = pageFooter(topic, "s", home = false)
     let tree = buildPage(title = fmt"""Search results for: "{keywords}" (from category: {topic})""",
                          content = content,
                          slug = "/s/" & kws,
@@ -217,10 +222,10 @@ proc buildSearchPage*(topic: string, kws: string, lang: string): string =
 
 proc buildSuggestList*(topic, input: string): string =
     let sgs = suggest(topic, input)
-    let p = buildHtml(ul(class="search-suggest")):
+    let p = buildHtml(ul(class = "search-suggest")):
         for sug in sgs:
             li():
-                a(href=($(WEBSITE_URL / topic / "s" / sug))):
+                a(href = ($(WEBSITE_URL / topic / "s" / sug))):
                     text sug
     if sgs.len > 0:
         p.find(VNodeKind.li).setAttr("class", "selected")

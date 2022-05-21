@@ -396,7 +396,7 @@ def get_topic_desc(topic: str):
 
 def get_topic_pubDate(idx: int):
     assert TOPICS is not None
-    return TOPICS[idx, 2]
+    return int(TOPICS[idx, 2])
 
 def set_topic_pubDate(idx):
     assert TOPICS is not None

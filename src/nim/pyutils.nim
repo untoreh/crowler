@@ -1,0 +1,210 @@
+import strutils,
+       nimpy,
+       nimpy/py_lib {.all.},
+       locks,
+       os,
+       strformat,
+       times
+
+export locks
+
+when false:
+    proc setPyLib() =
+        var (pylibpath, success) = execCmdEx("python3 -c 'import find_libpython; print(find_libpython.find_libpython())'")
+        if success != 0:
+            let (_, pipsuccess) = execCmdEx("pip3 install find_libpython")
+            assert pipsuccess == 0
+        (pylibpath, success) = execCmdEx("python3 -c 'import find_libpython; print(find_libpython.find_libpython())'")
+        assert success == 0
+        pylibpath.stripLineEnd
+        pyInitLibPath pylibpath
+    setPyLib()
+
+var pyLock*: Lock
+initLock(pyLock)
+
+import strutils
+template withPyLock*(code): auto =
+    {.locks: [pyLock]}:
+        try:
+            echo getThreadId(), " ", strutils.split(getStacktrace())[^2]
+            pyLock.acquire()
+            code
+        finally:
+            echo getThreadId(), " ", "unlocked"
+            pyLock.release()
+
+# in release mode cwd is not src/nim
+let
+    prefixPy = if dirExists "py": "py"
+               elif dirExists "lib/py": "lib/py"
+               elif dirExists "../py": "../py"
+               else: raise newException(Defect, "could not find python library path. in {getAppFileName.parentDir}")
+    machinery = pyImport("importlib.machinery")
+
+proc relpyImport*(relpath: string, prefix = prefixPy): PyObject =
+    let abspath = os.expandFilename(prefix / relpath & ".py")
+    try:
+        let name = abspath.splitFile[1]
+        let loader = machinery.SourceFileLoader(name, abspath)
+        return loader.load_module(name)
+    except:
+        raise newException(ValueError, fmt"Cannot import python module, pwd is {getCurrentDir()}, trying to load {abspath}")
+
+# we have to load the config before utils, otherwise the module is "partially initialized"
+let pycfg* {.guard: pyLock} = relpyImport("config")
+# let pylog* = relpyImport("log")
+let ut* {.guard: pyLock} = relpyImport("utils")
+
+# https://github.com/yglukhov/nimpy/issues/164
+let
+    pybi* = pyBuiltinsModule()
+    pyza* = pyimport("zarr")
+    PyBoolClass = pybi.True.getattr("__class__")
+    PyNoneClass = pybi.None.getattr("__class__")
+    PyDateTimeClass = pyimport("datetime").datetime
+    PyStrClass = pybi.str.getattr("__class__")
+    PyDictClass = pybi.dict.getattr("__class__")
+    PyZArray = pyza.getAttr("Array")
+var PyNone* {.threadvar.}: PyObject
+
+
+proc pyclass(py: PyObject): PyObject {.inline.} =
+    pybi.type(py)
+
+proc pytype*(py: PyObject): string =
+    py.pyclass.getattr("__name__").to(string)
+
+proc pyisbool*(py: PyObject): bool {.exportpy.} =
+    return pybi.isinstance(py, PyBoolClass).to(bool)
+
+proc pyisnone*(py: PyObject): bool {.exportpy.} =
+    return pybi.isinstance(py, PyNoneClass).to(bool)
+
+proc pyisdatetime*(py: PyObject): bool {.exportpy.} =
+    return pybi.isinstance(py, PyDateTimeClass).to(bool)
+
+proc pyisstr*(py: PyObject): bool {.exportpy.} =
+    return pybi.isinstance(py, PyStrClass).to(bool)
+
+proc pyiszarray*(py: PyObject): bool {.exportpy.} =
+    return pybi.isinstance(py, PyZArray).to(bool)
+
+
+const ymdFormat* = "yyyy-MM-dd"
+const isoFormat* = "yyyy-MM-dd'T'HH:mm:ss"
+
+proc pydate*(py: PyObject, default = getTime()): Time =
+    if pyisnone(py):
+        return default
+    elif pyisstr(py):
+        let s = py.to(string)
+        if s == "":
+            return default
+        else:
+            try:
+                return parseTime(py.to(string), isoFormat, utc())
+            except TimeParseError:
+                try:
+                    return parseTime(py.to(string), ymdFormat, utc())
+                except TimeParseError:
+                    return default
+    elif pyisdatetime(py):
+        return py.timestamp().to(float).fromUnixFloat()
+    else:
+        return default
+
+
+
+proc initPy*() {.raises: []} =
+    withPyLock:
+        try:
+            PyNone = pybi.None
+        except:
+            echo "Can't initialize PyNone"
+            quit()
+
+let pySlice = pybi.slice
+
+proc contains*[K](v: PyObject, k: K): bool =
+    v.callMethod("__contains__", k).to(bool)
+
+
+# PySequence
+type PySequence*[T] = ref object
+    py: PyObject
+    getitem: PyObject
+    setitem: PyObject
+
+proc initPySequence*[T](o: PyObject): PySequence[T] =
+    new(result)
+    result.py = o
+    result.getitem = o.getAttr("__getitem__")
+    result.setitem = o.getAttr("__setitem__")
+
+proc `[]`*[S, K](s: PySequence[S], k: K): PyObject =
+    s.getitem(k)
+
+proc `slice`*[S](s: PySequence[S], start: int, stop: int, step = 1): PyObject =
+    s.getitem(pySlice(start, stop, step))
+
+proc `[]=`*[S, K, V](s: PySequence[S], k: K, v: S) =
+    s.setitem(k, v)
+
+proc `$`*(s: PySequence): string = $s.py
+
+iterator items*[S](s: PySequence[S]): PyObject =
+    for i in s.py:
+        yield i
+
+{.experimental: "dotOperators".}
+
+import macros
+macro `.()`*(o: PySequence, field: untyped, args: varargs[untyped]): untyped =
+    quote do:
+        `o`.py.`field`(`args`)
+
+macro `.`*(o: PySequence, field: untyped): untyped =
+    quote do:
+        `o`.py.`field`
+
+macro `.=`*(o: PySequence, field: untyped, value: untyped): untyped =
+    quote do:
+        `o`.py.`field` = `value`
+
+var e: ref ValueError
+new(e)
+e.msg = "All python objects were None."
+
+proc pysome*(pys: varargs[PyObject], default = new(PyObject)): PyObject =
+    for py in pys:
+        if pyisnone(py):
+            continue
+        else:
+            return py
+    raise e
+
+proc len*(py: PyObject): int =
+    pybi.len(py).to(int)
+
+proc isa*(py: PyObject, tp: PyObject): bool =
+    pybi.isinstance(py, tp).to(bool)
+
+proc pyget*[T](py: PyObject, k: string, def: T = ""): T =
+    try:
+        let v = py.callMethod("get", k)
+        if pyisnone(v):
+            return def
+        else:
+            return v.to(T)
+    except:
+        if pyisnone(py):
+            return def
+        else:
+            return py.to(T)
+
+# Exported
+proc cleanText*(text: string): string {.exportpy.} =
+    multireplace(text, [("\n", "\n\n"),
+                        ("(.)\1{4,}", "\n\n\1")
+                        ])

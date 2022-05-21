@@ -18,7 +18,7 @@ import
     translate_types,
     utils,
     quirks,
-    py
+    pyutils
 
 static: echo "loading translate_srv"
 
@@ -71,14 +71,14 @@ proc trywrapPyFunc(fn: PyObject, tries = 3, defVal = ""): PyObject =
 template pySafeCall(code: untyped): untyped =
     debug "pysafe: acquiring lock"
     try:
-        slator.lock.acquire()
+        pyLock.acquire()
         debug "pysafe: lock acquired"
         code
     except:
         debug "pysafe: Failed with exception... {getCurrentException()[]}"
     finally:
         debug "pysafe: releasing lock"
-        slator.lock.release()
+        pyLock.release()
     debug "pysafe: lock released"
 
 proc getProxies(srv: service = deep_translator): auto =
@@ -95,7 +95,6 @@ proc initTranslator*(srv: service = default_service, provider: string = "", sour
         targets: HashSet[Lang] = TLangs): Translator =
     var py = ensurePy(srv)
     new(result)
-    initLock(result.lock)
     case srv:
         of deep_translator:
             result.py = py

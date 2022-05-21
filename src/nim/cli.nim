@@ -41,7 +41,7 @@ proc clearPage*(url: string) =
 
 when isMainModule:
     initThread()
-    dispatchMulti([start], [clearPage], [dopublish])
+    dispatchMulti([start], [clearPage], [pubTopic])
     # initCache()
     # let url = "http://wsl:5050/web/0/6-best-shared-web-hosting-services-companies-2022"
     # clearPage(url)

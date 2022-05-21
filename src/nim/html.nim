@@ -26,8 +26,9 @@ import cfg,
        shorturls,
        topics,
        quirks, # PySequence requires quirks
-       cache,
-       articles
+    cache,
+    articles,
+    pyutils
 
 static: echo "loading html..."
 
@@ -184,6 +185,30 @@ proc buildSearch(action: string; withButton = true): VNode =
             buildButton("search", "search-btn", aria_label = "Search",
                     title = "Search across the website.")
 
+proc topicsList*(ucls: string, icls: string, small: static[bool] = true): VNode =
+    result = newVNode(VNodeKind.ul)
+    result.setAttr("class", ucls)
+    let topics = loadTopics(MENU_TOPICS)
+    defer: pyLock.release()
+    pyLock.acquire()
+    for tpc in topics:
+        let topic_name = $tpc[0]
+        pyLock.release()
+        let liNode =  buildHtml(li(class = fmt"{icls} mdc-icon-button")):
+            tdiv(class = "mdc-icon-button__ripple")
+            a(href = ($(WEBSITE_URL / topic_name)), title = topic_name):
+                when small:
+                    # only use the first letter
+                    text $topic_name.runeAt(0).toUpper # loadTopics iterator returns pyobjects
+                else:
+                    text topic_name
+            when small:
+                br()
+            else:
+                span(class="separator")
+        result.add liNode
+        pyLock.acquire()
+
 proc buildMenuSmall*(crumbs: string; topic_uri: Uri; path: string): VNode {.gcsafe.} =
     let relpath = $(topic_uri / path)
     buildHtml():
@@ -197,15 +222,7 @@ proc buildMenuSmall*(crumbs: string; topic_uri: Uri; path: string): VNode {.gcsa
                             title = "Recent articles that have been trending up.")
             buildLang(path)
             # Topics
-            ul(class = "menu-list-topics"):
-                for tpc in loadTopics(MENU_TOPICS):
-                    let topic_name = $tpc[0]
-                    li(class = "menu-topic-item mdc-icon-button"):
-                        tdiv(class = "mdc-icon-button__ripple")
-                        a(href = ($(WEBSITE_URL / topic_name)), title = topic_name):
-                            # only use the first letter
-                            text $topic_name.runeAt(0).toUpper # loadTopics iterator returns pyobjects
-                        br()
+            topicsList(ucls="menu-list-topics", icls="menu-topic-item")
 
 proc buildMenuSmall*(crumbs: string; topic_uri: Uri; a = emptyArt): VNode =
     buildMenuSmall(crumbs, topic_uri, a.getArticleUrl)
@@ -240,14 +257,7 @@ proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): VNode =
                     tdiv(class = "mdc-ripple-surface")
                     text crumbs
                 # Topics list
-                ul(class = "app-bar-topics"):
-                    for tpc in loadTopics(MENU_TOPICS):
-                        let topic_name = $tpc[0]
-                        li(class = "topic-item mdc-icon-button"):
-                            tdiv(class = "mdc-icon-button__ripple")
-                            a(href = ($(WEBSITE_URL / topic_name))):
-                                text topic_name # loadTopics iterator returns pyobjects
-                            span(class = "separator")
+                topicsList(ucls="app-bar-topics", icls="topic-item", small=false)
             section(class = "mdc-top-app-bar__section mdc-top-app-bar__section--align-end",
                     role = "toolbar"):
                 buildSearch($topic_uri, true)
@@ -301,7 +311,7 @@ proc postTitle(a: Article): VNode =
 proc postContent(article: string): VNode =
     buildHtml(article(class = "post-wrapper")):
         # NOTE: use `code` tag to avoid minification to collapse whitespace
-        pre(class = HTML_POST_SELECTOR, style=break_style):
+        pre(class = HTML_POST_SELECTOR, style = break_style):
             verbatim(article)
 
 proc postFooter(pubdate: Time): VNode =
@@ -346,7 +356,7 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
             # we don't paginate searches because we only serve the first page per query
             if pn != -1 and not home:
                 span(class = "next-page"):
-                    if pn == ut.get_top_page(topic).to(int):
+                    if pn == lastPageNum(topic):
                         a:
                             text "Next page >>"
                     else:
@@ -437,7 +447,7 @@ proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode 
         # from browser JS we know which topic is the page about
         body(class = "", topic = topic, style = preline_style):
             buildMenu(crumbs, topic_uri, path)
-            buildMenuSmall(crumbs, topic_uri)
+            buildMenuSmall(crumbs, topic_uri, path)
             main(class = "mdc-top-app-bar--fixed-adjust"):
                 if title != "":
                     pageTitle(title, slug)

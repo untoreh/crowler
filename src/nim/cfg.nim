@@ -100,7 +100,7 @@ const
     PUBLISH_TIMEOUT* = 10 ## In seconds
     N_RELATED* = 3 # how many related articles to display at the bottom of an article page
     N_TOPICS* = 10 # Number of articles (1 per topic) to display on the homepage
-    CRON_TOPIC = 60 # Seconds between a `pub` job run
-    CRON_TOPIC_FREQ = 8 # Hours between a specific topic `pub` job run
+    CRON_TOPIC* = 10 # Seconds between a `pub` job run
+    CRON_TOPIC_FREQ* = 8 # Hours between a specific topic `pub` job run
 
 static: echo "Data Path is " & PROJECT_PATH

@@ -54,7 +54,7 @@ proc checkBatchedTranslation(sents: seq[string], query = "", tr: auto) =
         for t in tr:
             err.add "tr: "
             err.add t
-        err.add "mismatching batched translation query result: "
+        err.add "\nmismatching batched translation query result: "
         err.add fmt"{tr.len} - {sents.len}"
         raise newException(ValueError, err)
 

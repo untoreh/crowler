@@ -20,10 +20,11 @@ import cfg,
        topics,
        articles,
        cache,
-       search
+       search,
+       pyutils
 
 privateAccess(LocalitySensitive)
-var pageset = Table[string, bool]()
+let pageset = initLockTable[string, bool]()
 
 include "pages"
 
@@ -82,7 +83,8 @@ proc pubInfoPages() =
 
 
 proc curPageNumber(topic: string): int =
-    return ut.get_top_page(topic).to(int)
+    withPyLock:
+        return ut.get_top_page(topic).to(int)
     # return getSubdirNumber(topic, curdir)
 
 proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, istop = false,
@@ -96,14 +98,15 @@ proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, i
                 pagetree)
     # if we pass a pagecount we mean to finalize
     if finalize:
-        discard ut.update_page_size(topic, pagenum.parseInt, pagecount, final = true)
+        withPyLock:
+            discard ut.update_page_size(topic, pagenum.parseInt, pagecount, final = true)
     if with_arts:
         for a in arts:
             processHtml(topic / pagenum, a.slug, buildPost(a), a)
 
 proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
     ## Always update both the homepage and the previous page
-    let pages = ut.topic_group(topic)["pages"]
+    let pages = topicPages(topic)
     var pagenum = pn.intToStr
     # current articles count
     let pn = pagenum.parseInt
@@ -128,21 +131,22 @@ proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
 # proc resetPages(topic: string) =
 #     ## Takes all the published articles in `done`
 #     ## and resets their page numbers
-#     let done = ut.topic_group(topic)[$topicData.done]
-#     assert isa(done, ut.za.Group)
-#     let topdir = len(done)
-#     if topdir == 0:
-#         return
-#     var i = 0
-#     var newdone = newSeq[PyObject]()
-#     for k in done.keys()
-#         let pagedone = done[k]
-#         newdone.add()
+#     let done = topicDonePages(topic)
+#     withPyLock:
+#         assert isa(done, ut.za.Group)
+#         let topdir = len(done)
+#         if topdir == 0:
+#             return
+#         var i = 0
+#         var newdone = newSeq[PyObject]()
+#         for k in done.keys():
+#             let pagedone = done[k]
+#             newdone.add()
 
 proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
                       posts: var seq[(VNode, Article)],
                       donePy: var seq[PyObject],
-                      doneArts: var seq[Article]): bool =
+                      doneArts: var seq[Article]): bool {.gcsafe.} =
     var arts = getArticles(topic, pagenum = pagenum)
     if arts.len == 0:
         return false
@@ -157,24 +161,29 @@ proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
                 uslug = fmt"{a.slug}-{u}"
                 utitle = fmt"{a.title} ({u})"
                 u += 1
-            a.py["slug"] = uslug
             a.slug = uslug
-            a.py["title"] = utitle
             a.title = utitle
-            a.py["page"] = pagenum
             a.page = pagenum
             posts.add((buildPost(a), a))
+            withPyLock:
+                a.py["slug"] = uslug
+                a.py["title"] = utitle
+                a.py["page"] = pagenum
     # update done articles after uniqueness checks
-    for (_, a) in posts:
-        donePy.add a.py
-        doneArts.add a
+    withPyLock:
+        for (_, a) in posts:
+            donePy.add a.py
+            doneArts.add a
     updateTopicPubdate()
-    discard ut.save_done(topic, len(arts), donePy, pagenum)
+    withPyLock:
+        discard ut.save_done(topic, len(arts), donePy, pagenum)
     true
 
-proc pubTopic(topic: string) =
+proc pubTopic*(topic: string) {.gcsafe.} =
     ##  Generates html for a list of `Article` objects and writes to file.
-    doassert topic in ut.load_topics()[1]
+    withPyLock:
+        doassert topic in ut.load_topics()[1]
+    info "pub: topic - {topic}"
     var pagenum = curPageNumber(topic)
     let newpage = pageSize(topic, pagenum) > cfg.MAX_DIR_FILES
     if newpage:
@@ -216,13 +225,14 @@ proc pubTopic(topic: string) =
     # if its a new page, the page posts count is equivalent to the just published count
     var pagecount: int
     pagecount = newposts
-    if not newpage:
-        # add previous published articles
-        let pagesize = ut.get_page_size(topic, pagenum)
-        # In case we didn't save the count, re-read from disk
-        if not pyisnone(pagesize):
-            pagecount += pagesize[0].to(int)
-    discard ut.update_page_size(topic, pagenum, pagecount)
+    withPyLock:
+        if not newpage:
+            # add previous published articles
+            let pagesize = ut.get_page_size(topic, pagenum)
+            # In case we didn't save the count, re-read from disk
+            if not pyisnone(pagesize):
+                pagecount += pagesize[0].to(int)
+        discard ut.update_page_size(topic, pagenum, pagecount)
 
     finalizePages(topic, pagenum, newpage, pagecount)
     # update feed file
@@ -236,26 +246,28 @@ proc pubTopic(topic: string) =
     # update ydx turbo items
     when cfg.YDX:
         writeFeed()
+    info "pub: published {len(doneArts)} new posts."
 
 let lastPubTime = create(Time)
 var pubLock: Lock
 initLock(pubLock)
 lastPubTime[] = getTime()
-proc pub*() =
+proc pub*() {.gcsafe.} =
     let t = getTime()
     if pubLock.tryacquire:
         defer: pubLock.release
+        syncTopics()
         # Only publish one topic every `CRON_TOPIC`
-        if inSeconds(t - lastPubTime) > cfg.CRON_TOPIC:
-            let
-                lastPubTime = t
-                topic = nextTopic()
+        if inSeconds(t - lastPubTime[]) > cfg.CRON_TOPIC:
+            lastPubTime[] = t
+            let topic = nextTopic()
             # Don't publish each topic more than `CRON_TOPIC_FREQ`
-            if inHours(t - topicPubdate) > cfg.CRON_TOPIC_FREQ:
+            if inHours(t - topicPubdate()) > cfg.CRON_TOPIC_FREQ:
                 pubTopic(topic)
 
 proc resetTopic(topic: string) =
-    discard ut.reset_topic_data(topic)
+    withPyLock:
+        discard ut.reset_topic_data(topic)
     pageCache[].del(topic.feedKey)
     saveLS(topic, initLS())
 
@@ -278,15 +290,16 @@ proc pubAllPages(topic: string, clear = true) =
         pubPage(topic, $pagenum, pagecount, finalize = true, with_arts = true)
     ensureHome(topic, topdir)
 
-proc refreshPageSizes(topic: string) =
-    let grp = ut.topic_group(topic)
-    let donearts = grp[$topicData.done]
-    assert isa(donearts, ut.za.Group)
-    assert len(donearts) == len(grp[$topicData.pages])
-    let topdir = len(donearts) - 1
-    for pagenum in 0..<topdir:
-        discard ut.update_page_size(topic, pagenum, len(donearts[$pagenum]), final = true)
-    discard ut.update_page_size(topic, topdir, len(donearts[$topdir]), final = false)
+# proc refreshPageSizes(topic: string) =
+#     withPyLock:
+#         let grp = ut.topic_group(topic)
+#         let donearts = grp[$topicData.done]
+#         assert isa(donearts, ut.za.Group)
+#         assert len(donearts) == len(grp[$topicData.pages])
+#         let topdir = len(donearts) - 1
+#         for pagenum in 0..<topdir:
+#             discard ut.update_page_size(topic, pagenum, len(donearts[$pagenum]), final = true)
+#         discard ut.update_page_size(topic, topdir, len(donearts[$topdir]), final = false)
 
 # import translate
 when isMainModule:

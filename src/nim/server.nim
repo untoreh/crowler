@@ -2,8 +2,9 @@ import strformat,
        strutils,
        tables,
        nimpy,
-       std/[asyncdispatch, os],
-       weave,
+       std/[asyncdispatch, os, threadpool],
+       os,
+       times,
        locks,
        karax/vdom,
        strtabs,
@@ -21,11 +22,11 @@ import strformat,
 {.experimental: "caseStmtMacros".}
 
 import
+    cfg,
     types,
     server_types,
     topics,
     utils,
-    cfg,
     html,
     publish,
     translate,
@@ -48,8 +49,9 @@ var
     reqKey {.threadvar.}: int64
 
 proc initThreadBase*() {.gcsafe, raises: [].} =
-    initLogging()
+    initPy()
     initTypes()
+    initLogging()
 
 proc initThread*() {.gcsafe, raises: [].} =
     initThreadBase()
@@ -76,12 +78,12 @@ template setEncoding() {.dirty.} =
     debug "detected accepted encoding {headers}"
     if ("*" in headers[0]) or ("gzip" in headers[0]):
         hencoding.add("gzip")
-        resp = resp.compress(dataFormat=dfGzip)
+        resp = resp.compress(dataFormat = dfGzip)
     elif "deflate" in headers[0]:
         hencoding.add("deflate")
-        resp = resp.compress(dataFormat=dfDeflate)
+        resp = resp.compress(dataFormat = dfDeflate)
 
-proc doReply[T](ctx: HttpCtx, body: T, scode = Http200, headers: openarray[string] = @[]) {.raises: []} =
+proc doReply[T](ctx: HttpCtx, body: T, scode = Http200, headers: openarray[string] = @[]) {.raises: [].} =
     baseHeaders.add headers
     var resp = if likely(body != ""): body
                else:
@@ -289,9 +291,22 @@ proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
             discard
         discard
 
-proc start*(doclear=false, port=5050) =
+proc pubTask*() {.gcsafe.} =
+    initThread()
+    syncTopics()
+    let t = getTime()
+    # Only publish one topic every `CRON_TOPIC`
+    while true:
+        let topic = nextTopic()
+        # Don't publish each topic more than `CRON_TOPIC_FREQ`
+        if inHours(t - topicPubdate()) > cfg.CRON_TOPIC_FREQ:
+            pubTopic(topic)
+        sleep(cfg.CRON_TOPIC * 1000)
+
+proc start*(doclear = false, port = 5050) =
     var server = new GuildenServer
     initCache()
+    spawn pubTask()
     if doclear:
         if os.getenv("DO_SERVER_CLEAR", "") == "1":
             echo fmt"Clearing pageCache at {pageCache[].path}"

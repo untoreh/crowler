@@ -1,6 +1,6 @@
 import ../cfg
 
-const imgfPrefix = when releaseMode: "./lib" else: "./lib"
+const imgfPrefix = when releaseMode: "./lib" else: "../.."
 const libimageflow = imgfPrefix & "/vendor/imageflow.dist/libimageflow.so"
 
 type

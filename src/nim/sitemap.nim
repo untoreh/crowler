@@ -55,7 +55,7 @@ proc buildTopicSitemap(topic: string): XmlNode =
     syncTopics()
     result = newElement("urlset")
     result.attrs = {"xmlns": xmlNamespace, "xmlns:xhtml": xhtmlNamespace}.toXmlAttributes
-    let done = ut.topic_group(topic)[$topicData.done]
+    let done = topicDonePages(topic)
     var n_entries = 0
     for pagenum in done:
         if n_entries > maxEntries:

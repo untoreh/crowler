@@ -131,6 +131,15 @@ proc `[]=`*(t: LRUTrans, k: int64, v: string) {.gcsafe.} =
 
 proc `[]=`*[K: not int64](t: LRUTrans, k: K, v: string) = t[hash(k).int64] = v
 
+proc contains*(t: LRUTrans, k: int64): bool =
+    var bs: seq[byte]
+    withLock(tLock):
+        t.coll.inSnapshot do (cs: CollectionSnapshot):
+            bs = cs[k].asByteSeq
+    return bs.len != 0
+
+proc contains*[K: not int64](t: LRUTrans, k: K): bool = hash(k).int64 in t
+
 proc clear*(t: LRUTrans) =
     withLock(tLock):
         var ks: seq[int64]

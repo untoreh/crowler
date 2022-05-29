@@ -14,7 +14,7 @@ import
     translate_srv,
     translate
 
-proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true): auto =
+proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN): auto =
     translateEnv(dom)
     for node in otree.preorder():
         case node.kind:
@@ -45,7 +45,7 @@ proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true)
                         ((el.hasAttr("title")) and el.isTranslatable("title")):
                     translate(q, el, srv)
     debug "dom: finishing translations"
-    translate(q, srv, finish = finish)
+    translate(q, srv, finish = true)
     (q, otree)
 
 proc translateLang*(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath = "",
@@ -58,7 +58,7 @@ proc translateLang*(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath
     translateDom(fc)[1]
 
 proc translateLang*(fc: ptr FileContext, ar = emptyArt): VNode {.gcsafe.} =
-    translateDom(fc)[1]
+    result = translateDom(fc)[1]
 
 when isMainModule:
     import html, nre, pathnorm, strformat, pages

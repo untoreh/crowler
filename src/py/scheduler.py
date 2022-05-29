@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from multiprocessing.pool import ThreadPool
 import config
+# import nest_asyncio
+# nest_asyncio.apply()
 
 POOL = None
 

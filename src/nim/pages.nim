@@ -234,11 +234,10 @@ proc buildSuggestList*(topic, input: string): string =
 
 {.pop gcsafe.}
 
-when isMainModule:
-    discard
-    echo homePage()
-    let topic = "vps"
-    let page = buildHomePage("en", "")
+# when isMainModule:
+#     discard
+#     let topic = "vps"
+#     let page = buildHomePage("en", "")
     # page.writeHtml(SITE_PATH / "index.html")
     # initSonic()
     # let argt = getLastArticles(topic)

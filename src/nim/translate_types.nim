@@ -13,9 +13,10 @@ export sets
 
 static:
     echo "loading translate types..."
-
+import chronos
 type
     service* = enum
+        base_translator = "translator"
         deep_translator = "deep_translator"
     FcKind* = enum xml, dom
     Lang* = tuple
@@ -41,7 +42,7 @@ type
         bucket*: seq[XmlNode]
     QueueDom* = object of Queue
         bucket*: seq[VNode]
-    TFunc* = proc(src: string, lang: langPair): string {.gcsafe.} ## the proc that wraps a translation service call
+    TFunc* = proc(src: string, lang: langPair): Future[string] {.gcsafe.} ## the proc that wraps a translation service call
     FileContextBase = object of RootObj
         file_path*: string
         url_path*: string
@@ -82,10 +83,10 @@ proc initFileContext*(data, file_path, url_path, pair, t_path: auto): ptr FileCo
     result.t_path = t_path
 
 const
-    default_service* = deep_translator
+    default_service* = base_translator
     skip_nodes* = static(["code", "style", "script", "address", "applet", "audio", "canvas",
             "embed", "time", "video", "svg"])
-    skip_vnodes* = static([VNodeKind.code, style, script, address, audio, canvas, embed, time, video, svg])
+    skip_vnodes* = static([VNodeKind.code, style, script, VNodeKind.address, audio, canvas, embed, time, video, svg])
     skip_class* = ["menu-lang-btn", "material-icons", "rss", "sitemap"].static
 
 let
@@ -171,7 +172,7 @@ proc initGlues*() =
         collect(for (sep, _) in glues: sep.len)
     gluePadding *= 2
 
-proc initQueue*[T](f: TFunc, pair: auto): T =
+proc initQueue*[T](f: TFunc, pair: langPair): T =
     result.glues = glues
     result.bufsize = 5000
     result.call = f

@@ -96,7 +96,7 @@ template translateEnv*(kind: static[FcKind] = xml): untyped {.dirty.} =
 
     debug "html: setting root node attributes"
 
-template translateNode*(otree: XmlNode, q: QueueXml, tformsTags: auto) =
+template translateNode*(otree: XmlNode, q: QueueXml, tformsTags: auto, fin = false) =
     for el in preorder(otree):
         # skip empty nodes
         case el.kind:
@@ -116,7 +116,7 @@ template translateNode*(otree: XmlNode, q: QueueXml, tformsTags: auto) =
                 elif ((el.hasAttr("alt")) and el.isTranslatable("alt")) or
                      ((el.hasAttr("title")) and el.isTranslatable("title")):
                     translate(q, el, srv)
-    translate(q, srv, finish = finish)
+    translate(q, srv, finish = fin)
 
 template translateNode*(node: VNode, q: QueueXml) =
     assert node.kind == VNodeKind.verbatim
@@ -128,7 +128,11 @@ template translateNode*(node: VNode, q: QueueXml) =
                    vbtmcache[s.key] = parseHtml(s)
                    vbtmcache[s.key]
         otree = deepcopy(tree)
-    translateNode(otree, q, xtformsTags)
+    when defined(finish):
+        finish = false # FIXME: This overrides `finish` argument
+    else:
+        let finish = true
+    translateNode(otree, q, xtformsTags, finish)
     node.text = $otree
 
 proc translateHtml(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true): auto =

@@ -11,7 +11,7 @@ import numpy as np
 from re import finditer
 from enum import Enum
 from time import sleep
-from typing import MutableSequence, Optional, TypeAlias, Union, Tuple, List, Dict
+from typing import MutableSequence, Optional, Union, Tuple, List, Dict
 from distutils.util import strtobool
 from random import choice
 
@@ -50,7 +50,6 @@ def somekey(d, *keys):
         if v := d.get(k):
             break
     return v
-
 
 def fetch_data(url, *args, delay=0.3, backoff=0.3, depth=0, fromcache=True, **kwargs):
     if fromcache:
@@ -340,10 +339,8 @@ def load_topics():
     return (TOPICS, TPDICT)
 
 
-TopicsList: TypeAlias = List[Tuple[str, str]]
 
-
-def add_topics_idx(tp: TopicsList):
+def add_topics_idx(tp: List[Tuple[str, str]]):
     global TOPICS, TPDICT
     assert isinstance(tp, list)
     (topics, tpset) = load_topics()

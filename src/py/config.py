@@ -63,6 +63,7 @@ DATA_DIR = Path(os.path.realpath(
 ))
 assert (DATA_DIR is not None) and isdir(Path(dirname(DATA_DIR)) / ".venv")
 
+PROXIES_DIR = DATA_DIR / "proxies"
 TOPICS_DIR = DATA_DIR / "topics"
 TOPICS_IDX = TOPICS_DIR / "index"
 KW_HISTORY = "history"
@@ -79,6 +80,7 @@ DEFAULT_LANG = "en"
 SPACY_MODEL = "en_core_web_sm"
 TAGS_MAX_LEN = 4
 
+ART_MIN_LEN = 3000 # minimum article len (5 avg chars per 500 words + 500 chars for pre-cleanups)
 PROFANITY_THRESHOLD = 0.5
 # The maximum number of articles/feeds to store `unprocessed` for each topic
 # When cap is reached queue gets discarded as FIFO.

@@ -34,7 +34,7 @@ gs = Goose()
 if not hasattr(nltk, "punkt"):
     nltk.download("punkt")
 
-rx_nojs = r"(avail|enable)?(?i)(javascript|js)\s*(?i)(avail|enable)?"
+rx_nojs = r"(Your page may be loading slowly)|(block on your account)|((avail|enable)?(?i)(javascript|js)\s*(?i)(avail|enable)?)"
 def isrelevant(title, body):
     """String BODY is relevant if it contains at least one word from TITLE."""
     if not title or not body:
@@ -171,6 +171,8 @@ def fillarticle(url, data, topic):
     else:
         final["content"] = goo["cleaned_text"]
         final["source"] = "goo"
+    if len(final["content"]) < cfg.ART_MIN_LEN:
+        return {}
     final["title"] = tra["title"] or goo.get("title")
     final["content"] = replace_profanity(final["content"])
     if (

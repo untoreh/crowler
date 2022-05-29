@@ -60,7 +60,7 @@ proc initSonic*() {.gcsafe.} =
             # addExitProc(closeSonic)
         except:
             qdebug "Couldn't init Sonic connection to {SONIC_ADDR}:{SONIC_PORT}."
-    assert not snc.isnil
+    doassert not snc.isnil, "Is Sonic running?"
 
 proc toISO3(lang: string): string =
     withPyLock:
@@ -119,6 +119,7 @@ proc resume() =
         push(relpath)
     writeFile(SONIC_BACKLOG, "")
 
+import chronos
 proc query*(topic: string, keywords: string, lang: string = SLang.code, limit = defaultLimit): seq[string] =
     ## translate the query to source language, because we only index
     ## content in source language
@@ -129,7 +130,7 @@ proc query*(topic: string, keywords: string, lang: string = SLang.code, limit = 
                   let lp = (src: lang, trg: SLang.code)
                   let translate = getTfun(lp)
                   # echo "?? ", translate(keywords, lp)
-                  something translate(keywords, lp), keywords
+                  something (waitFor translate(keywords, lp)), keywords
               else: keywords
     debug "query: kws -- {kws}, keys -- {keywords}"
     try:

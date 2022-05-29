@@ -8,6 +8,8 @@ import strutils,
 
 export locks
 
+let pyGlo* = pyGlobals()
+
 when false:
     proc setPyLib() =
         var (pylibpath, success) = execCmdEx("python3 -c 'import find_libpython; print(find_libpython.find_libpython())'")
@@ -25,13 +27,13 @@ initLock(pyLock)
 
 import strutils
 template withPyLock*(code): auto =
-    {.locks: [pyLock]}:
+    {.locks: [pyLock].}:
         try:
-            echo getThreadId(), " ", strutils.split(getStacktrace())[^2]
+            # echo getThreadId(), " ", strutils.split(getStacktrace())[^2]
             pyLock.acquire()
             code
         finally:
-            echo getThreadId(), " ", "unlocked"
+            # echo getThreadId(), " ", "unlocked"
             pyLock.release()
 
 # in release mode cwd is not src/nim
@@ -41,20 +43,33 @@ let
                elif dirExists "../py": "../py"
                else: raise newException(Defect, "could not find python library path. in {getAppFileName.parentDir}")
     machinery = pyImport("importlib.machinery")
+    pyimlib = pyImport("importlib")
+    pysys = pyImport("sys")
 
 proc relpyImport*(relpath: string, prefix = prefixPy): PyObject =
-    let abspath = os.expandFilename(prefix / relpath & ".py")
+    ## All relative python imports inside the relatively imported module (from .. import $mod)
+    ## must be (relatively) imported (discard relPyImport...)
+    ## before the desired (relatively) imported target module.
+    let abspath = os.expandFilename(prefix) / relpath & ".py"
     try:
-        let name = abspath.splitFile[1]
-        let loader = machinery.SourceFileLoader(name, abspath)
-        return loader.load_module(name)
+        let
+            name = abspath.splitFile[1]
+            spec = pyimlib.util.spec_from_file_location(name, abspath)
+            pymodule = pyimlib.util.module_from_spec(spec)
+        pysys.modules[name] = pymodule
+        discard spec.loader.exec_module(pymodule)
+        return pyImport(name)
     except:
-        raise newException(ValueError, fmt"Cannot import python module, pwd is {getCurrentDir()}, trying to load {abspath}")
+        raise newException(ValueError, fmt"Cannot import python module, pwd is {getCurrentDir()}, trying to load {abspath} {'\n'} {getCurrentExceptionMsg()}")
 
 # we have to load the config before utils, otherwise the module is "partially initialized"
-let pycfg* {.guard: pyLock} = relpyImport("config")
-# let pylog* = relpyImport("log")
-let ut* {.guard: pyLock} = relpyImport("utils")
+{.push guard: pyLock.}
+let pycfg* = relpyImport("config")
+discard relpyImport("log")
+let ut* = relpyImport("utils")
+let pySched* = relpyImport("scheduler")
+discard pySched.initPool()
+{.pop guard:pyLock.}
 
 # https://github.com/yglukhov/nimpy/issues/164
 let
@@ -116,7 +131,7 @@ proc pydate*(py: PyObject, default = getTime()): Time =
 
 
 
-proc initPy*() {.raises: []} =
+proc initPy*() {.raises: [].} =
     withPyLock:
         try:
             PyNone = pybi.None
@@ -204,7 +219,8 @@ proc pyget*[T](py: PyObject, k: string, def: T = ""): T =
             return py.to(T)
 
 # Exported
-proc cleanText*(text: string): string {.exportpy.} =
-    multireplace(text, [("\n", "\n\n"),
-                        ("(.)\1{4,}", "\n\n\1")
-                        ])
+# proc cleanText*(text: string): string {.exportpy.} =
+#     multireplace(text, [("\n", "\n\n"),
+#                         ("(.)\1{4,}", "\n\n\1")
+#                         ])
+

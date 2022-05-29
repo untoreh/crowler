@@ -5,9 +5,15 @@
 **/rust/target/
 **/site*.html
 **/data/*.db/
+logs/*
+!logs/.gitkeep
+run/*
+!run/.gitkeep
 **/data/sonic/**/
 **.nimcache
 vendor/**/
+docker/
+!docker/*Dockerfile*
 
 # Added by cargo
 
@@ -18,6 +24,7 @@ data/topics/
 # dist/*
 # !dist
 /.log/
+data/*
 /data/cache/
 data/proxies/*
 !data/proxies

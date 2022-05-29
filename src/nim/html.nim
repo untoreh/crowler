@@ -28,7 +28,8 @@ import cfg,
        quirks, # PySequence requires quirks
     cache,
     articles,
-    pyutils
+    pyutils,
+    ads
 
 static: echo "loading html..."
 
@@ -128,6 +129,8 @@ proc buildHead*(path: string; description = ""; topic = ""; ar = emptyArt): VNod
         link(rel = "icon", href = FAVICON_SVG_URL, type = "image/svg+xml")
         # https://stackoverflow.com/questions/21147149/flash-of-unstyled-content-fouc-in-firefox-only-is-ff-slow-renderer
         verbatim("<script>const _ = null</script>")
+        when defined(ADSENSE_SRC):
+            verbatim(ADSENSE_SRC)
 
 proc buildLang(path: string; title = ""): VNode {.gcsafe.} =
     buildHtml(tdiv(class = "menu-lang-btn", title = "Change website's language")):
@@ -185,7 +188,7 @@ proc buildSearch(action: string; withButton = true): VNode =
             buildButton("search", "search-btn", aria_label = "Search",
                     title = "Search across the website.")
 
-proc topicsList*(ucls: string, icls: string, small: static[bool] = true): VNode =
+proc topicsList*(ucls: string; icls: string; small: static[bool] = true): VNode =
     result = newVNode(VNodeKind.ul)
     result.setAttr("class", ucls)
     let topics = loadTopics(MENU_TOPICS)
@@ -194,7 +197,7 @@ proc topicsList*(ucls: string, icls: string, small: static[bool] = true): VNode 
     for tpc in topics:
         let topic_name = $tpc[0]
         pyLock.release()
-        let liNode =  buildHtml(li(class = fmt"{icls} mdc-icon-button")):
+        let liNode = buildHtml(li(class = fmt"{icls} mdc-icon-button")):
             tdiv(class = "mdc-icon-button__ripple")
             a(href = ($(WEBSITE_URL / topic_name)), title = topic_name):
                 when small:
@@ -205,7 +208,7 @@ proc topicsList*(ucls: string, icls: string, small: static[bool] = true): VNode 
             when small:
                 br()
             else:
-                span(class="separator")
+                span(class = "separator")
         result.add liNode
         pyLock.acquire()
 
@@ -222,7 +225,7 @@ proc buildMenuSmall*(crumbs: string; topic_uri: Uri; path: string): VNode {.gcsa
                             title = "Recent articles that have been trending up.")
             buildLang(path)
             # Topics
-            topicsList(ucls="menu-list-topics", icls="menu-topic-item")
+            topicsList(ucls = "menu-list-topics", icls = "menu-topic-item")
 
 proc buildMenuSmall*(crumbs: string; topic_uri: Uri; a = emptyArt): VNode =
     buildMenuSmall(crumbs, topic_uri, a.getArticleUrl)
@@ -257,7 +260,7 @@ proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): VNode =
                     tdiv(class = "mdc-ripple-surface")
                     text crumbs
                 # Topics list
-                topicsList(ucls="app-bar-topics", icls="topic-item", small=false)
+                topicsList(ucls = "app-bar-topics", icls = "topic-item", small = false)
             section(class = "mdc-top-app-bar__section mdc-top-app-bar__section--align-end",
                     role = "toolbar"):
                 buildSearch($topic_uri, true)
@@ -368,8 +371,9 @@ const pageContent* = postContent
 proc asHtml*(data: auto): string {.inline.} =
     let html = "<!doctype html>"&"\n" & $data
     sdebug "html: raw size {len(html)}"
-    result = html.minifyHtml
-    sdebug "html: minified size {len(result)}"
+    let mhtml = html.minifyHtml
+    sdebug "html: minified size {len(mhtml)}"
+    return mhtml
 
 proc writeHtml*(data: auto; path: string) {.inline.} =
     debug "writing html file to {path}"

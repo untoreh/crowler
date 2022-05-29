@@ -4,8 +4,8 @@ import os,
        strutils
 
 const releaseMode* = os.getenv("NIM", "") == "release"
-const cfg_path = when releaseMode: "./"
-                 else: currentSourcePath().splitPath()[0]
+const PROJECT_PATH = when releaseMode: ""
+                 else: currentSourcePath().splitPath()[0] / ".." / ".."
 
 let loggerObj = newConsoleLogger(fmtStr = "[$time] - $levelname: ")
 let logger* = loggerObj.unsafeAddr
@@ -38,9 +38,8 @@ export logging
 const
     USE_PROXIES* = true
     PROXY_EP* = "socks5://localhost:8877"
-    PROJECT_PATH* = joinPath(cfg_path, "..", "..")
     WEBSITE_DEBUG_PORT* = ":5050"
-    WEBSITE_DOMAIN* = "wsl"
+    WEBSITE_DOMAIN* = os.getenv("WEBSITE_DOMAIN", "wsl")
     WEBSITE_URL* = parseUri("http://" & WEBSITE_DOMAIN & WEBSITE_DEBUG_PORT)
     WEBSITE_TITLE* = "wsl"
     WEBSITE_DESCRIPTION* = "Everything about server hosting."

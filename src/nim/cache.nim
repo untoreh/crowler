@@ -28,6 +28,3 @@ proc initCache*() {.raises: []} =
 
 proc `[]=`*[K, V](c: ptr PageCache, k: K, v: V) {.inline.} =
     c[][k] = v
-
-# proc `[]=`*[K, V](c: ptr PageCache, k: K, v: V) {.inline.} =
-#     c[][k] = v

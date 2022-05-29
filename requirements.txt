@@ -1,9 +1,13 @@
+# APT dependencies: libcurl4-openssl-dev
 # parsing
+pyyaml
 feedparser
 feedfinder2
 spacy
 alt-profanity-check
 clean-text
+deep_translator
+git+https://github.com/nidhaloff/deep-translator@master
 
 # requests
 pyssl
@@ -11,6 +15,8 @@ pycurl
 retry
 user_agent
 zict
+# proxy-checker
+git+https://github.com/orehunt/proxybroker2@master
 
 # data
 zarr

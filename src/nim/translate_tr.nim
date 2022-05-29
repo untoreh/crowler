@@ -9,43 +9,46 @@ import
     sugar,
     sequtils,
     hashes,
-    std/sharedtables
+    std/[sharedtables],
+    chronos,
+    karax/vdom
 
 import
     quirks,
     cfg,
     utils,
     types,
+    locktpl,
     translate_types,
     translate_srv,
     translate_db,
     locks
 
-type splitSent = object
+type splitSent = ref object
     sents: seq[string]
     size: int
 
-proc add(ss: ptr splitSent, s: string) =
+proc add(ss: splitSent, s: string) =
     ss.sents.add(s)
     ss.size += s.len
 
-proc clear(ss: ptr splitSent) =
+proc clear(ss: splitSent) =
     ss.sents.setLen(0)
     ss.size = 0
 
-proc len(ss: ptr splitSent): int = ss.size
+proc len(ss: splitSent): int = ss.size
+
+type JobsQueueTypeXml = seq[(seq[XmlNode], Queue, seq[seq[string]])]
+type JobsQueueTypeVNode = seq[(seq[VNode], Queue, seq[seq[string]])]
 
 var
-    sentsIn: ptr splitSent
-    transOut: ptr seq[string]
-    splitCache: ptr Table[string, seq[string]]
-    scLock: Lock
-    elSents {.threadvar.}: seq[string]
+    jobsQueueX {.threadvar.}: JobsQueueTypeXml
+    jobsQueueV {.threadvar.}: JobsQueueTypeVNode
 
-sentsIn = create(splitSent)
-transOut = create(seq[string])
-splitCache = create(Table[string, seq[string]])
-initLock(scLock)
+proc addJob(els: seq[XmlNode], q: Queue, batches: seq[seq[string]]) = jobsQueueX.add (els, q, batches)
+proc addJob(els: seq[VNode], q: Queue, batches: seq[seq[string]]) = jobsQueueV.add (els, q, batches)
+
+let splitCache = initLockLRUCache[string, seq[string]](1000)
 
 proc checkBatchedTranslation(sents: seq[string], query = "", tr: auto) =
     if len(tr) != len(sents):
@@ -58,33 +61,31 @@ proc checkBatchedTranslation(sents: seq[string], query = "", tr: auto) =
         err.add fmt"{tr.len} - {sents.len}"
         raise newException(ValueError, err)
 
-proc doQuery[T](q: T, sents: seq[string]): seq[string] =
+proc doQuery(q: auto, sents: seq[string]): Future[seq[string]] {.async.} =
     ## Iterate over all the separators pair until a bijective mapping is found
     var
-        tr: seq[string]
         itr = 1
         query = ""
 
     for (sep, splitsep) in q.glues:
         query = join(sents, sep)
         assert query.len < q.bufsize, fmt"mmh: {sents.len}, {query.len}"
-        debug "query: calling translation function, bucket: {q.bucket.len}, query: {query.len}"
-        let res = q.call(query, q.pair)
+        # debug "query: calling translation function, bucket: {q.bucket.len()}, query: {query.len}"
+        let res = await q.call(query, q.pair)
+        # let res = q.doCall(query)
         debug "query: response size: {res.len}"
-        let tr = res.split(splitsep)
+        result = res.split(splitsep)
         debug "query: split translations"
-        if len(tr) == len(sents):
+        if len(result) == len(sents):
             debug "query: translation successful."
-            return tr
+            return
         debug "query: translation failed, trying new glue ({itr})"
         itr += 1
-    checkBatchedTranslation(sents, query, tr)
+    checkBatchedTranslation(sents, query, result)
 
-proc doTrans(q: auto) =
-    let tr = doQuery(q, collect(for s in sentsIn.sents: s))
-    debug "doTrans: appending trans"
-    transOut[].add(tr)
-    debug "doTrans: clearing sentences"
+proc toSeq(sentsIn: splitSent): seq[string] =
+    result = collect(for s in sentsIn.sents: s)
+    # doQuery(q, collect(for s in sentsIn.sents: s))
     sentsIn.clear()
 
 proc setEl(q, el: auto, t: string) =
@@ -100,36 +101,81 @@ proc reachedBufSize[T](s: int, q: T): bool = reachedBufSize(q.bucket, s + q.sz, 
 proc elUpdate(q, el, srv: auto) =
     # TODO: sentence splitting should be memoized
     debug "elupdate: splitting sentences"
-    elSents.setLen(0)
-    withLock(scLock):
-        let txt = el.getText
-        if not (txt in splitCache[]):
-            splitCache[][txt] = splitSentences(txt)
-        elSents.add splitCache[][txt]
-    debug "elupdate: translating"
+    var
+        elSents: seq[string]
+        transOut: seq[string]
+        sentsIn = splitSent()
+        batches: seq[seq[string]]
+    sentsIn.size = 0
+    let txt = el.getText
+    elSents.add if txt in splitCache:
+                    splitCache[txt]
+                else: splitSentences(txt)
+    # debug "elupdate: translating"
     for s in elSents:
         if reachedBufSize(sentsIn.sents, sentsIn.len + s.len, q.bufsize):
-            doTrans(q)
+            batches.add sentsIn.toSeq
         sentsIn.add(s)
     if sentsIn.len > 0:
-        doTrans(q)
-    debug "elupdate: setting translation"
-    setEl(q, el, transOut[].join)
-    transOut[].setLen(0)
+        batches.add sentsIn.toSeq
+    debug "pushing job to queue"
+    addJob(@[el], q, batches)
     debug "elupdate: end"
+
+proc checkJobs(q: QueueXml) = doassert jobsQueueX[^1][0].len > 0
+proc checkJobs(q: QueueDom) = doassert jobsQueueV[^1][0].len > 0
+
+proc push[T](q: var T) =
+    ## Push the translation job for all elements in the queue
+    var batches: seq[seq[string]]
+    batches.add collect(for el in q.bucket: el.getText)
+    addJob(q.bucket, q, batches)
+    q.bucket.setLen(0)
+    q.sz = 0
+    checkJobs(q)
 
 
 proc elementsUpdate[T](q: var T) =
     ## Update all the elements in the queue
     debug "eleupdate: performing batch translation"
-    let tr = doQuery(q, collect(for el in q.bucket: el.getText))
+    # let tr = doQuery(q, )
     debug "eleupdate: setting elements"
     for (el, t) in zip(q.bucket, tr):
         # debug "el: {el.tag}, {t}"
         setEl(q, el, t)
     debug "eleupdate: cleaning up queue"
-    q.bucket.setLen(0)
-    q.sz = 0
+    # q.bucket.setLen(0)
+    # q.sz = 0
+
+proc doQueryAll(els: auto, q: Queue, batches: seq[seq[string]]): Future[void] {.async.} =
+    # We might have multiple batches when translating a single element
+    var tr: seq[string]
+    if len(els) == 1:
+        for batch in batches:
+            tr.add await doQuery(q, batch)
+        setEl(q, els[0], tr.join())
+        saveToDB()
+    else:
+        doassert len(batches) == 1
+        tr.add await doQuery(q, batches[0])
+        for (el, t) in zip(els, tr):
+            setEl(q, el, t)
+        saveToDB()
+
+proc queueTrans(): seq[Future[void]]  =
+    var jobs: seq[Future[void]]
+    for (els, q, batches) in jobsQueueX:
+        jobs.add doQueryAll(els, q, batches)
+    for (els, q, batches) in jobsQueueV:
+        jobs.add doQueryAll(els, q, batches)
+    debug "translate: waiting for {len(jobs)} jobs."
+    return jobs
+
+proc doTrans*() {.async.} =
+    let jobs = queueTrans()
+    for j in jobs:
+        await j
+    # saveToDB(force=true)
 
 proc translate*[Q, T](q: var Q, el: T, srv: auto) =
     let (success, length) = setFromDB(q.pair, el)
@@ -138,11 +184,9 @@ proc translate*[Q, T](q: var Q, el: T, srv: auto) =
             debug "Translating element singularly since it is big"
             elUpdate(q, el, srv)
             debug "Saving translations! {slations[].len}"
-            saveToDb()
         else:
             if reachedBufSize(length, q):
-                elementsUpdate(q)
-                saveToDB()
+                q.push()
             q.bucket.add(el)
             q.sz += length
 
@@ -150,18 +194,12 @@ proc translate*[Q, T](q: var Q, el: T, srv: auto, finish: bool) =
     if finish:
         let (success, _) = setFromDB(q.pair, el)
         if not success:
-            let t = q.translate(el.getText)
-            el.setText(t)
+            var batches: seq[seq[string]]
+            addJob(@[el], q, el.getText)
+            waitFor doTrans()
 
 proc translate*[Q](q: var Q, srv: auto, finish: bool) =
     if finish and q.sz > 0:
-        elementsUpdate(q)
-        saveToDB(force=true)
-
-# when isMainModule:
-#     let
-#         pair = (src: "en", trg: "it")
-#         slator = initTranslator()
-
-#     var q = getTfun(pair, slator).initQueue(pair, slator)
-#     echo q.translate("Hello")
+        q.push()
+        waitFor doTrans()
+        # saveToDB(force=true)

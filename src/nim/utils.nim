@@ -40,6 +40,15 @@ template lgetOrPut*[T, K](c: T, k: K, v: untyped): untyped =
     except KeyError:
         c.put(k, v)
 
+template lcheckOrPut*[T, K](c: T, k: K, v: untyped): untyped =
+    ## Lazy `mgetOrPut`
+    mixin get
+    if k in c:
+        c[k]
+    else:
+        c[k] = v
+        c[k]
+
 proc isWeaveOff*(): bool {.inline.} = globalCtx.numWorkers == 0 or workerContext.signaledTerminate
 
 template logstring(code: untyped): untyped =

@@ -22,6 +22,8 @@ import strformat,
 {.experimental: "caseStmtMacros".}
 
 import
+    pyutils,
+    quirks,
     cfg,
     types,
     server_types,
@@ -112,7 +114,7 @@ template handle404*(body: var string) =
 
 template handleHomePage(relpath: string, capts: auto, ctx: HttpCtx) {.dirty.} =
     const homePath = SITE_PATH / "index.html"
-    page = pageCache[].lgetOrPut(reqKey):
+    page = pageCache[].lcheckOrPut(reqKey):
         # in case of translations, we to generate the base page first
         # which we cache too (`setPage only caches the page that should be served)
         let (tocache, toserv) = buildHomePage(capts.lang, capts.amp)
@@ -151,7 +153,7 @@ template dispatchImg(relpath: var string, ctx: auto) {.dirty.} =
 template handleTopic(capts: auto, ctx: HttpCtx) {.dirty.} =
     debug "topic: looking for {capts.topic}"
     if capts.topic in topicsCache:
-        page = pageCache[].lgetOrPut(reqKey):
+        page = pageCache[].lcheckOrPut(reqKey):
             let
                 pagenum = if capts.page == "": "0" else: capts.page
                 topic = capts.topic
@@ -167,7 +169,7 @@ template handleArticle(capts: auto, ctx: HttpCtx) =
     debug "article: fetching article"
     let tg = topicsCache.get(capts.topic, emptyTopic)
     if tg.topdir != -1:
-        page = pageCache[].lgetOrPut(reqKey):
+        page = pageCache[].lcheckOrPut(reqKey):
             debug "article: generating article"
             articleHtml(capts)
         if page != "":
@@ -188,7 +190,7 @@ template handleSearch(relpath: string, ctx: HttpCtx) =
     if capts.lang == "" and refcapts.lang != "":
         handle301($(WEBSITE_URL / refcapts.lang / join(capts, n = 1)))
     else:
-        page = pageCache[].lgetOrPut(reqKey):
+        page = pageCache[].lcheckOrPut(reqKey):
             # there is no specialized capture for the query
             let
                 searchq = something(parseUri(capts.art).query.getParam("q"), capts.art)
@@ -219,7 +221,7 @@ template handleSitemap() =
     ctx.doReply(page)
 
 template handleRobots() =
-    page = pageCache[].lgetOrPut(reqKey):
+    page = pageCache[].lcheckOrPut(reqKey):
         buildRobots()
     ctx.doReply(page)
 
@@ -294,6 +296,8 @@ proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
 proc pubTask*() {.gcsafe.} =
     initThread()
     syncTopics()
+    # Give some time to services to warm up
+    sleep(10000)
     let t = getTime()
     # Only publish one topic every `CRON_TOPIC`
     while true:
@@ -303,16 +307,37 @@ proc pubTask*() {.gcsafe.} =
             pubTopic(topic)
         sleep(cfg.CRON_TOPIC * 1000)
 
+let broker = relPyImport("proxies_pb")
+const proxySyncInterval = 60 * 1000
+proc proxyTask() {.gcsafe.} =
+    initThread()
+    # syncTopics()
+    let syfp = broker.getAttr("sync_from_file")
+    while true:
+        withPyLock:
+            discard syfp()
+        sleep(proxySyncInterval)
+
 proc start*(doclear = false, port = 5050) =
     var server = new GuildenServer
+    # cache is global
     initCache()
+
+    # Publishes new articles for one topic every x seconds
     spawn pubTask()
+
+    # (python) Task for syncing proxy list
+    spawn proxyTask()
+
+    # Clear database before serving
     if doclear:
         if os.getenv("DO_SERVER_CLEAR", "") == "1":
             echo fmt"Clearing pageCache at {pageCache[].path}"
             pageCache[].clear()
         else:
             echo "Ignoring doclear flag because 'DO_SERVER_CLEAR' env var is not set to '1'."
+
+    # Configure and start server
     registerThreadInitializer(initThread)
     server.initHeaderCtx(handleGet, port, false)
     echo fmt"HTTP server listening on port {port}"

@@ -113,7 +113,7 @@ export function setupSuggest() {
     form = $("form.search")
     suggest = $(".search-suggest", form)
     closebtn = $(".clear-search-btn", form)
-    const topic = $("body").getAttribute("topic")
+    var topic = $("body").getAttribute("topic")
     if (topic != "") {
         topic = "/" + topic
     }

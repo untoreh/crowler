@@ -163,7 +163,6 @@ template handleTopic(capts: auto, ctx: HttpCtx) {.dirty.} =
             processPage(capts.lang, capts.amp, pagetree).asHtml
         ctx.doReply(page)
     elif capts.topic in customPages:
-        debug "WOWOWO"
         page = pageCache[].lcheckOrPut(reqKey):
             pageFromTemplate(capts.topic, capts.lang, capts.amp)
         ctx.doReply(page)

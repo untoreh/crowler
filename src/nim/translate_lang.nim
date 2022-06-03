@@ -60,20 +60,3 @@ proc translateLang*(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath
 proc translateLang*(fc: ptr FileContext, ar = emptyArt): VNode {.gcsafe.} =
     result = translateDom(fc)[1]
 
-when isMainModule:
-    import html, nre, pathnorm, strformat, pages
-    from server import initThread
-    server.initThread()
-    translate.initThread()
-    let
-        lang = ("en", "it")
-        dir = normalizePath(SITE_PATH)
-        rx_file = re fmt"(.*{dir}/)(.*$)"
-        (p, pp) = buildHomePage("en", false)
-        file = "/home/fra/dev/wsl/site/vps/1/cheap-dedicated-server-hosting-price-best-dedicated-hosting-plans.html"
-        (filepath, urlpath) = splitUrlPath(rx_file, file)
-        pair = (src: "en", trg: "it")
-        t_path = file_path / pair.trg / url_path
-
-    let ar = default(Article)
-    let d = translateLang(p, file, rx_file, lang, ar = ar)

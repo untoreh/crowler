@@ -175,7 +175,7 @@ proc doTrans*() {.async.} =
     let jobs = queueTrans()
     for j in jobs:
         await j
-    # saveToDB(force=true)
+    saveToDB(force=true)
 
 proc translate*[Q, T](q: var Q, el: T, srv: auto) =
     let (success, length) = setFromDB(q.pair, el)
@@ -202,4 +202,4 @@ proc translate*[Q](q: var Q, srv: auto, finish: bool) =
     if finish and q.sz > 0:
         q.push()
         waitFor doTrans()
-        # saveToDB(force=true)
+        saveToDB(force=true)

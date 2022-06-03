@@ -372,7 +372,7 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
 const pageContent* = postContent
 
 proc asHtml*(data: auto): string {.inline.} =
-    let html = "<!doctype html>"&"\n" & $data
+    let html = "<!DOCTYPE html>"&"\n" & $data
     sdebug "html: raw size {len(html)}"
     let mhtml = html.minifyHtml
     sdebug "html: minified size {len(mhtml)}"

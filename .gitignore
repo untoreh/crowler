@@ -31,3 +31,5 @@ data/proxies/*
 /src/nim/test.nim
 /src/py/test.py
 /old/
+/wsl_data.zip
+/wsl-cli

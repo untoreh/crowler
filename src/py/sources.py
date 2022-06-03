@@ -2,15 +2,12 @@ import config as cfg
 
 from retry import retry
 import sys, os
-from multiprocessing.pool import ThreadPool
-from random import shuffle, choice
-from log import logger, LoggerLevel, logger_level
+from random import shuffle
+from log import logger, LoggerLevel
 
-from proxies import set_socket_timeout
 import scheduler as sched
-from blacklist import exclude_blacklist
 
-set_socket_timeout(100)
+cfg.set_socket_timeout(100)
 
 from searx.search import SearchQuery, EngineRef
 from searx import search

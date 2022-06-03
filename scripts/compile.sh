@@ -2,7 +2,7 @@
 set -e
 
 export WEBSITE_DOMAIN=wsl
-
+export PATH=~/.nimble/bin/:$PATH
 file=${1:-src/nim/cli.nim}
 nim c  -d:${NIM:-debug} \
     --passL:"-flto" \

@@ -1,7 +1,8 @@
 import ../cfg
+import os
 
-const imgfPrefix = when releaseMode: "./lib" else: "../.."
-const libimageflow = imgfPrefix & "/vendor/imageflow.dist/libimageflow.so"
+const imgfPrefix = when releaseMode: "." else: os.getenv("PROJECT_DIR", "../..")
+const libimageflow = imgfPrefix & "/lib/libimageflow.so"
 
 type
   imageflow_lifetime* = enum

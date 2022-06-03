@@ -28,3 +28,6 @@ data/*
 /data/cache/
 data/proxies/*
 !data/proxies
+/src/nim/test.nim
+/src/py/test.py
+/old/

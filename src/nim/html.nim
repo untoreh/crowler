@@ -129,7 +129,7 @@ proc buildHead*(path: string; description = ""; topic = ""; ar = emptyArt): VNod
         link(rel = "icon", href = FAVICON_SVG_URL, type = "image/svg+xml")
         # https://stackoverflow.com/questions/21147149/flash-of-unstyled-content-fouc-in-firefox-only-is-ff-slow-renderer
         verbatim("<script>const _ = null</script>")
-        when defined(ADSENSE_SRC):
+        when declared(ADSENSE_SRC):
             verbatim(ADSENSE_SRC)
 
 proc buildLang(path: string; title = ""): VNode {.gcsafe.} =
@@ -228,7 +228,7 @@ proc buildMenuSmall*(crumbs: string; topic_uri: Uri; path: string): VNode {.gcsa
             topicsList(ucls = "menu-list-topics", icls = "menu-topic-item")
 
 proc buildMenuSmall*(crumbs: string; topic_uri: Uri; a = emptyArt): VNode =
-    buildMenuSmall(crumbs, topic_uri, a.getArticleUrl)
+    buildMenuSmall(crumbs, topic_uri, a.getArticlePath)
 
 proc buildLogo(pos: string): VNode =
     buildHtml():
@@ -284,11 +284,14 @@ proc buildFooter*(topic: string = ""): VNode =
                 a(href = ("/" & topic & "/feed.xml"), class = "rss"):
                     text("RSS")
                 text " - "
-                a(href = "/dmca.html"):
+                a(href = "/dmca"):
                     text("DMCA")
                 text " - "
-                a(href = "/privacy-policy.html"):
+                a(href = "/privacy-policy"):
                     text("Privacy Policy")
+                text " - "
+                a(href = "/terms-of-service"):
+                    text("Terms of Service")
             tdiv(class = "footer-copyright"):
                 text "Except where otherwise noted, this website is licensed under a "
                 a(rel = "license", href = "http://creativecommons.org/licenses/by/3.0/deed.en_US"):

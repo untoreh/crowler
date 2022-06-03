@@ -69,6 +69,7 @@ proc getLastTopicDir*(topic: string): string =
     let dirs = getSubDirs(SITE_PATH / topic)
     return $max(1, dirs.high)
 
+
 proc pageArticles*(topic: string; pagenum: string): seq[string] =
     let dir = SITE_PATH / topic / pagenum
     collect:
@@ -125,10 +126,10 @@ template topicPage*(topic: string, pagenum: string, istop = false) {.dirty.} =
     # if the page is not finalized, it is the homepage
     let footer = pageFooter(topic, pagenum, home = istop)
     let pagetree = buildPage(title = "", # this is NOT a `title` tag
-            content = content,
-            slug = pagenum,
-            pagefooter = footer,
-            topic = topic)
+        content = content,
+        slug = pagenum,
+        pagefooter = footer,
+        topic = topic)
 
 {.push gcsafe.}
 proc processPage*(lang, amp: string, tree: VNode, relpath = "index"): VNode =
@@ -145,6 +146,18 @@ proc processPage*(lang, amp: string, tree: VNode, relpath = "index"): VNode =
     if amp != "":
         debug "page: amping"
         result = result.ampPage
+
+proc pageFromTemplate*(tpl, lang, amp: string): string =
+    var txt = readfile(ASSETS_PATH / "templates" / tpl & ".html")
+    let (vars, title, desc) = case tpl:
+        of "dmca": (tplRep, "DMCA", fmt"dmca compliance for {WEBSITE_DOMAIN}")
+        of "tos": (tplRep, "Terms of Service", fmt"Terms of Service for {WEBSITE_DOMAIN}")
+        of "privacy-policy": (ppRep, "Privacy Policy", fmt"Privacy Policy for {WEBSITE_DOMAIN}")
+        else: (tplRep, tpl, "")
+    txt = multiReplace(txt, vars)
+    let slug = slugify(title)
+    let p = buildPage(title = title, content = txt)
+    return $processPage(title, tpl, p)
 
 proc articleTree*(capts: auto): VNode =
     # every article is under a page number

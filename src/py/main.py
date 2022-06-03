@@ -5,6 +5,7 @@ import os
 import shutil
 import argparse
 import time
+import random
 from pathlib import Path
 
 from searx.shared.shared_simple import schedule
@@ -185,8 +186,15 @@ def run_parse2_job(topic):
     return a
 
 def run_server(topics):
+    delay = 3600 * 8
+    random.shuffle(topics) # in case of crashes helps to distribute queryies more uniformly
     while True:
-        pass
+        for topic in topics:
+            run_parse1_job(topic)
+        if random.randrange(3) == 0:
+            for topic in topics:
+                run_parse2_job(topic)
+        time.sleep(delay)
 
 JOBS_MAP = {
     "sources": run_sources_job,
@@ -199,12 +207,15 @@ if __name__ == "__main__":
     parser.add_argument("-job", help="What kind of job to perform", default="parse1")
     parser.add_argument("-topics", help="The topics to fetch articles for.", default="")
     parser.add_argument("-workers", help="How many workers.", default=cfg.POOL_SIZE)
-    parser.add_argument("-server", help="Start the server.", default=cfg.POOL_SIZE)
+    parser.add_argument("-server", help="Start the server.", default=False)
     args = parser.parse_args()
     cfg.POOL_SIZE = int(args.workers)
     topics = args.topics.split(",")
-    if topics:
-        for tp in topics:
-            JOBS_MAP[args.job](tp)
+    if topics and topics[0] != "":
+        if args.server:
+            run_server(topics)
+        else:
+            for tp in topics:
+                JOBS_MAP[args.job](tp)
     else:
-        raise ValueError("Pass a `-topics` as argument to run a job.")
+        raise ValueError("Pass `-topics` as argument to run a job.")

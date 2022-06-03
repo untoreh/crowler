@@ -1,5 +1,4 @@
-import os
-from os.path import isdir, dirname
+import os, socket
 from pathlib import Path
 import warnings
 import pycurl
@@ -50,18 +49,26 @@ def setproxies(p=STATIC_PROXY_EP):
             pycurl.Curl = CURL_CLASS
 
 
+def set_socket_timeout(timeout):
+    socket.setdefaulttimeout(timeout)
+
+
+set_socket_timeout(5)
+
 REQ_TIMEOUT = 20
 # How many concurrent requests
 POOL_SIZE = os.cpu_count()
 
-DATA_DIR = Path(os.path.realpath(
-    "./data"
-    if os.path.exists("./data")
-    else "../../data"
-    if os.path.exists("../../data")
-    else ""
-))
-assert (DATA_DIR is not None) and isdir(Path(dirname(DATA_DIR)) / ".venv")
+DATA_DIR = Path(
+    os.path.realpath(
+        "./data"
+        if os.path.exists("./data")
+        else "../../data"
+        if os.path.exists("../../data")
+        else ""
+    )
+)
+assert DATA_DIR is not None  # and isdir(Path(dirname(DATA_DIR)) / ".venv")
 
 PROXIES_DIR = DATA_DIR / "proxies"
 TOPICS_DIR = DATA_DIR / "topics"
@@ -80,7 +87,9 @@ DEFAULT_LANG = "en"
 SPACY_MODEL = "en_core_web_sm"
 TAGS_MAX_LEN = 4
 
-ART_MIN_LEN = 3000 # minimum article len (5 avg chars per 500 words + 500 chars for pre-cleanups)
+ART_MIN_LEN = (
+    3000  # minimum article len (5 avg chars per 500 words + 500 chars for pre-cleanups)
+)
 PROFANITY_THRESHOLD = 0.5
 # The maximum number of articles/feeds to store `unprocessed` for each topic
 # When cap is reached queue gets discarded as FIFO.

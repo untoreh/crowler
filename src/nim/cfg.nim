@@ -38,7 +38,7 @@ export logging
 const
     USE_PROXIES* = true
     PROXY_EP* = "socks5://localhost:8877"
-    WEBSITE_DEBUG_PORT* = ":5050"
+    WEBSITE_DEBUG_PORT* = when releaseMode: "" else: os.getenv("WEBSITE_DEBUG_PORT", ":5050")
     WEBSITE_DOMAIN* = os.getenv("WEBSITE_DOMAIN", "wsl")
     WEBSITE_URL* = parseUri("http://" & WEBSITE_DOMAIN & WEBSITE_DEBUG_PORT)
     WEBSITE_TITLE* = "wsl"
@@ -102,4 +102,4 @@ const
     CRON_TOPIC* = 10 # Seconds between a `pub` job run
     CRON_TOPIC_FREQ* = 8 # Hours between a specific topic `pub` job run
 
-static: echo "Data Path is " & PROJECT_PATH
+static: echo "Project Path is '" & PROJECT_PATH & "'"

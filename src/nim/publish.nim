@@ -3,7 +3,6 @@ import nimpy,
        sugar,
        times,
        strutils,
-       timeit,
        strformat,
        algorithm,
        minhash {.all.},
@@ -65,22 +64,6 @@ proc addArticle(lsh: LocalitySensitive[uint64], a: Article): bool =
         lsh.add(a.content, $(len(lsh.fingerprints) + 1))
         return true
     false
-
-proc pubPageFromTemplate(tpl: string, title: string, vars: seq[(string, string)] = tplRep, desc = "") =
-    var txt = readfile(ASSETS_PATH / "templates" / tpl)
-    txt = multiReplace(txt, vars)
-    let slug = slugify(title)
-    let p = buildPage(title = title, content = txt)
-    processHtml("", slug, p)
-
-proc pubInfoPages() =
-    ## Build DMCA, TOS, and GPDR pages
-    pubPageFromTemplate("dmca.html", "DMCA", desc = fmt"DMCA compliance for {WEBSITE_DOMAIN}")
-    pubPageFromTemplate("tos.html", "Terms of Service",
-            desc = fmt"Terms of Service for {WEBSITE_DOMAIN}")
-    pubPageFromTemplate("privacy-policy.html", "Privacy Policy", ppRep,
-            desc = "Privacy Policy for {WEBSITE_DOMAIN}")
-
 
 proc curPageNumber(topic: string): int =
     withPyLock:

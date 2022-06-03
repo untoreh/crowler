@@ -14,19 +14,17 @@ import
     server,
     publish
 
-proc clearPage*(url: string) =
+template deleteArt() {.dirty.} =
     let
-        relpath = url.parseUri.path
-        capts = uriTuple(relpath)
         artPath = getArticlePath(capts)
         fpath = SITE_PATH / artPath
     doassert capts.topic != ""
     doassert capts.art != ""
     doassert capts.page != ""
     pageCache[].del(fpath)
-    pageCache[].del(SITE_PATH / capts.amp / artPath)
+    pageCache[].del(SITE_PATH / "amp" / artPath)
     for lang in TLangsCodes:
-        pageCache[].del(SITE_PATH / capts.amp / lang / artPath)
+        pageCache[].del(SITE_PATH / "amp" / lang / artPath)
         pageCache[].del(SITE_PATH / lang / artPath)
     let tg = topicsCache.fetch(capts.topic).group
     let pageArts = tg[$topicData.done][capts.page]
@@ -39,9 +37,28 @@ proc clearPage*(url: string) =
     for n in toRemove:
         pageArts[n] = PyNone
 
-when isMainModule:
+proc clearPage*(url: string) =
     initThread()
-    dispatchMulti([start], [clearPage], [pubTopic])
+    let
+        relpath = url.parseUri.path
+        capts = uriTuple(relpath)
+    if capts.art != "":
+        deleteArt()
+    else:
+        let fpath = SITE_PATH / relpath
+        pageCache[].del(fpath)
+        pageCache[].del(SITE_PATH / "amp" / relpath)
+        for lang in TLangsCodes:
+            pageCache[].del(SITE_PATH / "amp" / lang / relpath)
+            pageCache[].del(SITE_PATH / lang / relpath)
+
+
+proc cliPubTopic(topic: string) =
+    initThread()
+    pubTopic(topic)
+
+when isMainModule:
+    dispatchMulti([start], [clearPage], [cliPubTopic])
     # initCache()
     # let url = "http://wsl:5050/web/0/6-best-shared-web-hosting-services-companies-2022"
     # clearPage(url)

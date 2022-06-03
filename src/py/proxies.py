@@ -1,23 +1,19 @@
-import urllib.request, socket
-from typing import Tuple
+import urllib.request
+from urllib.parse import urlparse
 import random
 from pathlib import Path
 import json
 import log
 import resource
 import time
-from proxy_checker import ProxyChecker
 import time
 from copy import deepcopy
+from random import choice
 
 import config as cfg
 import utils as ut
 import scheduler
 
-checker = ProxyChecker()
-
-
-checker = ProxyChecker()
 JUDGES = [
     "http://mojeip.net.pl/asdfa/azenv.php",
     "http://www.proxy-listen.de/azenv.php",
@@ -43,60 +39,57 @@ def validate_judges():
     if len(JUDGES) == 0:
         raise RuntimeError("No judges available for proxy checking")
 
+from proxy_checker import ProxyChecker
 
-def set_socket_timeout(timeout):
-    socket.setdefaulttimeout(timeout)
-
-
-set_socket_timeout(5)
-
+checker = ProxyChecker()
 
 def check_proxy(proxy, timeout, verbose=False):
-    # if JUDGES_OK is None:
-    #     validate_judges()
     if checker.send_query(proxy=proxy):
         return proxy
-    # try:
-    #     pr = urlparse(proxy)
-    #     proxy_handler = urllib.request.ProxyHandler({pr.scheme: proxy})
-    #     opener = urllib.request.build_opener(proxy_handler)
-    #     opener.addheaders = [("User-agent", "Mozilla/5.0")]
-    #     urllib.request.install_opener(opener)
-    #     urllib.request.urlopen(JUDGES[0])  # change the url address here
-    # except urllib.error.HTTPError as e:
-    #     if verbose:
-    #         log.logger.debug(e.code)
-    #     return False
-    # except Exception as detail:
-    #     if verbose:
-    #         log.logger.debug(detail)
-    #     return True
-    # return True
+
+# def check_proxy_judges(proxy, timeout, verbose=False):
+#     if JUDGES_OK is None:
+#         validate_judges()
+#     try:
+#         pr = urlparse(proxy)
+#         proxy_handler = urllib.request.ProxyHandler({pr.scheme: proxy})
+#         opener = urllib.request.build_opener(proxy_handler)
+#         opener.addheaders = [("User-agent", "Mozilla/5.0")]
+#         urllib.request.install_opener(opener)
+#         urllib.request.urlopen(JUDGES[0])  # change the url address here
+#     except urllib.error.HTTPError as e:
+#         if verbose:
+#             log.logger.debug(e.code)
+#         return False
+#     except Exception as detail:
+#         if verbose:
+#             log.logger.debug(detail)
+#         return True
+#     return True
 
 
-def get_proxies():
-    proxies = get(cfg.PROXIES_EP).content.splitlines()
-    for p in proxies:
-        parts = p.split()
-        url = str(parts[-1]).rstrip(">'").lstrip("b'")
-        prot_type = str(parts[3]).rstrip(":'").lstrip("'b'[").rstrip("]").rstrip(",")
-        if (
-            prot_type == "HTTP"
-            or prot_type == "CONNECT:80"
-            or prot_type == "CONNECT:25"
-        ):
-            prot = "http://"
-        elif prot_type == "HTTPS":
-            prot = "https://"
-        elif prot_type == "SOCKS5":
-            prot = "socks5h://"
+# def get_proxies():
+#     proxies = get(cfg.PROXIES_EP).content.splitlines()
+#     for p in proxies:
+#         parts = p.split()
+#         url = str(parts[-1]).rstrip(">'").lstrip("b'")
+#         prot_type = str(parts[3]).rstrip(":'").lstrip("'b'[").rstrip("]").rstrip(",")
+#         if (
+#             prot_type == "HTTP"
+#             or prot_type == "CONNECT:80"
+#             or prot_type == "CONNECT:25"
+#         ):
+#             prot = "http://"
+#         elif prot_type == "HTTPS":
+#             prot = "https://"
+#         elif prot_type == "SOCKS5":
+#             prot = "socks5h://"
 
-        prx = f"{prot}{url}"
-        PROXIES[prx] = {eg: True for eg in ENGINES}
+#         prx = f"{prot}{url}"
+#         PROXIES[prx] = {eg: True for eg in ENGINES}
 
 
 prx_iter = iter(set(PROXIES))
-
 
 def switch_proxy(client):
     prx = next(prx_iter).lower()
@@ -106,7 +99,6 @@ def switch_proxy(client):
     client.proxy_dict["http"] = prx
     client.proxy_dict["https"] = prx
     print(client.proxy)
-
 
 def engine_proxy(engine):
     while True:
@@ -214,7 +206,7 @@ class Providers:
             self.prev_proxies = deepcopy(self.proxies)
         return self.proxies
 
-    def dump(self, root: str | Path = cfg.PROXIES_DIR, prefix=None, data=None):
+    def dump(self, root: Path = cfg.PROXIES_DIR, prefix=None, data=None):
         if data is None:
             data = self.proxies
         if not prefix:

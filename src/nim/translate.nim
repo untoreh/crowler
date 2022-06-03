@@ -328,26 +328,26 @@ proc translateDir(path: string, service_kind = deep_translator, tries = 1, targe
         link_src_to_dir(dir)
         fileWise(path, excluded_dirs, rx_file, langpairs, target_path = target_path)
 
-when isMainModule:
-    import timeit
-    let
-        dir = normalizePath(SITE_PATH)
-        langpairs = collect(for lang in TLangs: (src: SLang.code, trg: lang.code))
-        rx_file = re fmt"(.*{dir}/)(.*$)"
-    let
-        file = "/home/fra/dev/wsl/site/vps/1/cheap-dedicated-server-hosting-price-best-dedicated-hosting-plans.html"
-        html = fetchHtml(file)
-        (filepath, urlpath) = splitUrlPath(rx_file, file)
-        pair = (src: "en", trg: "it")
-        t_path = file_path / pair.trg / url_path
+# when isMainModule:
+#     import timeit
+#     let
+#         dir = normalizePath(SITE_PATH)
+#         langpairs = collect(for lang in TLangs: (src: SLang.code, trg: lang.code))
+#         rx_file = re fmt"(.*{dir}/)(.*$)"
+#     let
+#         file = "/home/fra/dev/wsl/site/vps/1/cheap-dedicated-server-hosting-price-best-dedicated-hosting-plans.html"
+#         html = fetchHtml(file)
+#         (filepath, urlpath) = splitUrlPath(rx_file, file)
+#         pair = (src: "en", trg: "it")
+#         t_path = file_path / pair.trg / url_path
 
-    # translateDir(SITE_PATH, target_path = "/tmp/out")
-    #
-    # withWeave(true):
-        # translateFile(file, rx_file, langpairs, target_path = "/tmp/out")
-    import threadpool
-    # translateLang()
+#     # translateDir(SITE_PATH, target_path = "/tmp/out")
+#     #
+#     # withWeave(true):
+#         # translateFile(file, rx_file, langpairs, target_path = "/tmp/out")
+#     import threadpool
+#     # translateLang()
 
-    # withWeave:
-    #     echo timeGo do:
-    #         discard translateHtml(html, file_path, url_path, pair, slator)
+#     # withWeave:
+#     #     echo timeGo do:
+#     #         discard translateHtml(html, file_path, url_path, pair, slator)

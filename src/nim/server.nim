@@ -15,9 +15,9 @@ import strformat,
        fusion/matching,
        uri,
        lrucache,
+       zippy,
        hashes,
-       json,
-       zippy
+       json
 
 {.experimental: "caseStmtMacros".}
 
@@ -43,7 +43,7 @@ import
     sitemap,
     articles
 
-const customPages* = ["dmca", "tos", "privacy-policy"]
+const customPages* = ["dmca", "terms-of-service", "privacy-policy"]
 const nobody = ""
 var
     reqMime {.threadvar.}: string
@@ -105,6 +105,7 @@ proc doReply[T](ctx: HttpCtx, body: T, scode = Http200, headers: openarray[strin
         except: discard
     sdebug "reply: sending: {len(resp)}"
     ctx.reply(scode, resp, baseHeaders)
+    sdebug "reply: sent: {len(resp)}"
 
 template handle301*(loc: string = $WEBSITE_URL) {.dirty.} =
     ctx.doReply(nobody, scode = Http301, headers = ["Location:"&loc])
@@ -160,6 +161,11 @@ template handleTopic(capts: auto, ctx: HttpCtx) {.dirty.} =
             topicPage(topic, pagenum, false)
             pageCache[SITE_PATH / capts.topic / capts.page] = pagetree.asHtml
             processPage(capts.lang, capts.amp, pagetree).asHtml
+        ctx.doReply(page)
+    elif capts.topic in customPages:
+        debug "WOWOWO"
+        page = pageCache[].lcheckOrPut(reqKey):
+            pageFromTemplate(capts.topic, capts.lang, capts.amp)
         ctx.doReply(page)
     else:
         handle301($(WEBSITE_URL / capts.amp / capts.lang))
@@ -259,6 +265,9 @@ proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
             of (topic: "sitemap.xml"):
                 debug "router: serving sitemap"
                 handleSitemap()
+            of (topic: "g"):
+                debug "router: serving suggestion {relpath}"
+                handleSuggest(relpath, ctx)
             of (page: "s"):
                 debug "router: serving search {relpath}"
                 handleSearch(relpath, ctx)
@@ -320,6 +329,8 @@ proc proxyTask() {.gcsafe.} =
 
 proc start*(doclear = false, port = 5050) =
     var server = new GuildenServer
+    # main Thread
+    initThread()
     # cache is global
     initCache()
 
@@ -345,4 +356,5 @@ proc start*(doclear = false, port = 5050) =
     server.serve(loglevel = INFO)
 
 when isMainModule:
+    pageCache[].clear()
     start()

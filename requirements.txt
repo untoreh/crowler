@@ -3,6 +3,7 @@
 pyyaml
 feedparser
 feedfinder2
+lassie
 spacy
 alt-profanity-check
 clean-text
@@ -41,6 +42,7 @@ pyate
 pytextrank
 phrasemachine
 textacy
+rake_nltk
 
 # not needed...
 # textacy

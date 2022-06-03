@@ -71,20 +71,33 @@ proc sanitize*(s: string): string =
     ## Replace new lines for search queries and ingestion
     s.replace(sre "\n|\r", "")
 
+proc addToBackLog(capts: UriCaptures) =
+    let f = open(SONIC_BACKLOG, fmAppend)
+    defer: f.close()
+    let l = join([capts.topic, capts.page, capts.art, capts.lang], ",")
+    writeLine(f, l)
+
 proc push*(capts: UriCaptures, content: string) =
     ## Push the contents of an article page to the search database
     var ofs = 0
     while ofs <= content.len:
-        if not snc.push(WEBSITE_DOMAIN,
-                "default", # TODO: Should we restrict search to `capts.topic`?
-                join([capts.page, capts.art], "/"),
-                content[ofs..<min(content.len, ofs + bufsize)],
-                lang = if capts.lang != "en": capts.lang.toISO3
-                        else: ""):
-            let f = open(SONIC_BACKLOG, fmAppend)
-            defer: f.close()
-            let l = join([capts.topic, capts.page, capts.art, capts.lang], ",")
-            writeLine(f, l)
+        let cnt = content[ofs..<min(content.len, ofs + bufsize)]
+        try:
+            if not snc.push(WEBSITE_DOMAIN,
+                    "default", # TODO: Should we restrict search to `capts.topic`?
+                    join([capts.page, capts.art], "/"),
+                    cnt,
+                    lang = if capts.lang != "en": capts.lang.toISO3
+                            else: ""):
+                capts.addToBackLog()
+                break
+        except:
+            debug "sonic: couldn't push content, {getCurrentExceptionMsg()} \n {cnt}"
+            capts.addToBackLog()
+            block:
+                let f = open("/tmp/sonic_debug.log", fmWrite)
+                defer: f.close()
+                write(f, cnt)
             break
         ofs += bufsize
 

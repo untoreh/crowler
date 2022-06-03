@@ -8,16 +8,9 @@ if [ "$(basename $PWD)" != "wsl" ]; then
     }
 fi
 
-. .venv/bin/activate
 scripts/site.sh -s
-rm -f wsl.zip
 
-zip wsl.zip -r \
-    data/ \
-    site/assets \
-    wsl-cli \
-    run/ \
-    lib/py \
-    lib/vendor/imageflow.dist/libimageflow.so \
-    scripts/ \
-    requirements.txt
+rm -f wsl_data.zip
+
+zip wsl_data.zip -r data/
+rclone copy wsl_data.zip mega:/wsl_data.zip

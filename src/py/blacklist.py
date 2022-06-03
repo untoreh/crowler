@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 
-from typing import Annotated, MutableSequence, Optional
+from typing import MutableSequence, Optional
 from config import BLACKLIST_PATH
 from urllib.parse import urlparse
 
-BLACKLIST: Annotated[
-    Optional[set], "Domain list to exclude from sources and parsing."
-] = None
-
+BLACKLIST: Optional[set] = None # "Domain list to exclude from sources and parsing."
 
 def load_blacklist():
     global BLACKLIST

@@ -114,7 +114,10 @@ export function setupSuggest() {
     suggest = $(".search-suggest", form)
     closebtn = $(".clear-search-btn", form)
     const topic = $("body").getAttribute("topic")
-    suggestUrl = "/" + topic + "/g/suggest?";
+    if (topic != "") {
+        topic = "/" + topic
+    }
+    suggestUrl = topic + "/g/suggest?";
     form.addEventListener("input", updateValue);
     setupInput()
     $("html,body").addEventListener("click", (e) => {

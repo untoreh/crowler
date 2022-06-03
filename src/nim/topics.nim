@@ -19,10 +19,17 @@ proc lastPageNum*(topic: string): int =
         return ut.get_top_page(topic).to(int)
 
 import quirks # PySequence requires quirks
+import strutils
 export nimpy
 proc loadTopicsIndex*(): PyObject =
-    withPyLock:
-        return ut.load_topics()[0]
+    try:
+        withPyLock:
+            return ut.load_topics()[0]
+    except:
+        let m = getCurrentExceptionMsg()
+        if "shape is None" in m:
+            qdebug "Couldn't load topics, is data dir present?"
+
 type TopicTuple* = (string, string, int)
 proc loadTopics*(): PySequence[TopicTuple] =
     withPyLock:
@@ -55,6 +62,7 @@ proc nextTopic*(): string =
         pyTopics[] = loadTopicsIndex()
     withPyLock:
         if len(pyTopics[]) <= topicIdx:
+            debug "pubtask: resetting topics idx ({len(pyTopics[])})"
             topicIdx = 0
         result = pyTopics[][topicIdx][0].to(string)
     topicIdx += 1

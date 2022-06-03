@@ -15,7 +15,8 @@ import tables,
 
 import cfg,
        utils,
-       html_misc
+       html_misc,
+       ads
 
 const skipNodes = [VNodeKind.iframe, audio, canvas, embed, video, img, button, form, VNodeKind.head, svg]
 const skipNodesXml = ["iframe", "audio", "canvas", "embed", "video", "img", "button", "form",
@@ -84,6 +85,10 @@ proc ampTemplate(): (VNode, VNode, VNode) =
         add styleElCustom
         add styleEl1
         add styleEl2Wrapper
+    ## ads
+    when declared(ADSENSE_AMP_HEAD):
+        ampHead.add verbatim(ADSENSE_AMP_HEAD)
+        ampBody.add verbatim(ADSENSE_AMP_BODY)
     (tree, ampHead, ampBody)
 
 proc fetchStyle(el: VNode) =

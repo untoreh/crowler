@@ -40,5 +40,6 @@ if [ $COPY_ONLY = 0 ]; then
     echo "done"
 fi
 
+mkdir -p $tmpdir/assets
 cp -a "$proj/src/assets/logo" "$tmpdir/assets/"
 cp -a "$proj/dist/"*{.js,.css,.png} "$tmpdir/assets/"

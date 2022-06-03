@@ -4,12 +4,12 @@
 **/queue.txt
 **/rust/target/
 **/site*.html
-**/data/*.db/
+**/data_*/*.db/
 logs/*
 !logs/.gitkeep
 run/*
 !run/.gitkeep
-**/data/sonic/**/
+**/data_*/sonic/**/
 **.nimcache
 vendor/**/
 docker/
@@ -19,15 +19,15 @@ docker/
 
 /target
 Cargo.lock
-data/topics/
+data_*/topics/
 # !site
 # dist/*
 # !dist
 /.log/
-data/*
-/data/cache/
-data/proxies/*
-!data/proxies
+data_*/*
+/data_*/cache/
+data_*/proxies/*
+!data_*/proxies
 /src/nim/test.nim
 /src/py/test.py
 /old/

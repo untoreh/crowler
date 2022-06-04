@@ -33,3 +33,4 @@ data_*/proxies/*
 /old/
 /wsl_data.zip
 /wsl-cli
+/supervisord.pid

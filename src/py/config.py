@@ -65,7 +65,7 @@ DATA_DIR = Path(
         if os.path.exists("./data")
         else "../../data"
         if os.path.exists("../../data")
-        else ""
+        else Path(os.getenv("PROJECT_DIR", "")) / "data"
     )
 )
 assert DATA_DIR is not None  # and isdir(Path(dirname(DATA_DIR)) / ".venv")

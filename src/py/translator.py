@@ -64,9 +64,14 @@ TLangs = [
 
 #     return wrapped_fn
 
+def override_requests_timeout():
+    import requests, copy, functools
+    get = copy.deepcopy(requests.get)
+    requests.get = functools.partial(get, timeout=10)
 
 class Translator:
     def __init__(self, provider="GoogleTranslator"):
+        override_requests_timeout()
         self._tr = getattr(deep_translator, provider)
         self._translate = {}
         self._proxies = {"https": "", "http": ""}
@@ -81,17 +86,22 @@ class Translator:
         lp = (self._sl, target)
         assert lp in self._translate, "(Source Target) language pair not found!"
         trans = ""
+        cfg.set_socket_timeout(10)
         while not trans:
             try:
                 prx = pb.get_proxy()
-                assert prx is not None
+                if prx is None:
+                    import log
+                    log.logger.warn("Couldn't get a proxy, using STATIC PROXY endpoint.")
+                    prx = cfg.STATIC_PROXY_EP
                 prx_dict = {}
                 prx_dict["https"] = prx
                 prx_dict["http"] = prx
-                cfg.setproxies(prx)
+                cfg.setproxies(None)
+                cfg.set_socket_timeout(5)
                 tr = self._translate[lp]
                 tr.proxies = prx_dict
                 trans = tr.translate(data)
-            except:
+            except Exception as e:
                 pass
         return trans

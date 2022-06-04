@@ -13,6 +13,7 @@ git+https://github.com/nidhaloff/deep-translator@master
 # requests
 pyssl
 pycurl
+pysocks
 retry
 user_agent
 zict

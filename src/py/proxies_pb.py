@@ -1,4 +1,5 @@
 import asyncio as aio
+from json.decoder import JSONDecodeError
 import proxybroker as pb
 from proxybroker.api import Broker
 from collections import deque
@@ -20,6 +21,7 @@ TYPES = [
     "CONNECT:80",
 ]
 
+PROXIES_SET = set()
 PROXIES = deque(maxlen=200)
 PB: Union[Broker, None] = None
 
@@ -106,12 +108,20 @@ typemap = {
 PROXIES_CYCLE = cycle(PROXIES)
 PROXIES_CYCLE_F = lambda: next(PROXIES_CYCLE)
 # 2 times free proxies, 1 time private proxies
-PROXY_CHOICE = (lambda: cfg.STATIC_PROXY_EP, PROXIES_CYCLE_F, PROXIES_CYCLE_F)
+PROXY_CHOICE = (lambda: cfg.STATIC_PROXY_EP, lambda: next(PROXIES_CYCLE), lambda: next(PROXIES_CYCLE))
 
 def sync_from_file():
     try:
         with open(cfg.PROXIES_DIR / "pbproxies.json", "r") as f:
-            proxies = json.load(f)
+            proxies = f.read()
+        try:
+            proxies = json.loads(proxies)
+        except JSONDecodeError:
+            assert proxies.endswith(",\n")
+            proxies = proxies.rstrip(",\n")
+            proxies += "]" # proxybroker keeps the json file unclosed open
+            proxies = json.loads(proxies)
+        PROXIES_SET.clear()
         for p in proxies:
             host = p["host"]
             port = p["port"]
@@ -119,10 +129,11 @@ def sync_from_file():
             for t in types:
                 tp = t["type"]
                 tpm = typemap[tp]
-                PROXIES.appendleft(f"{tpm}://{host}:{port}")
-            # set cycle again since proxies mutated
-            global PROXIES_CYCLE
-            PROXIES_CYCLE = cycle(PROXIES)
+                PROXIES_SET.add(f"{tpm}://{host}:{port}")
+        PROXIES.extendleft(PROXIES_SET)
+        # set cycle again since proxies mutated
+        global PROXIES_CYCLE
+        PROXIES_CYCLE = cycle(PROXIES)
     except:
         log.logger.debug("Could't sync proxies, was the file being written?")
 

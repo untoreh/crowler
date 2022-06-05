@@ -34,7 +34,7 @@ proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN): auto =
             else:
                 let t = el.kind
                 if t in tformsTags:
-                    getTForms(dom)[][t](el, file_path, url_path, pair)
+                    getTForms(dom)[t](el, file_path, url_path, pair)
                 if t == VNodeKind.a:
                     if el.hasAttr("href"):
                         rewriteUrl(el, rewrite_path, hostname)

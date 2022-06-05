@@ -10,6 +10,7 @@ import locks,
 
 import
     cfg,
+    types,
     translate_types,
     utils,
     ldj
@@ -17,17 +18,17 @@ import
 type
     TransformFunc* = proc(el: XmlNode, file: string, url: string, pair: langPair) {.gcsafe.}
     VTransformFunc* = proc(el: VNode, file: string, url: string, pair: langPair) {.gcsafe.}
-    TFormsTable = Table[string, TransformFunc]
-    VTFormsTable = Table[VNodeKind, VTransformFunc]
+    TFormsTable = LockTable[string, TransformFunc]
+    VTFormsTable = LockTable[VNodeKind, VTransformFunc]
     TForms = ptr TFormsTable
     VTForms = ptr VTFormsTable
 
 # var transformsTable = initTable[string, TransformFunc]()
-let transforms* = create(TFormsTable)
-let vtransforms* = create(VTFormsTable)
+let transforms* = initLockTable[string, TransformFunc]()
+let vtransforms* = initLockTable[VNodeKind, VTransformFunc]()
 
-var tfLock: Lock
-initLock(tfLock)
+# var tfLock: Lock
+# initLock(tfLock)
 
 macro getTforms*(kind: static[FcKind]): untyped =
     case kind:
@@ -36,34 +37,10 @@ macro getTforms*(kind: static[FcKind]): untyped =
         else:
             quote do: vtransforms
 
-iterator keys*(tf: TForms): string =
-    tfLock.acquire
-    for k in tf[].keys:
-        yield k
-    tfLock.release
-
-iterator keys*(tf: VTForms): VNodeKind =
-    tfLock.acquire
-    for k in tf[].keys:
-        yield k
-    tfLock.release
-
-proc `[]`*(tf: TForms, k: string): TransformFunc =
-    tf[][k]
-
-proc `[]=`*(tf: TForms, k: string, v: TransformFunc): TransformFunc =
-    tf[][k] = v
-
-proc `[]`*(tf: VTForms, k: VNodeKind): VTransformFunc =
-    tf[][k]
-
-proc `[]=`*(tf: VTForms, k: VNodeKind, v: VTransformFunc): VTransformFunc =
-    tf[][k] = v
-
 proc head_tform(el: VNode, basedir: string, relpath: string, pair: langPair) {.gcsafe.} =
     let
         srcUrl = $(WEBSITE_URL / relpath)
-        trgUrl =  $(WEBSITE_URL / pair.trg / relpath)
+        trgUrl = $(WEBSITE_URL / pair.trg / relpath)
     var title, desc, img, date: string
     var tags: seq[string]
     var stack = 6 # how many variables do we have to set
@@ -101,10 +78,12 @@ proc head_tform(el: VNode, basedir: string, relpath: string, pair: langPair) {.g
                     else: discard
             else: discard
         if stack < 0: break
-    let ldjTrans = translation(srcUrl, trgUrl, pair.trg, title, date, HTML_POST_SELECTOR, desc, tags, img)
+    let ldjTrans = translation(srcUrl, trgUrl, pair.trg, title, date, HTML_POST_SELECTOR, desc,
+            tags, img)
+    el.add ldjTrans.asVNode
 
 proc initTforms*() =
-    vtransforms[][VNodeKind.head] = head_tform
+    vtransforms[VNodeKind.head] = head_tform
 
 
 # when isMainModule:

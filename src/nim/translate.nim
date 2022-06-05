@@ -109,7 +109,7 @@ template translateNode*(otree: XmlNode, q: QueueXml, tformsTags: auto, fin = fal
             else:
                 let t = el.tag
                 if t in tformsTags:
-                    getTforms(xml)[][t](el, file_path, url_path, pair)
+                    getTforms(xml)[t](el, file_path, url_path, pair)
                 if t == "a":
                     if el.hasAttr("href"):
                         rewriteUrl(el, rewrite_path, hostname)
@@ -185,7 +185,7 @@ proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true)
             else:
                 let t = el.kind
                 if t in tformsTags:
-                    getTForms(dom)[][t](el, file_path, url_path, pair)
+                    getTForms(dom)[t](el, file_path, url_path, pair)
                 if t == VNodeKind.a:
                     if el.hasAttr("href"):
                         rewriteUrl(el, rewrite_path, hostname)

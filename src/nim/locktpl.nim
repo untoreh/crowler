@@ -36,6 +36,11 @@ template lockedStore*(name: untyped): untyped {.dirty.} =
             for (k, v) in tbl.storage.pairs():
                 yield (k, v)
 
+    iterator keys*[K, V](tbl: `Lock name`[K, V]): K =
+        withLock(tbl.lock):
+            for k in tbl.storage.keys():
+                yield k
+
     proc `[]=`*[K, V](tbl: `Lock name`[K, V], k: K, v: V) =
         withLock(tbl.lock):
             tbl.storage[k] = v

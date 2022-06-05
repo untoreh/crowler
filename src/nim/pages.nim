@@ -212,33 +212,44 @@ proc buildHomePage*(lang, amp: string): (VNode, VNode) =
 proc buildSearchPage*(topic: string, kws: string, lang: string): string =
     ## Builds a search page with 10 entries
     debug "search: lang:{lang}, topic:{topic}, kws:{kws}"
-    let
+    var content, keywords: string
+    if kws != "":
         keywords = kws.decodeUrl.sanitize
-        pslugs = query(topic, keywords, lang)
-    var content: string
-    if pslugs.len == 0:
-        let r = buildHtml(tdiv(class = "search-results")):
-            text "No results found."
-        content.add $r
+        let pslugs = query(topic, keywords, lang)
+        if pslugs.len == 0:
+            let r = buildHtml(tdiv(class = "search-results")):
+                text "No results found."
+            content.add $r
+        else:
+            for pslug in pslugs:
+                let ar = topic.fromSearchResult(pslug)
+                if not ar.isEmpty:
+                    content.add $articleEntry(ar)
+            if content.len == 0:
+                let r = buildHtml(tdiv(class = "search-results")):
+                    text "No results found."
+                content.add $r
     else:
-        for pslug in pslugs:
-            let ar = topic.fromSearchResult(pslug)
-            content.add $articleEntry(ar)
+        let r = buildHtml(tdiv(class = "search-results")):
+            text "Search query is empty."
+        content.add $r
     let
         footer = pageFooter(topic, "s", home = false)
-    let tree = buildPage(title = fmt"""Search results for: "{keywords}" (from category: {topic})""",
+    let fromcat = if topic != "": fmt" (from category: {topic})" else: ""
+    let tree = buildPage(title = fmt"""Search results for: "{keywords}"{fromcat}""",
                          content = content,
                          slug = "/s/" & kws,
                          pagefooter = footer,
                          topic = topic)
     $processPage(lang, "", tree)
 
-proc buildSuggestList*(topic, input: string): string =
+proc buildSuggestList*(topic, input: string, prefix = ""): string =
     let sgs = suggest(topic, input)
     let p = buildHtml(ul(class = "search-suggest")):
         for sug in sgs:
             li():
-                a(href = ($(WEBSITE_URL / topic / "s" / sug))):
+                a(href = ($(WEBSITE_URL / (if topic != "g": topic / "s" else: "s") / encodeUrl((if prefix != "": prefix &
+                        " " else: "") & sug)))): # FIXME: should `sug` be encoded?
                     text sug
     if sgs.len > 0:
         p.find(VNodeKind.li).setAttr("class", "selected")

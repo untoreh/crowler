@@ -38,7 +38,8 @@ def get_kw_batch(topic):
     kws = set(kws)
     batch = []
     for _ in range(cfg.KW_SAMPLE_SIZE):
-        batch.append(kws.pop())
+        if kws:
+            batch.append(kws.pop())
 
     ut.save_file("\n".join(kws), queue, root=None, ext="txt", as_json=False, mode="w")
     return batch

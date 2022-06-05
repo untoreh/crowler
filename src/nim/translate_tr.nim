@@ -79,7 +79,7 @@ proc doQuery(q: auto, sents: seq[string]): Future[seq[string]] {.async.} =
         if len(result) == len(sents):
             debug "query: translation successful."
             return
-        debug "query: translation failed, trying new glue ({itr})"
+        debug "query: translation failed ({len(result)}, {len(sents)}), trying new glue ({itr})"
         itr += 1
     checkBatchedTranslation(sents, query, result)
 

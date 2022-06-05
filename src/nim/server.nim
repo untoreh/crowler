@@ -195,18 +195,24 @@ template handleSearch(relpath: string, ctx: HttpCtx) =
     if capts.lang == "" and refcapts.lang != "":
         handle301($(WEBSITE_URL / refcapts.lang / join(capts, n = 1)))
     else:
-        page = pageCache[].lcheckOrPut(reqKey):
+        page = searchCache.lcheckOrPut(reqKey):
             # there is no specialized capture for the query
-            let
-                searchq = something(parseUri(capts.art).query.getParam("q"), capts.art)
-                lang = something(capts.lang, refcapts.lang)
-            buildSearchPage(capts.topic, searchq, lang).asHtml
+            var searchq = parseUri(capts.art).query.getParam("q")
+            let lang = something(capts.lang, refcapts.lang)
+            # this is for js-less form redirection
+            if searchq == "" and (not capts.art.startsWith("?")):
+                searchq = capts.art.strip()
+            buildSearchPage(if capts.topic != "s": capts.topic else: "", searchq, lang).asHtml
+        reqMime = mimePath("index.html")
         ctx.doReply(page)
 
 template handleSuggest(relpath: string, ctx: HttpCtx) =
     # there is no specialized capture for the query
-    let searchq = something(parseUri(capts.art).query.getParam("q"), capts.art)
-    page = buildSuggestList(capts.topic, searchq)
+    let
+        purl = parseUri(capts.art)
+        prefix = purl.query.getParam("p")
+        searchq = something(purl.query.getParam("q"), capts.art)
+    page = buildSuggestList(capts.topic, searchq, prefix)
     ctx.doReply(page)
 
 template handleFeed() =
@@ -264,6 +270,9 @@ proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
             of (topic: "sitemap.xml"):
                 debug "router: serving sitemap"
                 handleSitemap()
+            of (topic: "s"):
+                debug "router: serving search {relpath}"
+                handleSearch(relpath, ctx)
             of (topic: "g"):
                 debug "router: serving suggestion {relpath}"
                 handleSuggest(relpath, ctx)

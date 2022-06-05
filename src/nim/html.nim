@@ -176,8 +176,8 @@ proc buildDrawer(a: Article; site: VNode): VNode =
             site
         label(class = "pure-overlay", `for` = "pure-toggle-left", data_overlay = "left")
 
-proc buildSearch(action: string; withButton = true): VNode =
-    buildHtml(form(`method` = "get", action = (action & "/s/"), class = "search")):
+proc buildSearch(action: Uri; withButton = true): VNode =
+    buildHtml(form(`method` = "get", action = $(action / "s/"), class = "search")):
         label(class = "search-field", `for` = "search-input")
         input(id = "search-input", class = "search-input", autocomplete = "off",
                  type = "text", name = "q", placeholder = "Search...")
@@ -263,7 +263,7 @@ proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): VNode =
                 topicsList(ucls = "app-bar-topics", icls = "topic-item", small = false)
             section(class = "mdc-top-app-bar__section mdc-top-app-bar__section--align-end",
                     role = "toolbar"):
-                buildSearch($topic_uri, true)
+                buildSearch(topic_uri, true)
                 when TRENDS:
                     a(class = "trending", href = ($(topic_uri / "trending"))):
                         buildButton("trending_up", aria_label = "Trending",
@@ -278,10 +278,10 @@ proc buildFooter*(topic: string = ""): VNode =
     buildHtml(tdiv(class = "site-footer container max border medium no-padding")):
         footer(class = "padding absolute blue white-text primary left bottom"):
             tdiv(class = "footer-links"):
-                a(href = ("/" & topic & "/sitemap.xml"), class = "sitemap"):
+                a(href = ((if topic != "": "/" & topic else: "") & "/sitemap.xml"), class = "sitemap"):
                     text("Sitemap")
                 text " - "
-                a(href = ("/" & topic & "/feed.xml"), class = "rss"):
+                a(href = ((if topic != "": "/" & topic else: "") & "/feed.xml"), class = "rss"):
                     text("RSS")
                 text " - "
                 a(href = "/dmca"):

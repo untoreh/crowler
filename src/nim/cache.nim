@@ -5,9 +5,11 @@ import
     cfg,
     types,
     translate_db
+
 export translate_db
 type PageCache {.borrow: `.`.} = LRUTrans
 var pageCache*: ptr PageCache
+let searchCache* = initLockLruCache[int64, string](1000)
 
 proc initPageCache*(): PageCache =
     let dbpath = DATA_PATH / (WEBSITE_DOMAIN & ".page.db")

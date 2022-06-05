@@ -33,8 +33,7 @@ initLock(loggingLock)
 
 template lgetOrPut*[T, K](c: T, k: K, v: untyped): untyped =
     ## Lazy `mgetOrPut`
-    mixin get
-    mixin put
+    mixin get, put
     try:
         c.get(k)
     except KeyError:
@@ -42,7 +41,7 @@ template lgetOrPut*[T, K](c: T, k: K, v: untyped): untyped =
 
 template lcheckOrPut*[T, K](c: T, k: K, v: untyped): untyped =
     ## Lazy `mgetOrPut`
-    mixin get
+    mixin get, contains, put, `[]`, `[]=`
     if k in c:
         c[k]
     else:

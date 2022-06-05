@@ -2,7 +2,8 @@ import regeneratorRuntime from "regenerator-runtime";
 
 const Http = new XMLHttpRequest();
 var suggestUrl
-var form, sug, sel, cursel, suggest, sugLast, closebtn
+var searchUrl
+var form, sug, sel, cursel, suggest, sugLast, closebtn, searchbtn
 import { $, $$ } from "./lib.js";
 const sugThrottle = 333
 
@@ -18,9 +19,12 @@ Http.onreadystatechange = (e) => {
 
 function querySuggest(e) {
     let v = e.target.value
+    var prefix = $("form input.search-input").value.split(" ")
+    prefix.pop()
     if (v != "") {
         const query = {
             q: v,
+            p: prefix.join(" ")
         };
         const params = new URLSearchParams(query);
         Http.open("GET", suggestUrl + params.toString());
@@ -101,8 +105,21 @@ function setupInput() {
                 break;
             case 13: // Enter
                 e.preventDefault()
-                let url = $("a", cursel).getAttribute("href")
-                window.location = url
+                var url
+                let query = $("input.search-input", form).value.trim()
+                if (cursel) {
+                    url = $("a", cursel).getAttribute("href")
+                    let purl = new URL(url)
+                    let nodes = purl.pathname.split("/")
+                    url = searchUrl + encodeURIComponent(nodes[nodes.length - 1])
+                } else if (query) {
+                    url = searchUrl + encodeURIComponent(query)
+                } else {
+                    url = ""
+                }
+                if (url) {
+                    window.location = url
+                }
                 break;
         }
     });
@@ -113,11 +130,13 @@ export function setupSuggest() {
     form = $("form.search")
     suggest = $(".search-suggest", form)
     closebtn = $(".clear-search-btn", form)
+    searchbtn = $(".search-btn", form)
     var topic = $("body").getAttribute("topic")
     if (topic != "") {
         topic = "/" + topic
     }
     suggestUrl = topic + "/g/suggest?";
+    searchUrl = topic + "/s/"
     form.addEventListener("input", updateValue);
     setupInput()
     $("html,body").addEventListener("click", (e) => {
@@ -130,5 +149,10 @@ export function setupSuggest() {
         $(".search-input", form).value = ""
         e.preventDefault()
         visible(closebtn, false)
+    })
+    searchbtn.addEventListener("click", (e) => {
+        if ($(".search-input", form).value == "") {
+            e.preventDefault()
+        }
     })
 }

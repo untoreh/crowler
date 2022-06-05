@@ -173,6 +173,8 @@ def save_zarr(
     if len(contents) > cfg.MAX_BACKLOG_SIZE:
         contents = contents[-cfg.MAX_BACKLOG_SIZE :]
     try:
+        if k == ZarrKey.articles:
+            contents = [c for c in contents if isinstance(c, dict)]
         data = np.asarray(contents)
     except:
         raise ValueError("Contents provided can't be converted to numpy array.")
@@ -241,7 +243,8 @@ def save_done(topic: str, n_processed: int, done: MutableSequence, pagenum):
 
 def save_articles(arts: List[dict], topic: str, reset=False):
     topic_path = cfg.TOPICS_DIR / topic
-    save_zarr(arts, k=ZarrKey.articles, root=topic_path, reset=reset)
+    checked_arts = [a for a in arts if isinstance(a, dict)]
+    save_zarr(checked_arts, k=ZarrKey.articles, root=topic_path, reset=reset)
 
 
 def update_page_size(topic: str, idx: int, val, final=False):

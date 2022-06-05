@@ -163,10 +163,10 @@ var gluePadding*: int
 
 proc initGlues*() =
     glues = @[
-    (" #|#|# ", re"\s?#\s?\|\s?#\s?\|\s?#\s?"),
     (" <<...>> ", re"\s?<\s?<\s?\.\s?\.\s?\.\s?>\s?>\s?"),
     (" %¶%¶% ", re"\%\s\¶\s?\%\s?\¶\s?\%\s?"),
-    (" \n[[...]]\n ", re"\s?\n?\[\[?\.\.\.\]\]?\n?")
+    (" \n[[...]]\n ", re"\s?\n?\[\[?\.\.\.\]\]?\n?"),
+    (" #|#|# ", re"\s?#\s?\|\s?#\s?\|\s?#\s?")
     ]
     gluePadding = max:
         collect(for (sep, _) in glues: sep.len)

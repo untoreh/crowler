@@ -157,12 +157,14 @@ proc fetchFeed*(topic: string): Feed =
 proc fetchFeedString*(): string =
     pageCache[].lgetOrPut(static(WEBSITE_TITLE.feedKey)):
         var arts: seq[Article]
-        withPyLock:
-            for topic in loadTopics(cfg.MENU_TOPICS):
-                let topicName = topic[0].to(string) ## topic holds topic name and description
-                let ta = getLastArticles(topicName)
-                if ta.len > 0:
-                    arts.add ta[^1]
+        let pytopics = loadTopics(cfg.MENU_TOPICS)
+        var topicName: string
+        for topic in pytopics:
+            withPyLock:
+                topicName = topic[0].to(string) ## topic holds topic name and description
+            let ta = getLastArticles(topicName)
+            if ta.len > 0:
+                arts.add ta[^1]
         let sfeed = getTopicFeed("", WEBSITE_TITLE, WEBSITE_DESCRIPTION, arts)
         topicFeeds[WEBSITE_TITLE] = sfeed
         sfeed.toXmlString

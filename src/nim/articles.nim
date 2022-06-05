@@ -39,6 +39,7 @@ proc getArticles*(topic: string, n = 3, pagenum: int = -1): seq[Article] =
 
         info "Fetching {count}(total:{total}) unpublished articles for {topic}/page:{pagenum}"
         for i in start..total - 1:
+            # FIXME: some articles entries are _zeroed_ somehow
             data = arts[i]
             result.add(initArticle(data, pagenum))
 
@@ -84,11 +85,15 @@ proc getArticleContent*(topic, page, slug: string): string =
 proc getArticle*(topic, page, slug: auto): Article =
     var py {.threadvar.}:  PyObject
     py = getArticlePy(topic, page, slug)
+    if py.isnil:
+        return emptyArt
     withPyLock:
         result = if not pyisnone(py):
             initArticle(py, parseInt(page))
         else:
             emptyArt
+
+proc isEmpty*(a: Article): bool = a.title == ""
 
 proc getAuthor*(a: Article): string {.inline.} =
     if a.author.isEmptyOrWhitespace:

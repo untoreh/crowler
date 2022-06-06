@@ -10,11 +10,13 @@ import re
 import numpy as np
 from tagging import rake
 from urllib3.util.url import Url, parse_url
+import translator as tr
 
 # NOTE: Check scikit version from time to time
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     from profanity_check import predict_prob
+
 
 def check_spacy_model():
     info: dict = spacy.info()
@@ -27,6 +29,7 @@ def check_spacy_model():
         spacy.cli.download(cfg.SPACY_MODEL)
         cfg.setproxies()
 
+
 check_spacy_model()
 
 gs = Goose()
@@ -35,6 +38,8 @@ if not hasattr(nltk, "punkt"):
     nltk.download("punkt")
 
 rx_nojs = r"(Your page may be loading slowly)|(block on your account)|((avail|enable)?(?i)(javascript|js)\s*(?i)(avail|enable)?)"
+
+
 def isrelevant(title, body):
     """String BODY is relevant if it contains at least one word from TITLE."""
     if not title or not body:
@@ -173,7 +178,12 @@ def fillarticle(url, data, topic):
         final["source"] = "goo"
     if len(final["content"]) < cfg.ART_MIN_LEN:
         return {}
+    final["lang"] = tr.detect(final["content"])
     final["title"] = tra["title"] or goo.get("title")
+    # Ensure articles are always in the chosen source language
+    if final["lang"] != tr.SLang.code:
+        final["content"] = tr.translate(final["content"], target=tr.SLang.code, source=final["lang"])
+        final["title"] = tr.translate(final["title"], target=tr.SLang.code, source=final["lang"])
     final["content"] = replace_profanity(final["content"])
     if (
         not final["content"]
@@ -205,14 +215,6 @@ def fillarticle(url, data, topic):
         final["imageUrl"] = abs_url(goo["image"] or goo["opengraph"].get("image"), url)
         if final["imageUrl"] == final["icon"]:
             final["imageUrl"] = ""
-    final["lang"] = goo["meta"]["lang"]
-    if not final["lang"]:
-        l = la.get("locale", "")
-        if l:
-            assert isinstance(l, str)
-            final["lang"] = l.split("_")[0]
-        else:
-            final["lang"] = cfg.DEFAULT_LANG
     final["topic"] = topic
     final["tags"] = rake(final["content"])
     return final

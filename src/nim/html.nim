@@ -86,7 +86,6 @@ template ldjWebpage(): VNode {.dirty.} =
                 description = ar.desc,
                 keywords = ar.tags,
                 image = ar.imageUrl,
-                lang = ar.lang,
                 created = ($ar.pubDate),
                 props = (%*{
                     "availableLanguage": ldjLanguages(),
@@ -419,7 +418,7 @@ proc processHtml*(relpath: string; slug: string; data: VNode; ar = emptyArt) =
     when cfg.YDX:
         if yandex.feedTopic != ar.topic:
             let ydxTurboFeedpath = $(WEBSITE_URL / topic / "ydx.xml")
-            yandex.setFeed(ar.topic, ydxTurboFeedpath, topicDesc(), ar.lang)
+            yandex.setFeed(ar.topic, ydxTurboFeedpath, topicDesc())
     for (pagepath, page) in o:
         when cfg.AMP:
             ppage = page.ampPage

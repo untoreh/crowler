@@ -1,12 +1,6 @@
-* Backend
-** Data
-** Processing
-*** Tasks
-**** Fetch fresh articles daily
-***** If: sources present, continue
-****** Else: Lookup sources
-******* Save a list of sources
-***** Fetch and parse an article
-****** Try n3k
-****** Try news-fetch
-* Frontend
+- decouple proxies and scraping from site deployment
+- implement statistics, and cleanup for low traffic topics/articles
+- social media accounts
+- make (nim) config easily modifiable for different sites
+- Change colors into a random template
+- backup for deployed websites

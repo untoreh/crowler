@@ -37,6 +37,7 @@ trafilatura
 goose3
 pytrends
 git+https://github.com/searx/searx
+lingua-language-detector
 
 # tags
 pyate

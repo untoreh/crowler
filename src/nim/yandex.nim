@@ -137,7 +137,7 @@ proc setChannelNode() =
 
 rssNode.add channelNode
 
-proc setFeed(topic, link, descr, lang: string): XmlNode =
+proc setFeed(topic, link, descr, lang: string = SLang.code): XmlNode =
     channelNode.clear()
     rssTitle.text = topic
     rssLink.text = link

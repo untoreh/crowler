@@ -28,7 +28,7 @@ type
         icon*: string
         url*: string
         slug*: string
-        lang*: string
+        # lang*: string # NOTE: we assume articles are always in SLang (english)
         topic*: string
         page*: int ## what page does this article belong to
         tags*: seq[string]
@@ -96,7 +96,7 @@ proc initArticle*(data: PyObject, pagenum: int): Article =
         a.icon = pyget(data, "icon")
         a.url = pyget(data, "url")
         a.slug = pyget(data, "slug")
-        a.lang = pyget(data, "lang")
+        # a.lang = pyget(data, "lang")
         a.topic = pyget(data, "topic")
         a.page = pyget(data, "page", pagenum)
         a.slug = pyget(data, "slug")

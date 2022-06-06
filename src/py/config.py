@@ -59,6 +59,16 @@ REQ_TIMEOUT = 20
 # How many concurrent requests
 POOL_SIZE = os.cpu_count()
 
+PROJECT_DIR = Path(
+    os.path.realpath(
+        "./"
+        if os.path.exists("./src")
+        else "../../"
+        if os.path.exists("../../src")
+        else Path(os.getenv("PROJECT_DIR", ""))
+    )
+)
+
 DATA_DIR = Path(
     os.path.realpath(
         "./data"

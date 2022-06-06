@@ -9,6 +9,7 @@ handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(logging.Formatter("%(name)s - %(levelname)s - %(message)s"))
 logger.addHandler(handler)
 
+
 def setloglevel(logger=logger, lvl=logger_level):
     logger.setLevel(lvl)
     for h in logger.handlers:
@@ -53,3 +54,15 @@ class LoggerLevel(object):
                 self.null.close()
                 sys.stdout = self.stdout
                 sys.stderr = self.stderr
+
+
+def warn(*args, **kwargs):
+    logger.warn(*args, **kwargs)
+
+
+def info(*args, **kwargs):
+    logger.info(*args, **kwargs)
+
+
+def debug(*args, **kwargs):
+    logger.debug(*args, **kwargs)

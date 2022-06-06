@@ -44,14 +44,46 @@ proc initLS(): LocalitySensitive[uint64] =
 proc getLSPath(topic: string): string =
     DATA_PATH / "topics" / topic / "lsh"
 
+
+import zstd / [compress, decompress]
+type
+    CompressorObj = object of RootObj
+        zstd_c: ptr ZSTD_CCtx
+        zstd_d: ptr ZSTD_DCtx
+    Compressor = ptr CompressorObj
+
+when defined(gcDestructors):
+    proc `=destroy`(c: var CompressorObj) =
+        if not c.zstd_c.isnil:
+            discard free_context(c.zstd_c)
+        if not c.zstd_d.isnil:
+            discard free_context(c.zstd_d)
+
+let comp = create(CompressorObj)
+comp.zstd_c = new_compress_context()
+comp.zstd_d = new_decompress_context()
+
+proc compress[T](v: T): seq[byte] = compress(comp.zstd_c, v, level=2)
+proc decompress[T](v: sink seq[byte]): T = cast[T](decompress(comp.zstd_d, v))
+proc decompress[T](v: sink string): T = cast[T](decompress(comp.zstd_d, v))
+
 proc saveLS(topic: string, lsh: LocalitySensitive[uint64]) =
     let path = getLSPath(topic)
     createDir(path)
-    writeFile(path / "lsh.json", $$lsh)
+    let lshJson = $$lsh
+    writeFile(path / "lsh.json.zst", compress(lshJson))
 
 proc loadLS(topic: string): LocalitySensitive[uint64] =
-    let lspath = getLSPath(topic) / "lsh.json"
+    var lspath = getLSPath(topic) / "lsh.json.zst"
+    var data: string
     if fileExists(lspath):
+        let f = readFile(lspath)
+        data = decompress[string](f)
+    else:
+        lspath = lspath[0..^5]
+        if fileExists(lspath):
+            data = readFile(lspath)
+    if data.len != 0:
         var lsh = to[LocalitySensitive[uint64]](readFile(lspath))
         # reinitialize minhasher since it is a cbinding func
         lsh.hasher = initMinHasher[uint64](64)
@@ -285,16 +317,16 @@ proc pubAllPages(topic: string, clear = true) =
 #         discard ut.update_page_size(topic, topdir, len(donearts[$topdir]), final = false)
 
 # import translate
-when isMainModule:
-    let topic = "vps"
-    # refreshPageSizes(topic)
-    # resetTopic("web")
-    # resetTopic("vps")
-    # resetTopic("dedi")
-    dopublish(topic)
-    quit()
-    let
-        topdir = 0
-        pagecount = pageSize(topic, topdir)
-    # pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true)
-    # pubPageFromTemplate("dmca.html", "DMCA")
+# when isMainModule:
+#     let topic = "vps"
+#     # refreshPageSizes(topic)
+#     # resetTopic("web")
+#     # resetTopic("vps")
+#     # resetTopic("dedi")
+#     dopublish(topic)
+#     quit()
+#     let
+#         topdir = 0
+#         pagecount = pageSize(topic, topdir)
+#     # pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true)
+#     # pubPageFromTemplate("dmca.html", "DMCA")

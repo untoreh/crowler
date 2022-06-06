@@ -416,3 +416,10 @@ def iter_topic_articles(topic: str):
 def get_random_topic():
     assert TOPICS is not None
     return choice(TOPICS)[0]
+
+def remove_broken_articles(topic):
+    valid = []
+    for a in enumerate(load_articles(topic=topic)):
+        if a is not int:
+            valid.append(a)
+    save_articles(valid, topic=topic, reset=True)

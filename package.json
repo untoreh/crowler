@@ -8,7 +8,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "webpack serve --allowed-hosts=wsl",
-    "build": "webpack && scripts/site.sh -s"
+    "build": "scripts/cssconfig.sh; webpack && scripts/site.sh -s"
   },
   "author": "",
   "license": "ISC",

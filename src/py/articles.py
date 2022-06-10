@@ -182,8 +182,8 @@ def fillarticle(url, data, topic):
     final["title"] = tra["title"] or goo.get("title")
     # Ensure articles are always in the chosen source language
     if final["lang"] != tr.SLang.code:
-        final["content"] = tr.translate(final["content"], target=tr.SLang.code, source=final["lang"])
-        final["title"] = tr.translate(final["title"], target=tr.SLang.code, source=final["lang"])
+        final["content"] = tr.translate(final["content"], to_lang=tr.SLang.code, from_lang=final["lang"])
+        final["title"] = tr.translate(final["title"], to_lang=tr.SLang.code, from_lang=final["lang"])
     final["content"] = replace_profanity(final["content"])
     if (
         not final["content"]

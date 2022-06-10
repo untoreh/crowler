@@ -24,6 +24,7 @@ type
         content*: string
         author*: string
         pubDate*: Time
+        pubTime*: Time
         imageUrl*: string
         icon*: string
         url*: string
@@ -91,7 +92,8 @@ proc initArticle*(data: PyObject, pagenum: int): Article =
         a.desc = pyget(data, "desc")
         a.content = pyget(data, "content")
         a.author = pyget(data, "author")
-        a.pubDate = pydate(data.pyget("pubDate", PyNone), getTIme())
+        a.pubDate = pydate(data.pyget("pubDate", PyNone), getTime())
+        a.pubTime = pydate(data.pyget("pubTime", PyNone), default(Time))
         a.imageUrl = pyget(data, "imageUrl")
         a.icon = pyget(data, "icon")
         a.url = pyget(data, "url")

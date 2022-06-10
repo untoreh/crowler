@@ -1,4 +1,4 @@
-import nimpy, uri, strformat, times
+import nimpy, uri, strformat, times, sugar
 import
     cfg,
     types,
@@ -76,7 +76,7 @@ proc updateTopicPubdate*(idx: int) =
         discard ut.set_topic_pubDate(idx)
 proc updateTopicPubdate*() =  updateTopicPubdate(max(0, topicIdx - 1))
 
-proc topicGroup*(topic: string): PyObject =
+proc getTopicGroup*(topic: string): PyObject =
     withPyLock:
         return ut.topic_group(topic)
 
@@ -92,9 +92,36 @@ proc topicArticles*(topic: string): PyObject =
     withPyLock:
         return ut.topic_group(topic)[$topicData.articles]
 
+iterator publishedArticles*[V](topic: string, attr: string = ""): (PyObject, V) =
+    var
+        pydone: PyObject
+        page: PyObject
+        art:  PyObject
+        n_pages: int
+        n_arts : int
+        v: V
+    withPyLock:
+        pydone = ut.topic_group(topic)[$topicData.done]
+        n_pages = len(pydone)
+    let getArticleAttr = if attr != "": (art: PyObject) => pyget[V](art, attr, default(V))
+                         else: (art: PyObject) => ""
+    for d in 0..<n_pages:
+        withPyLock:
+            page = pydone[d]
+            n_arts = len(page)
+        for a  in 0..<n_arts:
+            withPyLock:
+                art = page[a]
+                if not pyisnone(art):
+                    v = getArticleAttr(art)
+                else:
+                    v = default(V)
+            yield (art, v)
+
+
 proc fetch*(t: Topics, k: string): TopicState =
     t.lgetOrPut(k):
-        (topdir: lastPageNum(k), group: topicGroup(k))
+        (topdir: lastPageNum(k), group: getTopicGroup(k))
 
 proc getState*(topic: string): (int, int) =
     ## Get the number of the top page, and the number of `done` pages.

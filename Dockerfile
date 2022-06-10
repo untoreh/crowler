@@ -50,4 +50,6 @@ ENV NIM_DEBUG debug
 ENV NIM release
 RUN nimble build # ; strip -s cli
 RUN python3 lib/py/main.py; true # perform modules setups on imports
+EXPOSE 5050
+HEALTHCHECK CMD [ "/usr/bin/curl", "http://localhost:5050" ]
 CMD ./cli

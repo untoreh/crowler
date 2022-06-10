@@ -13,7 +13,7 @@ bin           = @["cli"]
 
 requires "nim >= 1.6.0"
 requires "sonic >= 0.1.0"
-requires "nimpy#master"
+requires "https://github.com/untoreh/nimpy#master" # required for destructors fix
 requires "cligen >= 1.5.23"
 requires "lrucache"
 requires "weave#master"

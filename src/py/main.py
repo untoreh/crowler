@@ -16,6 +16,7 @@ import sources
 import utils as ut
 import scheduler
 import blacklist
+import topics as tpm
 from log import logger
 from datetime import datetime
 
@@ -195,6 +196,12 @@ def run_server(topics):
         if random.randrange(3) == 0:
             for topic in topics:
                 run_parse2_job(topic)
+        if cfg.NEW_TOPICS_ENABLED:
+            with open(tpm.LAST_TOPIC_FILE, "r") as lt:
+                last_topic = json.load(lt)
+                if time.time() - last_topic["time"] > cfg.NEW_TOPIC_FREQ:
+                    newtopic = tpm.new_topic()
+                    logger.info("topics: added new topic %s", newtopic)
         time.sleep(delay)
 
 JOBS_MAP = {

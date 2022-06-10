@@ -1,15 +1,18 @@
 import uri,
        strutils,
-       nimpy,
        os,
-       algorithm
+       std/enumerate,
+       nimpy {.all.}
 
 import cfg,
        types,
        utils,
+       translate_types,
        server_types,
        topics,
-       pyutils
+       pyutils,
+       cache,
+       stats
 
 proc getArticlePath*(capts: UriCaptures): string =
     $(baseUri / capts.topic / capts.page / capts.art)
@@ -41,6 +44,9 @@ proc getArticles*(topic: string, n = 3, pagenum: int = -1): seq[Article] =
         for i in start..total - 1:
             # FIXME: some articles entries are _zeroed_ somehow
             data = arts[i]
+            if pyisint(data):
+                warn "articles: topic {topic} has _zeroed_ articles in storage."
+                continue
             result.add(initArticle(data, pagenum))
 
 proc getDoneArticles*(topic: string, pagenum: int): seq[Article] =
@@ -100,3 +106,28 @@ proc getAuthor*(a: Article): string {.inline.} =
         if a.url.isEmptyOrWhitespace: "Unknown"
         else: a.url.parseuri().hostname
     else: a.author
+
+proc deleteArt*(capts: UriCaptures) =
+    let
+        artPath = getArticlePath(capts)
+        fpath = SITE_PATH / artPath
+    doassert capts.topic != ""
+    doassert capts.art != ""
+    doassert capts.page != ""
+    pageCache[].del(fpath)
+    pageCache[].del(SITE_PATH / "amp" / artPath)
+    # remove statistics about article
+    statsDB.del(capts)
+    for lang in TLangsCodes:
+        pageCache[].del(SITE_PATH / "amp" / lang / artPath)
+        pageCache[].del(SITE_PATH / lang / artPath)
+    let tg = topicsCache.fetch(capts.topic).group
+    let pageArts = tg[$topicData.done][capts.page]
+    let pyslug = capts.art.nimValueToPy().newPyObject
+    var toRemove: seq[int]
+    for (n, a) in enumerate(pageArts):
+        if (not pyisnone(a)) and a["slug"] == pyslug:
+            toRemove.add n
+            break
+    for n in toRemove:
+        pageArts[n] = PyNone

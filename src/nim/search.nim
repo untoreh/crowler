@@ -104,7 +104,7 @@ proc push*(capts: UriCaptures, content: string) =
 proc push*(relpath: var string) =
     relpath.removeSuffix('/')
     let
-        fpath = relpath.fp
+        fpath = relpath.fp()
         capts = uriTuple(relpath)
         content = if pageCache[][fpath] != "":
                       let page = pageCache[].get(fpath).parseHtml

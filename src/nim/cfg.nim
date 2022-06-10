@@ -3,52 +3,18 @@ import os,
        uri,
        strutils
 
-const releaseMode* = os.getenv("NIM", "") == "release"
-const PROJECT_PATH = when releaseMode: ""
-                 else: currentSourcePath().splitPath()[0] / ".." / ".."
+import ./config/base
+export base
 
-let loggerObj = newConsoleLogger(fmtStr = "[$time] - $levelname: ")
-let logger* = loggerObj.unsafeAddr
-
-proc logLevelFromEnv(): auto =
-    case os.getenv("NIM_DEBUG", "INFO").toUpper:
-    of "ALL":
-        lvlAll
-    of "DEBUG":
-        lvlDebug
-    of "WARNING":
-        lvlWarn
-    of "ERROR":
-        lvlError
-    of "CRITICAL":
-        lvlFatal
-    of "NONE":
-        lvlNone
-    else:
-        lvlInfo
-
-let logLevel = logLevelFromEnv()
-const logLevelMacro* = logLevelFromEnv()
-proc initLogging*() = setLogFilter(logLevel)
-initLogging()
-static: echo "cfg: debug level set to: " & $logLevelMacro
-
-export logging
+const configName = os.getenv("CONFIG_NAME", "")
+when configName == "wsl":
+    import ./config/wsl
+    export wsl
+elif configName == "wsl":
+    import ./config/wsl
+    export wsl
 
 const
-    USE_PROXIES* = true
-    PROXY_EP* = "socks5://localhost:8877"
-    WEBSITE_DEBUG_PORT* = when releaseMode: "" else: os.getenv("WEBSITE_DEBUG_PORT", ":5050")
-    WEBSITE_DOMAIN* = os.getenv("WEBSITE_DOMAIN", "wsl")
-    WEBSITE_URL* = parseUri("http://" & WEBSITE_DOMAIN & WEBSITE_DEBUG_PORT)
-    WEBSITE_TITLE* = "wsl"
-    WEBSITE_DESCRIPTION* = "Everything about server hosting."
-    WEBSITE_CONTACT* = "contact@wsl"
-    WEBSITE_TWITTER* = "https://twitter.com/wsl"
-    WEBSITE_FACEBOOK* = "wslfb"
-    WEBSITE_PINTEREST* = "wslpinterest"
-    WEBSITE_WEIBO* = "wslweibo"
-    WEBSITE_REDDIT* = "wslreddit"
     WEBSITE_SOCIAL* = [WEBSITE_TWITTER, WEBSITE_FACEBOOK, WEBSITE_PINTEREST, WEBSITE_WEIBO, WEBSITE_REDDIT]
     SITE_PATH* = PROJECT_PATH / "site"
     SITE_ASSETS_DIR* = DirSep & "assets"
@@ -101,5 +67,7 @@ const
     N_TOPICS* = 10 # Number of articles (1 per topic) to display on the homepage
     CRON_TOPIC* = 10 # Seconds between a `pub` job run
     CRON_TOPIC_FREQ* = 8 # Hours between a specific topic `pub` job run
+    CLEANUP_AGE* = 3600 * 24 * 30 * 4 # Period in seconds, after which an article can be removed
+    CLEANUP_HITS* = 2 # Minimum number of hits an article has to have to avoid cleanup
 
 static: echo "Project Path is '" & PROJECT_PATH & "'"

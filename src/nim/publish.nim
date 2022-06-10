@@ -84,7 +84,7 @@ proc loadLS(topic: string): LocalitySensitive[uint64] =
         if fileExists(lspath):
             data = readFile(lspath)
     if data.len != 0:
-        var lsh = to[LocalitySensitive[uint64]](readFile(lspath))
+        var lsh = to[LocalitySensitive[uint64]](data)
         # reinitialize minhasher since it is a cbinding func
         lsh.hasher = initMinHasher[uint64](64)
         return lsh
@@ -163,6 +163,7 @@ proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
                       donePy: var seq[PyObject],
                       doneArts: var seq[Article]): bool {.gcsafe.} =
     var arts = getArticles(topic, pagenum = pagenum)
+    let pubtime = getTime().toUnix
     if arts.len == 0:
         return false
     clear(pageset)
@@ -184,6 +185,7 @@ proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
                 a.py["slug"] = uslug
                 a.py["title"] = utitle
                 a.py["page"] = pagenum
+                a.py["pubTime"] = pubtime
     # update done articles after uniqueness checks
     withPyLock:
         for (_, a) in posts:

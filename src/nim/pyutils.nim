@@ -78,8 +78,9 @@ let
     PyBoolClass = pybi.True.getattr("__class__")
     PyNoneClass = pybi.None.getattr("__class__")
     PyDateTimeClass = pyimport("datetime").datetime
-    PyStrClass = pybi.str.getattr("__class__")
-    PyDictClass = pybi.dict.getattr("__class__")
+    PyStrClass = pybi.getattr("str")
+    PyIntClass = pybi.getattr("int")
+    PyDictClass = pybi.getattr("dict")
     PyZArray = pyza.getAttr("Array")
 var PyNone* {.threadvar.}: PyObject
 
@@ -101,6 +102,9 @@ proc pyisdatetime*(py: PyObject): bool {.exportpy.} =
 
 proc pyisstr*(py: PyObject): bool {.exportpy.} =
     return pybi.isinstance(py, PyStrClass).to(bool)
+
+proc pyisint*(py: PyObject): bool {.exportpy.} =
+    return pybi.isinstance(py, pybi.getattr("int")).to(bool)
 
 proc pyiszarray*(py: PyObject): bool {.exportpy.} =
     return pybi.isinstance(py, PyZArray).to(bool)
@@ -204,6 +208,8 @@ proc len*(py: PyObject): int =
 
 proc isa*(py: PyObject, tp: PyObject): bool =
     pybi.isinstance(py, tp).to(bool)
+
+import utils
 
 proc pyget*[T](py: PyObject, k: string, def: T = ""): T =
     try:

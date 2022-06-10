@@ -1,6 +1,4 @@
-- decouple proxies and scraping from site deployment
-- implement statistics, and cleanup for low traffic topics/articles
-- social media accounts
-- make (nim) config easily modifiable for different sites
 - Change colors into a random template
+- decouple proxies and scraping from site deployment
+- social media accounts
 - backup for deployed websites

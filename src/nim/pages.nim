@@ -151,13 +151,13 @@ proc pageFromTemplate*(tpl, lang, amp: string): string =
     var txt = readfile(ASSETS_PATH / "templates" / tpl & ".html")
     let (vars, title, desc) = case tpl:
         of "dmca": (tplRep, "DMCA", fmt"dmca compliance for {WEBSITE_DOMAIN}")
-        of "tos": (tplRep, "Terms of Service", fmt"Terms of Service for {WEBSITE_DOMAIN}")
+        of "tos": (ppRep, "Terms of Service", fmt"Terms of Service for {WEBSITE_DOMAIN}")
         of "privacy-policy": (ppRep, "Privacy Policy", fmt"Privacy Policy for {WEBSITE_DOMAIN}")
         else: (tplRep, tpl, "")
     txt = multiReplace(txt, vars)
     let slug = slugify(title)
     let p = buildPage(title = title, content = txt)
-    return $processPage(title, tpl, p)
+    return $processPage(lang, amp, p, relpath=tpl)
 
 proc articleTree*(capts: auto): VNode =
     # every article is under a page number

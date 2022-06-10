@@ -51,6 +51,7 @@ def somekey(d, *keys):
             break
     return v
 
+
 def fetch_data(url, *args, delay=0.3, backoff=0.3, depth=0, fromcache=True, **kwargs):
     if fromcache:
         try:
@@ -147,6 +148,7 @@ def dirsbydate(path):
     dirs = list(os.scandir(path))
     return sorted(dirs, key=lambda d: d.stat().st_ctime)
 
+
 class ZarrKey(Enum):
     # articles to be published
     articles = "articles"
@@ -158,6 +160,7 @@ class ZarrKey(Enum):
     pages = "pages"
     # stores the topics list and the last update timestamp for each one
     topics = "topics"
+
 
 def _wrap_path(root):
     return os.path.normpath(os.path.sep + str(root) + os.path.sep)
@@ -240,6 +243,17 @@ def save_done(topic: str, n_processed: int, done: MutableSequence, pagenum):
         saved_articles.resize(newsize)
     save_zarr(done, k=ZarrKey.done, subk=pagenum, root=topic_path)
 
+def update_pubtime(topic: str, pagenum: int):
+    topic_path = cfg.TOPICS_DIR / topic
+    page_articles_arr = load_zarr(k=ZarrKey.done, subk=str(pagenum), root=topic_path)
+    assert page_articles_arr is not None
+    page_articles = page_articles_arr[:]
+    for (n, art) in enumerate(page_articles):
+        if art is not None:
+            art["pubTime"] = int(time.time())
+            page_articles[n] = art
+    page_articles_arr[:] = page_articles
+    return page_articles_arr
 
 def save_articles(arts: List[dict], topic: str, reset=False):
     topic_path = cfg.TOPICS_DIR / topic
@@ -303,16 +317,30 @@ def topic_group(topic, root=cfg.TOPICS_DIR):
         return PUBCACHE[cache_key]
     except KeyError:
         file_path = get_file_path(Path(topic), root, ext=None, as_json=False)
-        if os.path.exists(file_path):
+        za.open_group(file_path, mode="a")
+        if Path(file_path).exists():
             g = PUBCACHE[cache_key] = za.open_group(file_path, mode="a")
             assert isinstance(g, za.Group)
             return g
         else:
-            raise ValueError("topics: Could'nt fetch topic group")
+            raise ValueError(
+                f"topics: Could'nt fetch topic group, {file_path} does not exist."
+            )
 
 
 def get_topic(tp, **kwargs):
     return topic_group(tp, **kwargs)
+
+
+# def init_topic(topic: str):
+#     tg = topic_group(topic)
+#     arr = np.asarray([], dtype=object)
+#     # if ZarrKey.articles not in tg:
+#     tg[ZarrKey.articles] = arr
+# # if ZarrKey.done not in tg:
+#     tg[str(ZarrKey.done) +  "/0"] = arr
+# # if ZarrKey.pages not in tg:
+#     tg[ZarrKey.pages] = [(0, False)]
 
 
 def reset_topic_data(topic: str):
@@ -329,6 +357,8 @@ def reset_topic_data(topic: str):
         pages = grp["pages"]
         assert isinstance(pages, za.Array)
         pages.resize(0)
+    if "articles" not in grp:
+        save_zarr([], k=ZarrKey.articles, root=(cfg.TOPICS_DIR / topic))
 
 
 def load_topics():
@@ -342,15 +372,23 @@ def load_topics():
     return (TOPICS, TPDICT)
 
 
+def is_topic(topic: str):
+    load_topics()
+    return topic in TPDICT
 
-def add_topics_idx(tp: List[Tuple[str, str]]):
-    global TOPICS, TPDICT
+
+def add_topics_idx(tp: List[Tuple[str, str, int]]):
     assert isinstance(tp, list)
     (topics, tpset) = load_topics()
     for t in tp:
+        tpslug = t[0]
+        assert slugify(tpslug) == tpslug
+        if tpslug in tpset:
+            continue
         d = np.asarray(t)
-        topics.append(d)
-        tpset[t[0]] = t[1]
+        topics.append([d])
+        tpset[tpslug] = t[1]
+        reset_topic_data(tpslug)
 
 
 def reset_topics_idx(tp):
@@ -394,13 +432,16 @@ def get_top_articles(topic: str):
 def get_topic_desc(topic: str):
     return TPDICT[topic]
 
+
 def get_topic_pubDate(idx: int):
     assert TOPICS is not None
     return int(TOPICS[idx, 2])
 
+
 def set_topic_pubDate(idx):
     assert TOPICS is not None
     TOPICS[idx, 2] = int(time.time())
+
 
 def iter_topic_articles(topic: str):
     tg = topic_group(topic)
@@ -413,9 +454,11 @@ def iter_topic_articles(topic: str):
     for a in tg[ZarrKey.articles.name]:
         yield a
 
+
 def get_random_topic():
     assert TOPICS is not None
     return choice(TOPICS)[0]
+
 
 def remove_broken_articles(topic):
     valid = []

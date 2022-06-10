@@ -111,10 +111,13 @@ proc update*(tfeed: Feed, topic: string, newArts: seq[Article], dowrite = false)
         itms = chann.drainChannel
         arl = itms.len
         narl = newArts.len
+
+    debug "rss: newArts: {narl}, previous: {arl}"
+    let
         fill = RSS_N_ITEMS - arl
-        rem = newArts.len - fill
+        rem = max(0, narl - fill)
         shrinked = if rem > 0 and arl > 0:
-                       itms[0..<arl-rem]
+                       itms[0..<(arl-rem)]
                    else: itms
     debug "rss: articles tail len {len(shrinked)}, newarts: {len(newArts)}"
     assert shrinked.len + narl <= RSS_N_ITEMS, fmt"shrinked: {shrinked.len}, newarticles: {narl}"

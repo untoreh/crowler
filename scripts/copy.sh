@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
-
+set -e
 trg=docker
 cp requirements.txt $trg/
 mkdir -p $trg/run
 cp -a scripts $trg/
 mkdir -p $trg/logs
 mkdir -p $trg/{site,lib,data}
-[ $(ls $trg/data | wc -l) = 0 ] || { echo data dir is a volume and should be empty; exit 1; }
+[ $(ls $trg/data | wc -l) = 0 ] || {
+    echo data dir is a volume and should be empty
+    exit 1
+}
 cp -a src/assets/logo $trg/site/assets
 cp -a src/{assets,css,js} $trg/src/ &>/dev/null
 mkdir -p $trg/src/nim
@@ -17,6 +20,7 @@ mkdir -p $trg/{src/py,lib}
 cp -a src/py/*.py $trg/src/py/
 ln -srf $trg/src/py $trg/lib/
 
+scripts/cssconfig.sh
 cp -a dist/*{.js,.css,.png} $trg/site/assets
 cp -a dist/*{.js,.css,.png} $trg/site/assets
 libminify=src/rust/target/release/libminify_html_c.a

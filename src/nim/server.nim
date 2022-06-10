@@ -1,4 +1,5 @@
 import strformat,
+       sugar,
        strutils,
        tables,
        nimpy,
@@ -27,6 +28,7 @@ import
     cfg,
     types,
     server_types,
+    server_tasks,
     topics,
     utils,
     html,
@@ -41,7 +43,8 @@ import
     cache,
     search,
     sitemap,
-    articles
+    articles,
+    stats
 
 const customPages* = ["dmca", "terms-of-service", "privacy-policy"]
 const nobody = ""
@@ -161,6 +164,7 @@ template handleTopic(capts: auto, ctx: HttpCtx) {.dirty.} =
             topicPage(topic, pagenum, false)
             pageCache[SITE_PATH / capts.topic / capts.page] = pagetree.asHtml
             processPage(capts.lang, capts.amp, pagetree).asHtml
+        updateHits(capts)
         ctx.doReply(page)
     elif capts.topic in customPages:
         page = pageCache[].lcheckOrPut(reqKey):
@@ -178,6 +182,7 @@ template handleArticle(capts: auto, ctx: HttpCtx) =
             debug "article: generating article"
             articleHtml(capts)
         if page != "":
+            updateHits(capts)
             ctx.doReply(page)
         else:
             debug "article: redirecting to topic because page is empty"
@@ -310,43 +315,25 @@ proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
             discard
         discard
 
-proc pubTask*() {.gcsafe.} =
-    initThread()
-    syncTopics()
-    # Give some time to services to warm up
-    sleep(10000)
-    let t = getTime()
-    # Only publish one topic every `CRON_TOPIC`
-    while true:
-        let topic = nextTopic()
-        # Don't publish each topic more than `CRON_TOPIC_FREQ`
-        if inHours(t - topicPubdate()) > cfg.CRON_TOPIC_FREQ:
-            pubTopic(topic)
-        sleep(cfg.CRON_TOPIC * 1000)
-
-let broker = relPyImport("proxies_pb")
-const proxySyncInterval = 60 * 1000
-proc proxyTask() {.gcsafe.} =
-    initThread()
-    # syncTopics()
-    let syfp = broker.getAttr("sync_from_file")
-    while true:
-        withPyLock:
-            discard syfp()
-        sleep(proxySyncInterval)
+template initSpawn(code) =
+    threadpool.spawn (() => (initThread(); code))()
 
 proc start*(doclear = false, port = 5050) =
     var server = new GuildenServer
     # main Thread
     initThread()
-    # cache is global
+    # cache and stats are global
     initCache()
+    initStats()
 
     # Publishes new articles for one topic every x seconds
-    spawn pubTask()
+    initSpawn pubTask()
 
     # (python) Task for syncing proxy list
-    spawn proxyTask()
+    initSpawn proxyTask()
+
+    # cleanup task for deleting low traffic articles
+    initSpawn cleanupTask()
 
     # Clear database before serving
     if doclear:

@@ -60,14 +60,14 @@ initLock(tLock)
 # Slations holds python objects, it must be unmanaged memory
 var slations* {.threadvar.}: ptr Table[int64, string]
 
-proc openDB*(t: var LRUTrans) {.gcsafe.} =
+proc openDB*(t: var LRUTrans, kt = IntegerKeys) {.gcsafe.} =
     if DB_PATH[].len == 0:
         DB_PATH[] = DEFAULT_DB_PATH
     t.db = openDatabase(DB_PATH[], maxFileSize = MAX_DB_SIZE)
-    var c: Collection = t.db.openCollectionOrNil("slations", keytype = IntegerKeys)
+    var c: Collection = t.db.openCollectionOrNil("slations", keytype = kt)
     let cnn = cast[CollectionNotNil](createShared(Collection))
     if c.isnil:
-        c = t.db.createCollection("slations", keytype = IntegerKeys)
+        c = t.db.createCollection("slations", keytype = kt)
         if c.isnil:
             raise newException(ValueError, "Cannot create collection")
         else:
@@ -76,12 +76,12 @@ proc openDB*(t: var LRUTrans) {.gcsafe.} =
         cnn[] = c
     t.coll = cnn
 
-proc initLRUTrans*(comp=true): LRUTrans =
+proc initLRUTrans*(comp = true): LRUTrans =
     result = create(LRUTransObj)
     result.zstd_c = new_compress_context()
     result.zstd_d = new_decompress_context()
 
-proc initSlations*(comp=true) {.gcsafe.} =
+proc initSlations*(comp = true) {.gcsafe.} =
     if slations.isnil:
         slations = create(Table[int64, string])
         slations[] = initTable[int64, string]()
@@ -115,8 +115,9 @@ proc getImpl(t: LRUTrans, k: int64, throw: static bool): string =
 proc getImpl[T: not int64](t: LRUTrans, k: T, throw: static bool): string =
     getImpl(t, hash(k).int64, throw)
 
-proc `[]`*[T](t: LRUTrans, k: T): string = t.getImpl(k, false)
-proc `get`*[T](t: LRUTrans, k: T): string = t.getImpl(k, true)
+
+proc `[]`*[T](t: LRUTrans, k: T): auto = t.getImpl(k, false)
+proc `get`*[K](t: LRUTrans, k: K): auto = t.getImpl(k, true)
 
 proc `[]=`*(t: LRUTrans, k: int64, v: string) {.gcsafe.} =
     withLock(tLock):
@@ -218,11 +219,11 @@ template cursIter(c: Collection, what: untyped): untyped =
 iterator keys*(c: Collection not nil): auto =
     cursIter(c, curs.key)
 
-iterator values*(c: Collection not nil, td=string): auto =
+iterator values*(c: Collection not nil, td = string): auto =
     cursIter(c,
              cast[string](decompress(trans.zstd_d,
                                      curs.value.asByteSeq)))
-iterator items*(c: Collection not nil, td=string): auto =
+iterator items*(c: Collection not nil, td = string): auto =
     cursIter(c, (curs.key.asInt64,
                  cast[td](decompress(trans.zstd_d,
                                          curs.value.asByteSeq))))

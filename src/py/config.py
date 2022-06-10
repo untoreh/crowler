@@ -106,3 +106,5 @@ PROFANITY_THRESHOLD = 0.5
 MAX_BACKLOG_SIZE = 100
 
 BLACKLIST_PATH = DATA_DIR / "blacklist.txt"
+NEW_TOPICS_ENABLED = True # If the job server should keep adding new topics to the current website
+NEW_TOPIC_FREQ = 3600 * 8 # Delay between adding new topics

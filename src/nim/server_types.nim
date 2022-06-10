@@ -15,6 +15,9 @@ var baseHeaders* {.threadvar.}: seq[string]
 
 type UriTuple = (string, string, string, string, string)
 type UriCaptures* = tuple[amp, lang, topic, page, art: string]
+proc mUriCaptures*(): var UriCaptures =
+    ## Create an empty `UriCaptures` mutable variable.
+    result = new(UriCaptures)[]
 proc uriTuple*(match: seq[Option[string]]): UriCaptures =
     var i = 0
     for v in result.fields:
@@ -74,9 +77,8 @@ proc addHeaders*(headers: seq[(Header, string)]) =
     for (h, s) in headers:
         h.add(s)
 
-
 when isMainModule:
     initMimes()
     # var s = @[""]
     # mimeHeader("asd.json", s)
-    echo s
+    # echo s

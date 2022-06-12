@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # Copyright 2019 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""This example generates keyword ideas from a list of seed keywords."""
+# """This example generates keyword ideas from a list of seed keywords."""
 
 
 from google.ads.googleads.client import GoogleAdsClient

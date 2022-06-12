@@ -1,0 +1,188 @@
+:root {
+    --primary: ${PRIMARY};
+    --light-primary: ${LIGHT_PRIMARY};
+    --dark-primary: ${DARK_PRIMARY};
+
+    --secondary: ${SECONDARY};
+    --light-secondary: ${LIGHT_SECONDARY};
+    --dark-secondary: ${DARK_SECONDARY};
+
+    --on-primary: ${ON_PRIMARY};
+    --on-secondary: ${ON_SECONDARY};
+
+  --text-primary-on-light: ${TEXT_PRIMARY_ON_LIGHT};
+  --text-secondary-on-light: ${TEXT_SECONDARY_ON_LIGHT};
+
+  --text-primary-on-dark: ${TEXT_PRIMARY_ON_DARK};
+  --text-secondary-on-dark: ${TEXT_SECONDARY_ON_DARK};
+
+  --background: ${BACKGROUND};
+  --surface: ${SURFACE};
+
+  --light-on-primary: ${LIGHT_ON_PRIMARY};
+  --light-on-secondary: ${LIGHT_ON_SECONDARY};
+
+  --dark-on-primary: ${DARK_ON_PRIMARY};
+  --dark-on-secondary: ${DARK_ON_SECONDARY};
+
+  --light-background: ${LIGHT_BACKGROUND};
+  --light-on-background: ${LIGHT_ON_BACKGROUND};
+
+  --dark-background: ${DARK_BACKGROUND};
+  --dark-on-background: ${DARK_ON_BACKGROUND};
+
+  --light-surface: ${LIGHT_SURFACE};
+  --light-on-surface: ${LIGHT_ON_SURFACE};
+
+  --dark-surface: ${DARK_SURFACE};
+  --dark-on-surface: ${DARK_ON_SURFACE};
+}
+
+@mixin mdc-light {
+  --mdc-theme-primary: var(--light-primary);
+  --mdc-theme-secondary: var(--light-secondary);
+  --mdc-theme-surface: var(--light-surface);
+  --mdc-theme-on-primary: var(--light-on-primary);
+  --mdc-theme-on-secondary: var(--light-on-secondary);
+  --mdc-theme-on-surface: var(--light-on-surface);
+  --mdc-theme-on-background: var(--light-on-background);
+  --mdc-theme-text-on-primary: var(--text-primary-on-light);
+  --mdc-theme-text-on-secondary: var(--text-secondary-on-light);
+  background: var(--light-background, white);
+}
+
+@mixin mdc-dark {
+  --mdc-theme-primary: var(--dark-primary);
+  --mdc-theme-secondary: var(--dark-secondary);
+  --mdc-theme-surface: var(--dark-surface);
+  --mdc-theme-on-primary: var(--dark-on-primary);
+  --mdc-theme-on-secondary: var(--dark-on-secondary);
+  --mdc-theme-on-surface: var(--dark-on-surface);
+  --mdc-theme-on-background: var(--dark-on-background);
+  --mdc-theme-text-on-primary: var(--text-primary-on-dark);
+  --mdc-theme-text-on-secondary: var(--text-secondary-on-dark);
+  background: var(--dark-background, #02020d);
+}
+
+body {
+  &.dark {
+    @include mdc-dark;
+  }
+  &.light {
+    @include mdc-light;
+  }
+}
+
+@mixin dark {
+  body {
+    @include mdc-dark;
+  }
+  main {
+    background: var(--dark-background, #02020d);
+  }
+  .mdc-top-app-bar a {
+    color: var(--text-primary-on-light);
+  }
+  .search-input {
+    color: var(--primary);
+    background: var(--surface);
+    border-color: var(--light-secondary);
+  }
+  .search-suggest {
+    background: var(--text-secondary-on-dark);
+    color: var(--text-primary-on-dark);
+    & li:hover,
+    li.selected {
+      background: var(--text-primary-on-light);
+    }
+  }
+}
+
+@mixin light {
+  body {
+    @include mdc-light;
+  }
+  main {
+    background: var(--light-background, white);
+  }
+  .search-input {
+    color: var(--secondary);
+    background: var(--light-background);
+    border-color: var(--light-background);
+  }
+  .search-suggest {
+    background: var(--background);
+    color: var(--text-primary-on-light);
+    & li:hover,
+    li.selected {
+      background: var(--mdc-theme-on-secondary);
+    }
+  }
+}
+
+.dark {
+  @include dark;
+}
+
+.light {
+  @include light;
+}
+
+@media (prefers-color-scheme: dark) {
+  @include dark;
+}
+
+@media (prefers-color-scheme: light) {
+  @include light;
+}
+
+main {
+  color: var(--mdc-theme-on-background);
+}
+header {
+  box-shadow: var(--light-secondary) 0 1px 2px;
+}
+footer {
+  background: var(--mdc-theme-secondary);
+  color: var(--mdc-theme-text-on-secondary);
+  box-shadow: var(--mdc-theme-secondary) 0 -1px 2px;
+  a:visited {
+    color: var(--mdc-theme-secondary);
+  }
+}
+a {
+  color: var(--mdc-theme-primary);
+}
+a:visited {
+  color: var(--mdc-theme-text-on-primary);
+  &::hover {
+    color: var(--mdc-theme-text-on-secondary);
+  }
+}
+.menu-list button {
+  color: var(--mdc-theme-on-primary);
+}
+
+.mdc-top-app-bar a {
+  color: var(--mdc-theme-on-background);
+}
+
+.entry-info {
+  color: var(--mdc-theme-primary);
+}
+.entry-tags {
+  color: var(--mdc-theme-text-on-secondary);
+}
+
+// .mdc-tooltip {
+//   @include tooltip.fill-color(var(--light-primary));
+//   @include tooltip.label-ink-color(var(--light-on-primary));
+//   font-variant: none;
+//   white-space: normal;
+//   width: 10rem;
+//   @include tooltip.word-break(break-word, break-all);
+// }
+
+// .mdc-text-field--label-floating {
+//   @include textfield.label-color(var(--mdc-theme-on-primary));
+// }

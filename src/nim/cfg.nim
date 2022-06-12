@@ -7,7 +7,10 @@ import ./config/base
 export base
 
 const configName = os.getenv("CONFIG_NAME", "")
-when configName == "wsl":
+when configName == "dev":
+    import ./config/dev
+    export dev
+elif configName == "wsl":
     import ./config/wsl
     export wsl
 elif configName == "wsl":

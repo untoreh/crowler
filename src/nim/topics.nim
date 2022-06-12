@@ -60,6 +60,8 @@ pyTopics[] = loadTopicsIndex()
 proc nextTopic*(): string =
     if pyTopics.isnil:
         pyTopics[] = loadTopicsIndex()
+    if pyisnone(pyTopics[]):
+        return ""
     withPyLock:
         if len(pyTopics[]) <= topicIdx:
             debug "pubtask: resetting topics idx ({len(pyTopics[])})"

@@ -12,11 +12,11 @@ from searx.shared.shared_simple import schedule
 
 import config as cfg
 import contents as cnt
-import sources
+import topics as tpm
+import sources # NOTE: searx has some namespace conflicts with google.ads, initialize after the `adwords_keywords` module
 import utils as ut
 import scheduler
 import blacklist
-import topics as tpm
 from log import logger
 from datetime import datetime
 
@@ -187,6 +187,12 @@ def run_parse2_job(topic):
         logger.info("%s: No articles were found queued.", topic)
     return a
 
+def new_topic(force=False):
+    last_topic = tpm.get_last_topic()
+    if force or time.time() - last_topic["time"] > cfg.NEW_TOPIC_FREQ:
+        newtopic = tpm.new_topic()
+        logger.info("topics: added new topic %s", newtopic)
+
 def run_server(topics):
     delay = 3600 * 8
     random.shuffle(topics) # in case of crashes helps to distribute queryies more uniformly
@@ -197,17 +203,14 @@ def run_server(topics):
             for topic in topics:
                 run_parse2_job(topic)
         if cfg.NEW_TOPICS_ENABLED:
-            with open(tpm.LAST_TOPIC_FILE, "r") as lt:
-                last_topic = json.load(lt)
-                if time.time() - last_topic["time"] > cfg.NEW_TOPIC_FREQ:
-                    newtopic = tpm.new_topic()
-                    logger.info("topics: added new topic %s", newtopic)
+            new_topic()
         time.sleep(delay)
 
 JOBS_MAP = {
     "sources": run_sources_job,
     "parse1": run_parse1_job,
     "parse2": run_parse2_job,
+    "newtopic": new_topic
 }
 
 if __name__ == "__main__":
@@ -225,5 +228,7 @@ if __name__ == "__main__":
         else:
             for tp in topics:
                 JOBS_MAP[args.job](tp)
+    elif args.job == "newtopic":
+        JOBS_MAP[args.job](force=True)
     else:
         raise ValueError("Pass `-topics` as argument to run a job.")

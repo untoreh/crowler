@@ -4,12 +4,13 @@ import
     sequtils,
     unicode,
     xmltree,
-    random
+    algorithm
 
 import html_misc,
        translate,
        translate_lang,
-       amp
+       amp,
+       search
 
 const tplRep = @{"WEBSITE_DOMAIN": WEBSITE_DOMAIN}
 const ppRep = @{"WEBSITE_URL": $WEBSITE_URL.combine(),
@@ -157,7 +158,7 @@ proc pageFromTemplate*(tpl, lang, amp: string): string =
     txt = multiReplace(txt, vars)
     let slug = slugify(title)
     let p = buildPage(title = title, content = txt)
-    return $processPage(lang, amp, p, relpath=tpl)
+    return $processPage(lang, amp, p, relpath = tpl)
 
 proc articleTree*(capts: auto): VNode =
     # every article is under a page number
@@ -248,8 +249,8 @@ proc buildSuggestList*(topic, input: string, prefix = ""): string =
     let p = buildHtml(ul(class = "search-suggest")):
         for sug in sgs:
             li():
-                a(href = ($(WEBSITE_URL / (if topic != "g": topic / "s" else: "s") / encodeUrl((if prefix != "": prefix &
-                        " " else: "") & sug)))): # FIXME: should `sug` be encoded?
+                a(href = ($(WEBSITE_URL / (if topic != "g": topic / "s" else: "s") / encodeUrl((
+                        if prefix != "": prefix & " " else: "") & sug)))): # FIXME: should `sug` be encoded?
                     text sug
     if sgs.len > 0:
         p.find(VNodeKind.li).setAttr("class", "selected")
@@ -257,12 +258,3 @@ proc buildSuggestList*(topic, input: string, prefix = ""): string =
 
 
 {.pop gcsafe.}
-
-# when isMainModule:
-#     discard
-#     let topic = "vps"
-#     let page = buildHomePage("en", "")
-    # page.writeHtml(SITE_PATH / "index.html")
-    # initSonic()
-    # let argt = getLastArticles(topic)
-    # echo buildRelated(argt[0])

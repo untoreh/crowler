@@ -277,7 +277,8 @@ proc buildFooter*(topic: string = ""): VNode =
     buildHtml(tdiv(class = "site-footer container max border medium no-padding")):
         footer(class = "padding absolute blue white-text primary left bottom"):
             tdiv(class = "footer-links"):
-                a(href = ((if topic != "": "/" & topic else: "") & "/sitemap.xml"), class = "sitemap"):
+                a(href = ((if topic != "": "/" & topic else: "") & "/sitemap.xml"),
+                        class = "sitemap"):
                     text("Sitemap")
                 text " - "
                 a(href = ((if topic != "": "/" & topic else: "") & "/feed.xml"), class = "rss"):
@@ -476,4 +477,5 @@ proc ldjData*(el: VNode; filepath, relpath: string; lang: langPair; a: Article) 
         trgurl = pathLink(relpath, code = lang.trg, rel = false)
 
     let ldjTr = ldjTrans(relpath, srcurl, trgurl, lang, a)
+
 

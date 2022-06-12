@@ -2,12 +2,11 @@ from pytrends.request import TrendReq
 import os, json, random, time
 
 import config as cfg
-import adwords_keywords as adk
 import utils as ut
 
 CATEGORIES = None
 _CAT_FILE = cfg.DATA_DIR / "google" / "categories.json"
-_KEYWORDS = adk.Keywords()
+_KEYWORDS = None
 LAST_TOPIC_FILE = cfg.TOPICS_DIR / "last_topic.json"
 
 
@@ -42,28 +41,48 @@ def flatten_categories(flat=[], cats=CATEGORIES):
     return flat
 
 
+def get_last_topic():
+    with open(LAST_TOPIC_FILE, "r") as lt:
+        try:
+            last_topic = json.load(lt)
+        except:
+            last_topic = {"name": "", "time": 0}
+    return last_topic
+
+
+def set_last_topic(data):
+    with open(LAST_TOPIC_FILE, "w") as lt:
+        json.dump(data, lt)
+
+
 def get_category():
-    with open(LAST_TOPIC_FILE, "a+") as lt:
-        last_topic = json.load(lt)
-        # if the last topic processing ended correctly the topic should be indexed
-        if not ut.is_topic(last_topic["name"]):
-            return last_topic
-        if CATEGORIES is None:
-            load_categories()
-        assert CATEGORIES is not None
-        n = random.randrange(len(CATEGORIES))
-        v = CATEGORIES.pop(n)
-        json.dump({"name": v, "time": int(time.time())}, lt)
-        with open(_CAT_FILE, "w") as f:
-            json.dump(CATEGORIES, f)
+    last_topic = get_last_topic()
+    # if the last topic processing ended correctly the topic should be indexed
+    if last_topic["name"] and not ut.is_topic(last_topic["name"]):
+        return last_topic["name"]
+    if CATEGORIES is None:
+        load_categories()
+    assert CATEGORIES is not None
+    n = random.randrange(len(CATEGORIES))
+    v = CATEGORIES.pop(n)
+    set_last_topic({"name": v, "time": int(time.time())})
+    with open(_CAT_FILE, "w") as f:
+        json.dump(CATEGORIES, f)
     return v
 
 
 def new_topic():
+    global _KEYWORDS
     cat = get_category()
     tpslug = ut.slugify(cat)
     topic_path = cfg.TOPICS_DIR / tpslug
-    os.makedirs(topic_path)
+    try:
+        os.makedirs(topic_path)
+    except:
+        pass
+    if _KEYWORDS is None:
+        import adwords_keywords as adk
+        _KEYWORDS = adk.Keywords()
     suggestions = _KEYWORDS.suggest([cat])
     assert suggestions is not None
     with open(topic_path / "list.txt", "w") as f:

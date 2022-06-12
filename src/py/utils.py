@@ -361,6 +361,11 @@ def reset_topic_data(topic: str):
         save_zarr([], k=ZarrKey.articles, root=(cfg.TOPICS_DIR / topic))
 
 
+def init_data():
+    assert not os.path.exists(cfg.TOPICS_IDX)
+    os.makedirs(cfg.TOPICS_IDX)
+    load_zarr(k=ZarrKey.topics, root=cfg.TOPICS_IDX, dims=2, overwrite=True)
+
 def load_topics():
     global TOPICS, TPDICT
 
@@ -435,7 +440,7 @@ def get_topic_desc(topic: str):
 
 def get_topic_pubDate(idx: int):
     assert TOPICS is not None
-    return int(TOPICS[idx, 2])
+    return int(TOPICS[idx, 2]) if len(TOPICS) > idx else 0
 
 
 def set_topic_pubDate(idx):

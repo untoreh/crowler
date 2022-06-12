@@ -351,13 +351,13 @@ proc start*(doclear = false, port = 5050) =
     server.serve(loglevel = INFO)
 
 when isMainModule:
-    initThread()
-    let topic = "vps"
-    let page = buildHomePage("en", "")
-    page.writeHtml(SITE_PATH / "index.html")
+    # initThread()
+    # let topic = "vps"
+    # let page = buildHomePage("en", "")
+    # page.writeHtml(SITE_PATH / "index.html")
 
     # initSonic()
     # let argt = getLastArticles(topic)
     # echo buildRelated(argt[0])
-    # pageCache[].clear()
-    # start()
+    pageCache[].clear()
+    start()

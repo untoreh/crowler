@@ -345,6 +345,7 @@ def get_topic(tp, **kwargs):
 
 def reset_topic_data(topic: str):
     assert topic != ""
+    print("utils: resetting topic data for topic: ", topic)
     grp = topic_group(topic)
     assert isinstance(grp, za.Group)
     if "done" in grp:
@@ -357,6 +358,8 @@ def reset_topic_data(topic: str):
         pages = grp["pages"]
         assert isinstance(pages, za.Array)
         pages.resize(0)
+    else:
+        save_zarr([], k=ZarrKey.pages, root=(cfg.TOPICS_DIR / topic))
     if "articles" not in grp:
         save_zarr([], k=ZarrKey.articles, root=(cfg.TOPICS_DIR / topic))
 
@@ -366,14 +369,17 @@ def init_data():
     os.makedirs(cfg.TOPICS_IDX)
     load_zarr(k=ZarrKey.topics, root=cfg.TOPICS_IDX, dims=2, overwrite=True)
 
-def load_topics():
+def load_topics(force=False):
     global TOPICS, TPDICT
 
-    if TOPICS is None:
+    if TOPICS is None or force:
         TOPICS = load_zarr(k=ZarrKey.topics, root=cfg.TOPICS_IDX, dims=2)
         if TOPICS is None:
             raise IOError(f"Couldn't load topics. for root {cfg.TOPICS_IDX}")
-        TPDICT = dict(zip(TOPICS[:, 0], TOPICS[:, 1]))
+        if len(TOPICS) > 0:
+            TPDICT = dict(zip(TOPICS[:, 0], TOPICS[:, 1]))
+        else:
+            TPDICT = dict()
     return (TOPICS, TPDICT)
 
 
@@ -385,6 +391,8 @@ def is_topic(topic: str):
 def add_topics_idx(tp: List[Tuple[str, str, int]]):
     assert isinstance(tp, list)
     (topics, tpset) = load_topics()
+    if topics.shape == (0, 0):
+        topics.resize(0, 3)
     for t in tp:
         tpslug = t[0]
         assert slugify(tpslug) == tpslug
@@ -403,7 +411,8 @@ def reset_topics_idx(tp):
     - 2: last publication date
     """
     global TOPICS, TPDICT
-    assert isinstance(tp, list)
+    assert isinstance(tp, (tuple, list))
+    assert isinstance(tp[0], (tuple, list))
     tp = np.asarray(tp)
     save_zarr(tp, cfg.TOPICS_IDX, ZarrKey.topics, reset=True)
     TOPICS = None

@@ -20,28 +20,29 @@ if "CURL_CLASS" not in globals():
     CURL_CLASS = copy.deepcopy(pycurl.Curl)
 
 
-def curlproxy():
-    c = CURL_CLASS()
-    ua = generate_user_agent()
-    c.setopt(pycurl.PROXY, STATIC_PROXY_EP)
-    c.setopt(pycurl.SSL_VERIFYHOST, 0)
-    c.setopt(pycurl.SSL_VERIFYPEER, 0)
-    # self.setopt(pycurl.PROXYTYPE, pycurl.PROXYTYPE_SOCKS5_HOSTNAME)
-    c.setopt(pycurl.USERAGENT, ua)
-    traset.DEFAULT_CONFIG.set("DEFAULT", "USER_AGENTS", ua)
-    traset.TIMEOUT = REQ_TIMEOUT
-    tradl.TIMEOUT = REQ_TIMEOUT
-    return c
+def get_curlproxy(p=STATIC_PROXY_EP):
+    def curlproxy():
+        c = CURL_CLASS()
+        ua = generate_user_agent()
+        c.setopt(pycurl.PROXY, p)
+        c.setopt(pycurl.SSL_VERIFYHOST, 0)
+        c.setopt(pycurl.SSL_VERIFYPEER, 0)
+        # self.setopt(pycurl.PROXYTYPE, pycurl.PROXYTYPE_SOCKS5_HOSTNAME)
+        c.setopt(pycurl.USERAGENT, ua)
+        traset.DEFAULT_CONFIG.set("DEFAULT", "USER_AGENTS", ua)
+        traset.TIMEOUT = REQ_TIMEOUT
+        tradl.TIMEOUT = REQ_TIMEOUT
+        return c
+    return curlproxy
 
 
 PROXY_VARS = ("HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy")
-
 
 def setproxies(p=STATIC_PROXY_EP):
     if p:
         for name in PROXY_VARS:
             os.environ[name] = p
-        pycurl.Curl = curlproxy
+        pycurl.Curl = get_curlproxy()
     else:
         for name in PROXY_VARS:
             if name in os.environ:
@@ -98,7 +99,7 @@ SPACY_MODEL = "en_core_web_sm"
 TAGS_MAX_LEN = 4
 
 ART_MIN_LEN = (
-    3000  # minimum article len (5 avg chars per 500 words + 500 chars for pre-cleanups)
+    800 # minimum article len
 )
 PROFANITY_THRESHOLD = 0.5
 # The maximum number of articles/feeds to store `unprocessed` for each topic

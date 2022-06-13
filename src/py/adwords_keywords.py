@@ -32,6 +32,7 @@ import log
 
 # [START generate_keyword_ideas]
 def main(client, customer_id, location_ids, language_id, keyword_texts, page_url):
+    cfg.setproxies(None)
     keyword_plan_idea_service = client.get_service("KeywordPlanIdeaService")
     keyword_competition_level_enum = client.enums.KeywordPlanCompetitionLevelEnum
     keyword_plan_network = (
@@ -80,6 +81,7 @@ def main(client, customer_id, location_ids, language_id, keyword_texts, page_url
 
     keyword_ideas = keyword_plan_idea_service.generate_keyword_ideas(request=request)
 
+    cfg.setproxies()
     return [idea.text for idea in keyword_ideas]
     # [END generate_keyword_ideas]
 
@@ -124,6 +126,7 @@ class Keywords:
         language_id=_DEFAULT_LANGUAGE_ID,
     ):
         try:
+            cfg.setproxies(None)
             return main(
                 self.client,
                 self._customer_id,
@@ -142,3 +145,5 @@ class Keywords:
                 if error.location:
                     for field_path_element in error.location.field_path_elements:
                         log.warn(f"\t\tOn field: {field_path_element.field_name}")
+        finally:
+            cfg.setproxies()

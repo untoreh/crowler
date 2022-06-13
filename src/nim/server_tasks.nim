@@ -9,12 +9,17 @@ proc pubTask*() {.gcsafe.} =
     sleep(10000)
     let t = getTime()
     # Only publish one topic every `CRON_TOPIC`
+    var n = len(topicsCache)
     while true:
+        if n == 0:
+            syncTopics()
+            n = len(topicsCache)
         let topic = nextTopic()
         # Don't publish each topic more than `CRON_TOPIC_FREQ`
         if inHours(t - topicPubdate()) > cfg.CRON_TOPIC_FREQ:
             pubTopic(topic)
         sleep(cfg.CRON_TOPIC * 1000)
+        n -= 1
 
 let broker = relPyImport("proxies_pb")
 const proxySyncInterval = 60 * 1000

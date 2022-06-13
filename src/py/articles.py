@@ -11,6 +11,7 @@ import numpy as np
 from tagging import rake
 from urllib3.util.url import Url, parse_url
 import translator as tr
+import log
 
 # NOTE: Check scikit version from time to time
 with warnings.catch_warnings():
@@ -45,7 +46,7 @@ def isrelevant(title, body):
     if not title or not body:
         return False
     # only allow contents that don't start with special chars to avoid spam/code blocks
-    if re.match(r"^[^a-zA-Z]", body):
+    if re.match(r"^[^a-zA-Z\-\*\=]", body):
         return False
     # skip error pages
     if re.match(rx_nojs, title) or re.match(rx_nojs, body):
@@ -177,6 +178,8 @@ def fillarticle(url, data, topic):
         final["content"] = goo["cleaned_text"]
         final["source"] = "goo"
     if len(final["content"]) < cfg.ART_MIN_LEN:
+        u = parse_url(url)
+        print("too short!: ", len(final["content"]), " ", u.hostname)
         return {}
     final["lang"] = tr.detect(final["content"])
     final["title"] = tra["title"] or goo.get("title")

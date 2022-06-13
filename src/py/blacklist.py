@@ -3,13 +3,17 @@
 from typing import MutableSequence, Optional
 from config import BLACKLIST_PATH
 from urllib.parse import urlparse
+from pathlib import Path
 
 BLACKLIST: Optional[set] = None # "Domain list to exclude from sources and parsing."
 
 def load_blacklist():
     global BLACKLIST
-    with open(BLACKLIST_PATH, "r") as f:
-        BLACKLIST = set(f.read())
+    try:
+        with open(BLACKLIST_PATH, "r") as f:
+            BLACKLIST = set(f.read())
+    except:
+        Path(BLACKLIST_PATH).touch()
 
 def exclude(k):
     u = urlparse(k)

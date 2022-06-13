@@ -1,6 +1,7 @@
 from pytrends.request import TrendReq
 import os, json, random, time
 
+import adwords_keywords as adk
 import config as cfg
 import utils as ut
 
@@ -58,7 +59,8 @@ def set_last_topic(data):
 def get_category():
     last_topic = get_last_topic()
     # if the last topic processing ended correctly the topic should be indexed
-    if last_topic["name"] and not ut.is_topic(last_topic["name"]):
+    tpslug = ut.slugify(last_topic["name"])
+    if tpslug and not ut.is_topic(tpslug):
         return last_topic["name"]
     if CATEGORIES is None:
         load_categories()
@@ -81,7 +83,6 @@ def new_topic():
     except:
         pass
     if _KEYWORDS is None:
-        import adwords_keywords as adk
         _KEYWORDS = adk.Keywords()
     suggestions = _KEYWORDS.suggest([cat])
     assert suggestions is not None

@@ -1,6 +1,8 @@
 # APT dependencies: libcurl4-openssl-dev
 # parsing
 pyyaml
+html5lib
+lxml
 feedparser
 feedfinder2
 lassie

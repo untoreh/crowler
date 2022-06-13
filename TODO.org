@@ -1,4 +1,3 @@
-- Change colors into a random template
 - decouple proxies and scraping from site deployment
 - social media accounts
 - backup for deployed websites

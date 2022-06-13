@@ -223,6 +223,8 @@ if __name__ == "__main__":
     cfg.POOL_SIZE = int(args.workers)
     topics = args.topics.split(",")
     if topics and topics[0] != "":
+        if topics[0] == "all":
+            topics = list(ut.load_topics()[1].keys())
         if args.server:
             run_server(topics)
         else:

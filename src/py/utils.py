@@ -427,6 +427,7 @@ def _count_top_page(pages):
 
 
 def get_top_page(topic: str):
+    assert topic
     tg = topic_group(topic)
     pages = tg[ZarrKey.pages.name]
     return _count_top_page(pages)

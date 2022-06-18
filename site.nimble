@@ -2,9 +2,8 @@
 
 version       = "0.1.0"
 author        = "untoreh"
-description   = "wsl"
+description   = "site"
 license       = "MIT"
-skipDirs      = @["wslpkg"]
 srcDir        = "src/nim"
 installExt    = @["nim"]
 bin           = @["cli"]
@@ -12,7 +11,7 @@ bin           = @["cli"]
 # Dependencies
 
 requires "nim >= 1.6.0"
-requires "sonic >= 0.1.0"
+requires "https://github.com/untoreh/nim-sonic-client#master"
 requires "https://github.com/untoreh/nimpy#master" # required for destructors fix
 requires "cligen >= 1.5.23"
 requires "lrucache"

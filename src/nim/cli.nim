@@ -13,7 +13,8 @@ import
     topics,
     server,
     publish,
-    stats
+    stats,
+    search
 
 
 proc clearPage*(url: string) =
@@ -34,10 +35,14 @@ proc clearPage*(url: string) =
 
 proc cliPubTopic(topic: string) =
     initThread()
-    pubTopic(topic)
+    discard pubTopic(topic)
+
+proc cliReindexSearch() =
+    initThread()
+    pushAllSonic(clear=true)
 
 when isMainModule:
-    dispatchMulti([start], [clearPage], [cliPubTopic])
+    dispatchMulti([start], [clearPage], [cliPubTopic], [cliReindexSearch])
     # initCache()
     # let url = "http://wsl:5050/web/0/6-best-shared-web-hosting-services-companies-2022"
     # clearPage(url)

@@ -4,6 +4,7 @@ import warnings
 import pycurl
 from trafilatura import settings as traset, downloads as tradl
 from user_agent import generate_user_agent
+from distutils.util import strtobool
 import copy
 import json
 
@@ -99,7 +100,7 @@ SPACY_MODEL = "en_core_web_sm"
 TAGS_MAX_LEN = 4
 
 ART_MIN_LEN = (
-    800 # minimum article len
+    400 # minimum article len
 )
 PROFANITY_THRESHOLD = 0.5
 # The maximum number of articles/feeds to store `unprocessed` for each topic
@@ -107,5 +108,5 @@ PROFANITY_THRESHOLD = 0.5
 MAX_BACKLOG_SIZE = 100
 
 BLACKLIST_PATH = DATA_DIR / "blacklist.txt"
-NEW_TOPICS_ENABLED = True # If the job server should keep adding new topics to the current website
+NEW_TOPICS_ENABLED = strtobool(os.getenv("NEW_TOPICS_ENABLED", "False")) # If the job server should keep adding new topics to the current website
 NEW_TOPIC_FREQ = 3600 * 8 # Delay between adding new topics

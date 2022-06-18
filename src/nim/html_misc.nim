@@ -40,14 +40,17 @@ proc buildImgUrl*(url: string; origin: string; cls = "image-link"): VNode =
         img(class = "material-icons", src = bsrc, srcset = srcsetstr, alt = "image",
                 loading = "lazy")
 
-proc fromSearchResult*(topic: string, pslug: string): Article =
+proc fromSearchResult*(pslug: string): Article =
     ## Construct an article from a stored search result
     let
         s = pslug.split("/")
-        page = s[0]
-        slug = s[1]
+        topic = s[0]
+        page = s[1]
+        slug = s[2]
 
-    getArticle(topic, page, slug)
+    debug "html: fromSearchResult - {pslug}"
+    if topic != "":
+        result = getArticle(topic, page, slug)
 
 proc buildRelated*(a: Article): VNode =
     ## Get a list of related articles by querying search db with tags and title words
@@ -66,9 +69,12 @@ proc buildRelated*(a: Article): VNode =
         if kw.len < 3:
             continue
         let sgs = query(a.topic, kw.toLower, limit = N_RELATED)
+        debug "html: suggestions {sgs}, from kw: {kw}"
+        # if sgs.len == 1 and sgs[0] == "//":
+        #     return
         for sg in sgs:
-            let relart = a.topic.fromSearchResult(sg)
-            if relart.slug in related or relart.slug == "":
+            let relart = fromSearchResult(sg)
+            if (relart.isnil or (relart.slug in related or relart.slug == "")):
                 continue
             else:
                 related.incl relart.slug

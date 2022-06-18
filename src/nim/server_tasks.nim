@@ -1,7 +1,7 @@
 import std/times, std/os, strutils
 
 import server_types,
-    cfg, types, topics, pyutils, publish, quirks, stats, articles
+    cfg, types, topics, pyutils, publish, quirks, stats, articles, cache
 
 proc pubTask*() {.gcsafe.} =
     syncTopics()
@@ -17,7 +17,11 @@ proc pubTask*() {.gcsafe.} =
         let topic = nextTopic()
         # Don't publish each topic more than `CRON_TOPIC_FREQ`
         if inHours(t - topicPubdate()) > cfg.CRON_TOPIC_FREQ:
-            pubTopic(topic)
+            if pubTopic(topic):
+                # clear homepage and topic page cache
+                {.cast(gcsafe).}:
+                    pageCache[].del(fp(""))
+                    pageCache[].del(fp("/" & topic))
         sleep(cfg.CRON_TOPIC * 1000)
         n -= 1
 

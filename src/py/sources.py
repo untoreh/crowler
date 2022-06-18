@@ -7,10 +7,11 @@ from log import logger, LoggerLevel
 
 import scheduler as sched
 
-cfg.set_socket_timeout(100)
+cfg.set_socket_timeout(10)
 
 from searx.search import SearchQuery, EngineRef
 from searx import search
+import translator as tr
 
 # the searx.search module has a variable named `processors`
 # import importlib
@@ -41,11 +42,13 @@ ENGINES = [
 N_ENGINES = len(ENGINES)
 R_ENGINES = []
 
+
 def get_engine():
     engines = ENGINES.copy()
     shuffle(engines)
     for e in engines:
         yield e
+
 
 def get_engine_params(engine):
     params = {
@@ -56,23 +59,39 @@ def get_engine_params(engine):
         "categories": "general",
     }
     if cfg.PROXIES_ENABLED:
-        params["network"] = {"verify": False, "proxies": cfg.STATIC_PROXY_EP}
+        params["network"] = {
+            "verify": False,
+            "proxies": cfg.STATIC_PROXY_EP,
+            "retries": 3,
+            "retry_on_http_error": True,
+            "max_redirects": 30
+        }
     return params
 
 
 ENGINES_PARAMS = [get_engine_params(engine) for engine in ENGINES]
 search.initialize(settings_engines=ENGINES_PARAMS)
 
+
 @retry(tries=cfg.SRC_MAX_TRIES, delay=1, backoff=3.0, logger=None)
-def single_search(kw, engine, pages=1, timeout=cfg.REQ_TIMEOUT, category=""):
+def single_search(
+    kw, engine, pages=1, lang="all", timeout=cfg.REQ_TIMEOUT, category=""
+):
     res = []
     for p in range(pages):
-        s = SearchQuery(kw, [EngineRef(engine, category)], timeout_limit=timeout, pageno=p)
+        s = SearchQuery(
+            kw,
+            [EngineRef(engine, category)],
+            timeout_limit=timeout,
+            pageno=p,
+            lang=lang,
+        )
         q = search.Search(s).search()
         res = q.get_ordered_results()
         if len(res) > 0:
             res.extend(res)
     return res
+
 
 def try_search(*args, **kwargs):
     logger.info("Processing single search...")
@@ -96,11 +115,7 @@ def dedup_results(results):
     return all_results
 
 
-def fromkeyword(
-    keyword="trending",
-    verbose=False,
-    n_engines=1,
-):
+def fromkeyword(keyword="trending", verbose=False, n_engines=1, filter_lang=False):
     """
     `n_engines`: How many search engines to query.
     """
@@ -109,7 +124,10 @@ def fromkeyword(
         shuffle(engines)
         logger.info("Finding sources for keyword: %s", keyword)
         assert isinstance(cfg.POOL_SIZE, int)
-        res = sched.POOL.starmap(try_search, [(keyword, engines[n], 1) for n in range(cfg.POOL_SIZE)])
+        kwlang = tr.detect(keyword) if filter_lang else "all"
+        res = sched.POOL.starmap(
+            try_search, [(keyword, engines[n], 1, kwlang) for n in range(cfg.POOL_SIZE)]
+        )
     except KeyboardInterrupt:
         print("Caught KB interrupt.")
         sched.POOL.close()
@@ -125,23 +143,23 @@ def fromkeyword(
         print(res)
     return res
 
-def fromkeyword_async(
-    keyword="trending",
-    n_engines=1,
-):
+
+def fromkeyword_async(keyword="trending", n_engines=1, filter_lang=False):
     """
     `n_engines`: How many search engines to query.
     """
     logger.info("Finding sources for keyword: %s", keyword)
     n = 0
     kwjobs = []
+    kwlang = tr.detect(keyword) if filter_lang else "all"
     for egn in get_engine():
         n += 1
         if n > n_engines:
             break
-        j = sched.apply(try_search, keyword, egn, 1)
+        j = sched.apply(try_search, keyword, egn, 1, kwlang)
         kwjobs.append(j)
     return kwjobs
+
 
 def print_results(res):
     for r in res:

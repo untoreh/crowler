@@ -3,9 +3,12 @@
 from typing import NamedTuple
 import deep_translator
 from lingua import Language, LanguageDetectorBuilder
+from nltk.tokenize import sent_tokenize
+from requests.exceptions import ConnectTimeout, ProxyError, ConnectionError
 
 import config as cfg
 import proxies_pb as pb
+import log
 
 
 class Lang(NamedTuple):
@@ -107,7 +110,10 @@ def override_requests_timeout():
 
 
 class Translator:
+    _max_query_len = 5000
+
     def __init__(self, provider="GoogleTranslator"):
+
         override_requests_timeout()
         self._tr = getattr(deep_translator, provider)
         self._translate = {}
@@ -117,7 +123,16 @@ class Translator:
             self._translate[(self._sl, code)] = self._tr(source=self._sl, target=code)
         pb.sync_from_file()
 
-    def translate(self, data: str, target: str, source=SLang.code):
+    def parse_data(self, data: str):
+        queries = []
+        if len(data) > self._max_query_len:
+            queries.extend(sent_tokenize(data))
+        else:
+            queries.append(data)
+        assert all(len(q) < self._max_query_len for q in queries)
+        return queries
+
+    def translate(self, data: str, target: str, source=SLang.code, max_tries=5):
         lp = (source, target)
         if lp not in self._translate:
             self._translate[lp] = self._tr(source=source, target=target)
@@ -125,27 +140,38 @@ class Translator:
         prx_dict = {}
         cfg.setproxies(None)
         cfg.set_socket_timeout(5)
-        trans = ""
-        while not trans:
+        trans = []
+        tries = 0
+        current = 0
+        queries = self.parse_data(data)
+        n_queries = len(queries)
+        while len(trans) != n_queries:
             try:
                 prx = pb.get_proxy()
                 if prx is None:
-                    import log
-
-                    log.logger.warn(
-                        "Couldn't get a proxy, using STATIC PROXY endpoint."
+                    log.warn(
+                        "Translator: Couldn't get a proxy, using STATIC PROXY endpoint."
                     )
                     prx = cfg.STATIC_PROXY_EP
                 prx_dict["https"] = prx
                 prx_dict["http"] = prx
                 tr.proxies = prx_dict
-                trans = tr.translate(data)
-            except:
-                pass
-        return trans
+                q = queries[current]
+                trans.append(tr.translate(q))
+                current += 1
+            except Exception as e:
+                if isinstance(e, (ConnectTimeout, ProxyError, ConnectionResetError)):
+                    continue
+                tries += 1
+                if tries >= max_tries:
+                    print(e)
+                    log.warn("Translator: Could not translate, reached max tries.")
+                    break
+        return "".join(trans)
 
 
 _SLATOR = Translator()
+
 
 def translate(text: str, to_lang: str, from_lang: str):
     return _SLATOR.translate(text, target=to_lang, source=from_lang)

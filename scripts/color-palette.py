@@ -48,7 +48,7 @@ def gen_palette():
     palette["LIGHT_ON_SURFACE"] = palette["LIGHT_SURFACE"].invert()
     palette["DARK_ON_SURFACE"] = palette["DARK_SURFACE"].invert()
 
-    print({k: "#" + str(v.hex) for (k, v) in palette.items()})
+    # print({k: "#" + str(v.hex) for (k, v) in palette.items()})
     return palette
 
 

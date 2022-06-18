@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -e
 trg=docker
+[ -e $trg/cli ] && rm -f $trg/cli
 cp requirements.txt $trg/
 mkdir -p $trg/run
 cp -a scripts $trg/
@@ -14,7 +15,7 @@ cp -a src/assets/logo $trg/site/assets
 cp -a src/{assets,css,js} $trg/src/ &>/dev/null
 mkdir -p $trg/src/nim
 cp -a src/nim/*.nim $trg/src/nim/
-cp -a src/nim/vendor $trg/src/nim/
+cp -a src/nim/{config,vendor} $trg/src/nim/
 
 mkdir -p $trg/{src/py,lib}
 cp -a src/py/*.py $trg/src/py/
@@ -28,4 +29,4 @@ mkdir -p "$trg/$(dirname $libminify)"
 cp -a $libminify $trg/$libminify
 cp -a lib/vendor/imageflow.dist/libimageflow.so $trg/lib
 cp -a nim.cfg $trg/
-cp -a wsl.nimble $trg/
+cp -a site.nimble $trg/

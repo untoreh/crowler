@@ -157,10 +157,11 @@ template dispatchImg(relpath: var string, ctx: auto) {.dirty.} =
 template handleTopic(capts: auto, ctx: HttpCtx) {.dirty.} =
     debug "topic: looking for {capts.topic}"
     if capts.topic in topicsCache:
+        echo reqFile
         page = pageCache[].lcheckOrPut(reqKey):
             let
-                pagenum = if capts.page == "": "0" else: capts.page
                 topic = capts.topic
+                pagenum = if capts.page == "": $topic.lastPageNum else: capts.page
             topicPage(topic, pagenum, false)
             pageCache[SITE_PATH / capts.topic / capts.page] = pagetree.asHtml
             processPage(capts.lang, capts.amp, pagetree).asHtml

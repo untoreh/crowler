@@ -1,7 +1,9 @@
 # APT dependencies: libcurl4-openssl-dev
 # parsing
 pyyaml
-html5lib
+bs4
+git+https://github.com/html5lib/html5lib-python@master  # for python3.10 use latest
+html-parser
 lxml
 feedparser
 feedfinder2
@@ -23,6 +25,7 @@ zict
 git+https://github.com/orehunt/proxybroker2@master
 
 # data
+google-ads
 zarr
 # ALPINE distro packages
 # py3-numpy
@@ -52,3 +55,6 @@ rake_nltk
 git+https://github.com/untoreh/colors.py
 # not needed...
 # textacy
+
+# debug
+guppy3

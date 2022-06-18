@@ -16,18 +16,52 @@
 
 from google.ads.googleads.client import GoogleAdsClient
 from google.ads.googleads.errors import GoogleAdsException
+from google.api_core.exceptions import ResourceExhausted
 
 # Location IDs are listed here:
 # https://developers.google.com/google-ads/api/reference/data/geotargets
 # and they can also be retrieved using the GeoTargetConstantService as shown
 # here: https://developers.google.com/google-ads/api/docs/targeting/location-targeting
-_DEFAULT_LOCATION_IDS = [""]  # location ID for New York, NY
+_DEFAULT_LOCATION_IDS = [""]  #
 # A language criterion ID. For example, specify 1000 for English. For more
 # information on determining this value, see the below link:
 # https://developers.google.com/google-ads/api/reference/data/codes-formats#expandable-7
 _DEFAULT_LANGUAGE_ID = "1000"  # language ID for English
 
+# Mapping of languages to location ids (countries)
+LANG_LOC_IDS = {
+    ("1000", "en"): ["2840", "2826"],
+    ("1019", "ar"): "2682",
+    ("1056", "bn"): "2356",
+    ("1017", "zh-CN"): "2156",
+    ("1010", "nl"): "2528",
+    ("1042", "tl"): "2608",
+    ("1002", "fr"): "2250",
+    ("1001", "de"): "2276",
+    ("1022", "el"): "2300",
+    ("1023", "hi"): "2356",
+    ("1004", "it"): "2380",
+    ("1005", "ja"): "2392",
+    ("1012", "ko"): "2410",
+    ("1102", "ms"): "2458",
+    ("1030", "pl"): "2616",
+    ("1014", "pt"): "2076",
+    ("1032", "ro"): "2642",
+    # ("1031", "ru"): "2643", # russia is blocked...
+    ("1003", "es"): "2724",
+    ("1015", "sv"): "2752",
+    ("1044", "th"): "2764",
+    ("1037", "tr"): "2792",
+    ("1036", "uk"): "2804",
+    ("1041", "ur"): "2586",
+    ("1040", "vi"): "2704",
+}
+
+from time import sleep
+from typing import Union
+
 import config as cfg
+import translator as tr
 import log
 
 # [START generate_keyword_ideas]
@@ -118,24 +152,35 @@ class Keywords:
     def __init__(self) -> None:
         self.client = GoogleAdsClient.load_from_storage(self._config, version="v10")
 
-    def suggest(
-        self,
-        keyword_texts=[],
-        page_url="",
-        location_ids=[],
-        language_id=_DEFAULT_LANGUAGE_ID,
-    ):
+    def suggest(self, kw: Union[list, str], page_url="", langloc=LANG_LOC_IDS, delay=1, sugs=None):
         try:
             cfg.setproxies(None)
-            return main(
-                self.client,
-                self._customer_id,
-                location_ids,
-                language_id,
-                keyword_texts,
-                page_url,
-            )
+            if sugs is None:
+                sugs = []
+            if langloc is None:
+                langloc = {("1000", "en"): [""]}
+            for lang, loc_id in langloc.items():
+                lang_id, lang_code = lang
+                # print("lang: ", lang_id, " loc: ", loc_id)
+                if lang_code != "en":
+                    assert kw is str
+                    kw_t = tr.translate(kw, to_lang=lang_code, from_lang="en")
+                else:
+                    kw_t = kw
+                s = main(
+                    self.client,
+                    self._customer_id,
+                    [loc_id] if isinstance(loc_id, str) else loc_id,
+                    lang_id,
+                    [kw_t] if kw_t is str else kw_t,
+                    page_url,
+                )
+                sleep(1)
+                sugs.extend(s)
+            return list(dict.fromkeys(sugs))  ## dedup
         except GoogleAdsException as ex:
+            if isinstance(ex, ResourceExhausted):
+                return self.suggest(kw, page_url, langloc, delay=delay * 2, sugs=sugs)
             log.warn(
                 f'Request with ID "{ex.request_id}" failed with status '
                 f'"{ex.error.code().name}" and includes the following errors:'
@@ -145,5 +190,6 @@ class Keywords:
                 if error.location:
                     for field_path_element in error.location.field_path_elements:
                         log.warn(f"\t\tOn field: {field_path_element.field_name}")
+            return list(dict.fromkeys(sugs))  ## dedup
         finally:
             cfg.setproxies()

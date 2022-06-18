@@ -71,6 +71,8 @@ def run_sources_job(topic):
             logger.debug("Timing out kw search..")
             break
         for kw in ready.keys():
+            if not kw:
+                continue
             if kw in jobs:
                 kwjobs = jobs[kw]
                 for (n, j) in enumerate(kwjobs):
@@ -129,6 +131,7 @@ def run_parse1_job(topic):
         logger.warning("Couldn't find sources for topic %s.", topic)
         return None
 
+    logger.info("Parsing %d sources...for %s", len(sources), topic)
     arts, feeds = cnt.fromsources(sources, topic)
     topic_path = cfg.TOPICS_DIR / Path(topic)
     sa = sf = None
@@ -194,9 +197,12 @@ def new_topic(force=False):
         logger.info("topics: added new topic %s", newtopic)
 
 def run_server(topics):
+    from guppy import hpy
+    h = hpy()
     delay = 3600 * 8
     random.shuffle(topics) # in case of crashes helps to distribute queryies more uniformly
     while True:
+        print(h.heap())
         for topic in topics:
             run_parse1_job(topic)
         if random.randrange(3) == 0:

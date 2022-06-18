@@ -9,6 +9,7 @@ import sonic,
        parseutils,
        uri,
        hashes
+from unicode import runeSubStr, validateUtf8
 
 from sonic {.all.} import SonicServerError
 export SonicServerError
@@ -35,7 +36,7 @@ let Language = withPyLock:
     pyImport("langcodes").Language
 
 const defaultLimit = 10
-const bufsize = 20000 - 128 # FIXME: snc.bufsize returns 0...
+const bufsize = 20000 - 256 # FIXME: snc.bufsize returns 0...
 
 proc closeSonic() =
     debug "sonic: closing"
@@ -69,7 +70,7 @@ proc toISO3(lang: string): string =
 
 proc sanitize*(s: string): string =
     ## Replace new lines for search queries and ingestion
-    s.replace(sre "\n|\r", "")
+    s.replace(sre "\n|\r", "").replace("\"", "\\\"") # FIXME: this should be done by sonic module
 
 proc addToBackLog(capts: UriCaptures) =
     let f = open(SONIC_BACKLOG, fmAppend)
@@ -81,25 +82,29 @@ proc push*(capts: UriCaptures, content: string) =
     ## Push the contents of an article page to the search database
     var ofs = 0
     while ofs <= content.len:
-        let cnt = content[ofs..<min(content.len, ofs + bufsize)]
+        let view = content[ofs..^1]
+        let key = join([capts.topic, capts.page, capts.art], "/")
+        let cnt = runeSubStr(view, 0, min(view.len, bufsize - key.len))
+        ofs += cnt.len
+        if cnt.len == 0:
+            break
         try:
             if not snc.push(WEBSITE_DOMAIN,
                     "default", # TODO: Should we restrict search to `capts.topic`?
-                    join([capts.page, capts.art], "/"),
+                    key,
                     cnt,
                     lang = if capts.lang != "en": capts.lang.toISO3
                             else: ""):
                 capts.addToBackLog()
                 break
         except:
-            debug "sonic: couldn't push content, {getCurrentExceptionMsg()} \n {cnt}"
+            debug "sonic: couldn't push content, {getCurrentExceptionMsg()} \n {key} \n {cnt}"
             capts.addToBackLog()
             block:
                 let f = open("/tmp/sonic_debug.log", fmWrite)
                 defer: f.close()
                 write(f, cnt)
             break
-        ofs += bufsize
 
 proc push*(relpath: var string) =
     relpath.removeSuffix('/')
@@ -118,7 +123,7 @@ proc push*(relpath: var string) =
     else:
         push(capts, content.sanitize)
 
-proc resume() =
+proc resumeSonic() =
     ## Push all backlogged articles to search database
     assert (not snc.isnil)
     for l in lines(SONIC_BACKLOG):
@@ -164,28 +169,33 @@ proc suggest*(topic, input: string, limit = defaultLimit): seq[string] =
         initSonic()
         discard
 
-proc pushall() =
+proc deleteFromSonic*(capts: UriCaptures): int =
+    ## Delete an article from sonic db
+    let key = join([capts.topic, capts.page, capts.art], "/")
+    snc.flush(WEBSITE_DOMAIN, object_name=key)
+
+proc pushAllSonic*(clear=true) =
     syncTopics()
+    if clear:
+        discard snc.flush(WEBSITE_DOMAIN)
     for (topic, state) in topicsCache:
         let done = state.group["done"]
         for page in done:
             var c = len(done[page])
             for n in 0..<c:
                 let ar = done[page][n]
-                var relpath = getArticlePath(ar, topic)
-                relpath.removeSuffix("/")
-                let
-                    capts = uriTuple(relpath)
-                    content = ar.pyget("content").sanitize
-                push(capts, content)
+                if not pyisnone(ar):
+                    var relpath = getArticlePath(ar, topic)
+                    relpath.removeSuffix("/")
+                    let
+                        capts = uriTuple(relpath)
+                        content = ar.pyget("content").sanitize
+                    push(capts, content)
     discard sncc.trigger("consolidate")
 
 when isMainModule:
-    var relpath = "/web/0/is-hosting-your-wordpress-website-on-aws-a-good-idea"
-    # initSonic()
-    # initCache()
-    # sncc.flush()
-    # pushall()
+    initSonic()
+    pushAllSonic()
 
     # push(relpath)
     # discard sncc.trigger("consolidate")

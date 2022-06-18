@@ -362,11 +362,14 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
             # we don't paginate searches because we only serve the first page per query
             if pn != -1 and not home:
                 span(class = "next-page"):
-                    if pn == lastPageNum(topic):
+                    let lpn = lastPageNum(topic)
+                    if pn == lpn:
                         a:
                             text "Next page >>"
                     else:
-                        a(href = (topic_path / (pn + 1).intToStr)):
+                        let nextPageNum = pn + 1
+                        a(href = (topic_path / (if nextPageNum ==
+                                lpn: "" else: nextPageNum.intToStr))):
                             text "Next page >>"
 
 const pageContent* = postContent

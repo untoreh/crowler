@@ -74,8 +74,8 @@ def fromsources(sources, topic, n=cfg.POOL_SIZE, use_proxies=True):
         j = sched.apply(parsesource, url, topic)
         jobs.append(j)
     for n, j in enumerate(jobs):
-        j.wait()
         logger.info("Waiting for job: %s.", n)
+        j.wait()
 
     if use_proxies:
         cfg.setproxies()

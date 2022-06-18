@@ -11,3 +11,7 @@ if [ ! -e "$data_dir" ]; then
 fi
 rm -f data
 ln -sr "$data_dir" data
+
+scripts/cssconfig.sh $site_name
+npm run build
+scripts/site.sh

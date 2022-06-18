@@ -21,35 +21,45 @@ RUN curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
 RUN echo PATH=/root/.nimble/bin:\$PATH >> /root/.profile
 SHELL ["/bin/bash", "-lc"]
 
-FROM nimrt AS wslenv
-ENV PROJECT_DIR=/wsl
-RUN mkdir /wsl
-COPY /wsl.nimble /wsl/
-WORKDIR /wsl
-VOLUME ["/wsl/data"]
+FROM nimrt AS siteenv
+ENV PROJECT_DIR=/site
+RUN mkdir /site
+COPY /site.nimble /site/
+WORKDIR /site
+VOLUME ["/site/data"]
 
-FROM wslenv AS wsldeps1
+FROM siteenv AS sitedeps1
 # install nimterop separately
 RUN cd /; nimble install -y nimterop
-RUN cd /wsl; \
+RUN cd /
+RUN cd /site; \
     while true; do nimble install -y -d --verbose && break; done
 
 
-FROM wsldeps1 AS wsldeps2
+FROM sitedeps1 AS sitedeps2
 RUN apt update -y ; \
     apt install -y python3-dev python3-pip git libcurl4-openssl-dev libssl-dev gcc; true
-COPY /requirements.txt /wsl/
+COPY /requirements.txt /site/
 RUN pip3 install pyyaml supervisor && \
     pip3 install -r requirements.txt
 
-FROM wsldeps2 AS wsl
-COPY / /wsl/
-ARG WEBSITE_DOMAIN
-ENV WEBSITE_DOMAIN $WEBSITE_DOMAIN
+FROM sitedeps2 AS scraper
+COPY / /site/
+RUN python3 lib/py/main.py; true # perform modules setups on imports
+CMD /site/scripts/scraper.sh
+
+FROM scraper AS site
 ENV NIM_DEBUG debug
 ENV NIM release
-RUN nimble build # ; strip -s cli
-RUN python3 lib/py/main.py; true # perform modules setups on imports
 EXPOSE 5050
 HEALTHCHECK CMD [ "/usr/bin/curl", "http://localhost:5050" ]
 CMD ./cli
+
+FROM site AS wsl
+ENV CONFIG_NAME wsl
+RUN cd /site; nimble build # ; strip -s cli
+
+FROM site as wsl
+ENV CONFIG_NAME wsl
+ENV NEW_TOPICS_ENABLED True
+RUN cd /site; nimble build # ; strip -s cli

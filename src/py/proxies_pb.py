@@ -22,9 +22,21 @@ TYPES = [
 ]
 
 PROXIES_SET = set()
-PROXIES = deque(maxlen=200)
+N_PROXIES = 200
+PROXIES = deque(maxlen=N_PROXIES)
+PROXIES.extendleft([cfg.STATIC_PROXY_EP for _ in range(N_PROXIES)])
 PB: Union[Broker, None] = None
 
+def next_proxy():
+    i = 0
+    while True:
+        yield PROXIES[i]
+        i += 1
+        if i >= N_PROXIES:
+            i = 0
+
+PROXY_ITER = iter(next_proxy())
+PROXY_CHOICE = (lambda: cfg.STATIC_PROXY_EP, lambda: next(PROXY_ITER), lambda: next(PROXY_ITER))
 
 async def fetch_proxies(limit: int, proxies, out: Queue):
     try:
@@ -105,10 +117,13 @@ typemap = {
     "SOCKS4": "socks4",
     "SOCKS5": "socks5"
 }
-PROXIES_CYCLE = cycle(PROXIES)
-PROXIES_CYCLE_F = lambda: next(PROXIES_CYCLE)
 # 2 times free proxies, 1 time private proxies
-PROXY_CHOICE = (lambda: cfg.STATIC_PROXY_EP, lambda: next(PROXIES_CYCLE), lambda: next(PROXIES_CYCLE))
+# def update_proxies():
+#     global PROXIES_CYCLE, PROXY_CHOICE
+#     assert PROXIES
+#     assert isinstance(PROXIES, list)
+#     PROXIES_CYCLE = cycle(PROXIES)
+# update_proxies()
 
 def sync_from_file():
     try:
@@ -131,15 +146,19 @@ def sync_from_file():
                 tpm = typemap[tp]
                 PROXIES_SET.add(f"{tpm}://{host}:{port}")
         PROXIES.extendleft(PROXIES_SET)
-        # set cycle again since proxies mutated
-        global PROXIES_CYCLE
-        PROXIES_CYCLE = cycle(PROXIES)
+        # # set cycle again since proxies mutated
+        # update_proxies()
     except:
         log.logger.debug("Could't sync proxies, was the file being written?")
 
 def get_proxy():
-    i = random.randrange(3)
-    return PROXY_CHOICE[i]()
+    try:
+        i = random.randrange(3)
+        return PROXY_CHOICE[i]()
+    except Exception as e:
+        # this should never fail
+        print(e)
+        exit()
 
 
 # if __name__ == "__main__":

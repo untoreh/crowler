@@ -161,63 +161,67 @@ def abs_url(url: str, baseurl) -> str:
 
 def fillarticle(url, data, topic):
     """Using `trafilatura`, `goose` and `lassie` machinery to parse article data."""
-    final = dict()
-    tra = trafi(url, data)
-    assert isinstance(tra, dict)
-    goo = goose(url, data).infos
-    if tra is None:
-        tra = {}
-    if goo is None:
-        goo = {}
-    la = {}
-    # first try content
-    if tra["text"]:
-        final["content"] = tra["text"]
-        final["source"] = "tra"
-    else:
-        final["content"] = goo["cleaned_text"]
-        final["source"] = "goo"
-    if len(final["content"]) < cfg.ART_MIN_LEN:
-        u = parse_url(url)
-        print("too short!: ", len(final["content"]), " ", u.hostname)
-        return {}
-    final["lang"] = tr.detect(final["content"])
-    final["title"] = tra["title"] or goo.get("title")
-    # Ensure articles are always in the chosen source language
-    if final["lang"] != tr.SLang.code:
-        final["content"] = tr.translate(final["content"], to_lang=tr.SLang.code, from_lang=final["lang"])
-        final["title"] = tr.translate(final["title"], to_lang=tr.SLang.code, from_lang=final["lang"])
-    final["content"] = replace_profanity(final["content"])
-    if (
-        not final["content"]
-        or not isrelevant(final["title"], final["content"])
-    ):
-        return {}
-    # double new lines for better formatting
-    final["content"] = final["content"].replace("\n", "\n\n")
-    # clean repeated charaters
-    final["content"] = re.sub(r"[^a-zA-Z0-9\n\s]{3,}|(.\s+)\1{2,}", "", final["content"])
-    # compact whitespace
-    final["content"] = re.sub(r" {2,}", "", final["content"])
+    log.debug("pyarticle: parsing %s", url)
+    try:
+        final = dict()
+        tra = trafi(url, data)
+        assert isinstance(tra, dict)
+        goo = goose(url, data).infos
+        if tra is None:
+            tra = {}
+        if goo is None:
+            goo = {}
+        la = {}
+        # first try content
+        if tra["text"]:
+            final["content"] = tra["text"]
+            final["source"] = "tra"
+        else:
+            final["content"] = goo["cleaned_text"]
+            final["source"] = "goo"
+        if len(final["content"]) < cfg.ART_MIN_LEN:
+            log.debug("too short!: %d, %s", len(final["content"]), url)
 
-    final["slug"] = ut.slugify(final["title"])
-    final["desc"] = tra["description"] or goo.get("meta", {}).get("description")
-    final["author"] = (
-        tra["author"]
-        or "".join(goo.get("authors", ""))
-        or tra.get("sitename")
-        or goo.get("opengraph", {}).get("site_name")
-    )
-    final["pubDate"] = tra["date"] or goo.get("publish_date")
-    la = lassie_img(url, data, final)
+        final["lang"] = tr.detect(final["content"])
+        final["title"] = tra["title"] or goo.get("title")
+        # Ensure articles are always in the chosen source language
+        if final["lang"] != tr.SLang.code:
+            log.debug("articles: different lang? %s", final["lang"])
+            final["content"] = tr.translate(final["content"], to_lang=tr.SLang.code, from_lang=final["lang"])
+            final["title"] = tr.translate(final["title"], to_lang=tr.SLang.code, from_lang=final["lang"])
+        final["content"] = replace_profanity(final["content"])
+        if (
+            not final["content"]
+            or not isrelevant(final["title"], final["content"])
+        ):
+            return {}
+        # double new lines for better formatting
+        final["content"] = final["content"].replace("\n", "\n\n")
+        # clean repeated charaters
+        final["content"] = re.sub(r"[^a-zA-Z0-9\n\s]{3,}|(.\s+)\1{2,}", "", final["content"])
+        # compact whitespace
+        final["content"] = re.sub(r" {2,}", "", final["content"])
 
-    url = final["url"] = tra["url"] or goo["meta"]["canonical"] or la["url"]
-    if not final["icon"]:
-        final["icon"] = abs_url(goo["meta"]["favicon"], url)
-    if not final["imageUrl"] or final["imageUrl"] == final["icon"]:
-        final["imageUrl"] = abs_url(goo["image"] or goo["opengraph"].get("image"), url)
-        if final["imageUrl"] == final["icon"]:
-            final["imageUrl"] = ""
-    final["topic"] = topic
-    final["tags"] = rake(final["content"])
+        final["slug"] = ut.slugify(final["title"])
+        final["desc"] = tra["description"] or goo.get("meta", {}).get("description")
+        final["author"] = (
+            tra["author"]
+            or "".join(goo.get("authors", ""))
+            or tra.get("sitename")
+            or goo.get("opengraph", {}).get("site_name")
+        )
+        final["pubDate"] = tra["date"] or goo.get("publish_date")
+        la = lassie_img(url, data, final)
+
+        url = final["url"] = tra["url"] or goo["meta"]["canonical"] or la["url"]
+        if not final["icon"]:
+            final["icon"] = abs_url(goo["meta"]["favicon"], url)
+        if not final["imageUrl"] or final["imageUrl"] == final["icon"]:
+            final["imageUrl"] = abs_url(goo["image"] or goo["opengraph"].get("image"), url)
+            if final["imageUrl"] == final["icon"]:
+                final["imageUrl"] = ""
+        final["topic"] = topic
+        final["tags"] = rake(final["content"])
+    except Exception as e:
+        log.info("articles: Exception %s", e)
     return final

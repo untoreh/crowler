@@ -57,7 +57,7 @@ class LoggerLevel(object):
 
 
 def warn(*args, **kwargs):
-    logger.warn(*args, **kwargs)
+    logger.warning(*args, **kwargs)
 
 
 def info(*args, **kwargs):

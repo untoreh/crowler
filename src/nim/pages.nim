@@ -216,14 +216,16 @@ proc buildSearchPage*(topic: string, kws: string, lang: string): string =
     var content, keywords: string
     if kws != "":
         keywords = kws.decodeUrl.sanitize
-        let pslugs = query(topic, keywords, lang)
+        var pslugs = query(topic, keywords, lang)
         if pslugs.len == 0:
             let r = buildHtml(tdiv(class = "search-results")):
                 text "No results found."
             content.add $r
         else:
+            if pslugs[0] == "/":
+                del(pslugs, 0)
             for pslug in pslugs:
-                let ar = topic.fromSearchResult(pslug)
+                let ar = fromSearchResult(pslug)
                 if not ar.isEmpty:
                     content.add $articleEntry(ar)
             if content.len == 0:

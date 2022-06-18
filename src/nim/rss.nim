@@ -116,8 +116,8 @@ proc update*(tfeed: Feed, topic: string, newArts: seq[Article], dowrite = false)
     let
         fill = RSS_N_ITEMS - arl
         rem = max(0, narl - fill)
-        shrinked = if rem > 0 and arl > 0:
-                       itms[0..<(arl-rem)]
+        shrinked = if (rem > 0 and arl > 0):
+                       itms[0..<(max(0, arl-rem))]
                    else: itms
     debug "rss: articles tail len {len(shrinked)}, newarts: {len(newArts)}"
     assert shrinked.len + narl <= RSS_N_ITEMS, fmt"shrinked: {shrinked.len}, newarticles: {narl}"

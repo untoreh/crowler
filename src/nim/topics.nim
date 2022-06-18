@@ -61,7 +61,9 @@ proc nextTopic*(): string =
     if pyTopics.isnil:
         pyTopics[] = loadTopicsIndex()
     if pyisnone(pyTopics[]):
-        return ""
+        pyTopics[] = loadTopicsIndex()
+    if pyisnone(pyTopics[]):
+        raise newException(Exception, "topics: could not load topics.")
     withPyLock:
         if len(pyTopics[]) <= topicIdx:
             debug "pubtask: resetting topics idx ({len(pyTopics[])})"
@@ -113,6 +115,7 @@ iterator publishedArticles*[V](topic: string, attr: string = ""): (PyObject, V) 
             n_arts = len(page)
         for a  in 0..<n_arts:
             withPyLock:
+                assert not page.isnil
                 art = page[a]
                 if not pyisnone(art):
                     v = getArticleAttr(art)
@@ -127,6 +130,7 @@ proc fetch*(t: Topics, k: string): TopicState =
 
 proc getState*(topic: string): (int, int) =
     ## Get the number of the top page, and the number of `done` pages.
+    doassert topic != ""
     let grp = topicsCache.fetch(topic).group
     doassert not grp.isnil
     var topdir, numdone: int

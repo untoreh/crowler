@@ -1,3 +1,4 @@
-- decouple proxies and scraping from site deployment
 - social media accounts
+- site directory / link
+- ads
 - backup for deployed websites

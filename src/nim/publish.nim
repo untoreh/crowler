@@ -180,6 +180,10 @@ proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
             a.slug = uslug
             a.title = utitle
             a.page = pagenum
+            echo a.topic
+            if a.topic == "":
+                a.topic = topic
+                a.py["topic"] = topic
             posts.add((buildPost(a), a))
             withPyLock:
                 a.py["slug"] = uslug
@@ -196,7 +200,7 @@ proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
         discard ut.save_done(topic, len(arts), donePy, pagenum)
     true
 
-proc pubTopic*(topic: string) {.gcsafe.} =
+proc pubTopic*(topic: string): bool {.gcsafe.} =
     ##  Generates html for a list of `Article` objects and writes to file.
     withPyLock:
         doassert topic in ut.load_topics()[1]
@@ -280,7 +284,7 @@ proc pub*() {.gcsafe.} =
             let topic = nextTopic()
             # Don't publish each topic more than `CRON_TOPIC_FREQ`
             if inHours(t - topicPubdate()) > cfg.CRON_TOPIC_FREQ:
-                pubTopic(topic)
+                discard pubTopic(topic)
 
 proc resetTopic(topic: string) =
     withPyLock:

@@ -82,12 +82,32 @@ def new_topic():
         os.makedirs(topic_path)
     except:
         pass
-    if _KEYWORDS is None:
-        _KEYWORDS = adk.Keywords()
-    suggestions = _KEYWORDS.suggest([cat])
+    suggestions = suggest(cat)
     assert suggestions is not None
     with open(topic_path / "list.txt", "w") as f:
         f.write("\n".join(suggestions))
     ut.add_topics_idx([(tpslug, cat, 0)])
     # clear last topic since we saved
     return tpslug
+
+def suggest(topic: str):
+    assert topic
+    global _KEYWORDS
+    cfg.setproxies(None)
+    if _KEYWORDS is None:
+        _KEYWORDS = adk.Keywords()
+    sugs = []
+    kws = [topic]
+    while len(sugs) < 20:
+        s = _KEYWORDS.suggest(kws[:20], langloc=None)
+        sugs.extend(s)
+        kws = s
+    cfg.setproxies()
+    return list(dict.fromkeys(sugs))  ## dedup
+
+def save_kws(topic: str, kws: list):
+    topic_path = cfg.TOPICS_DIR / topic
+    sugs = suggest(topic)
+    with open(topic_path / "list.txt", "w") as f:
+        f.seek(0)
+        f.write("\n".join(kws))

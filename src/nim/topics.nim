@@ -1,4 +1,4 @@
-import nimpy, uri, strformat, times, sugar
+import nimpy, uri, strformat, times, sugar, os
 import
     cfg,
     types,
@@ -12,6 +12,12 @@ type
 let
     topicsCache*: Topics = initLockTable[string, TopicState]()
     emptyTopic* = (topdir: -1, group: PyObject())
+    pyTopicsMod = if os.getEnv("NEW_TOPICS_ENABLED", "") != "":
+                      discard relPyImport("proxies_pb") # required by topics
+                      discard relPyImport("translator") # required by topics
+                      discard relPyImport("adwords_keywords") # required by topics
+                      relPyImport("topics")
+                  else: PyNone
 
 proc lastPageNum*(topic: string): int =
     withPyLock:
@@ -147,26 +153,30 @@ proc syncTopics*() {.gcsafe} =
     withPyLock:
         assert not ut.isnil
     try:
-        let pytopics = loadTopics()
-        var n_topics: int
+        var
+            pytopics = loadTopics()
+            n_topics: int
         withPyLock:
             n_topics = pytopics.len
+            if n_topics == 0 and (not pyisnone(pyTopicsMod)):
+                discard pyTopicsMod.new_topic()
+                pytopics = loadTopics()
+                n_topics = pytopics.len
+                assert n_topics > 0
 
         if n_topics > topicsCache.len:
             {.locks: [pyLock]}:
                 pyLock.acquire()
                 for topic in pytopics.slice(topicsCache.len, pytopics.len):
-                    let
-                        tp = topic[0].to(string)
-                        tg = ut.topic_group(tp)
+                    let tp = topic[0].to(string)
                     pyLock.release()
-                    let td = tp.getState[0]
                     debug "synctopics: adding topic {tp} to global"
-                    topicsCache[tp] = (topdir: td, group: tg)
+                    # topicsCache[tp] = (topdir: td, group: tg)
+                    discard topicsCache.fetch(tp)
                     pyLock.acquire()
                 pyLock.release()
     except Exception as e:
-        debug "could not sync topics {getCurrentExceptionMsg()}"
+        debug "could not sync topics {getCurrentExceptionMsg()} {getStackTrace()}"
 
 when isMainModule:
     synctopics()

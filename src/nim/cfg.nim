@@ -49,7 +49,7 @@ const
     YDX* = false                ## Don't build yandex turbopages if the site is large
     MINIFY* = true
     RSS* = true
-    RSS_N_ITEMS* = 10
+    RSS_N_ITEMS* = 20
     RSS_N_CACHE* = 1000
     SERVER_MODE* = true
     # WEBSITE_IMG_PORT* = ":5051"

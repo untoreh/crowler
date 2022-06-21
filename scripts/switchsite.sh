@@ -13,5 +13,13 @@ rm -f data
 ln -sr "$data_dir" data
 
 scripts/cssconfig.sh $site_name
+
+logobase=src/assets/logo
+logodir="${logobase}_${site_name}"
+[ ! -e $logodir ] && { echo could not find logo directory "$logodir"; exit 1; }
+rm -f $logobase
+ln -sr $logodir $logobase
+
 npm run build
-scripts/site.sh
+# this should already be ran by npm
+# scripts/site.sh

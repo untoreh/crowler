@@ -205,14 +205,20 @@ def save_zarr(
         path = ZarrKey(k).name
         if subk != "":
             path += f"/{subk}"
-        za.save_array(
-            store=store,
-            arr=data,
-            path=path,
-            object_codec=codec,
-            compressor=compressor,
-            dtype=object,
-        )
+        kwargs = {
+            "store": store,
+            "path": path,
+            "object_codec": codec,
+            "compressor": compressor,
+            "dtype": object
+            }
+        if not data:
+            kwargs["shape"] = (0, 3) if k == ZarrKey.topics else (0,)
+            zfun = za.empty
+        else:
+            kwargs["arr"] = data
+            zfun = za.save_array
+        zfun(**kwargs)
 
 
 def load_articles(topic_path=None, topic=None, k=ZarrKey.articles):

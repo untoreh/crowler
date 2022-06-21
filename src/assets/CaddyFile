@@ -1,0 +1,7 @@
+wsl:80 {
+    reverse_proxy localhost:5050
+}
+
+wsl:80 {
+    reverse_proxy localhost::5051
+}

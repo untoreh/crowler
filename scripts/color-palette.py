@@ -4,8 +4,8 @@ import random, colors
 
 # get seeds https://color.adobe.com/create/color-wheel (choose "shades" radio, take "ABCD" colors)
 # PRIMARY/A, SECONDARY/B, BACKGROUND/C, SURFACE/D
-SEED = ["#69644B", "#B8AF84", "#FFF3B8", "#EBE0A9"]
-mid = colors.rgb(40, 40, 40)
+SEED = ["#616161", "#333333", "#FFFFFF", "#050505"]
+mid = colors.rgb(125, 125, 125)
 
 def from_hex(hex):
     hex = hex[1:]
@@ -45,8 +45,8 @@ def gen_palette():
     palette["SURFACE"] = from_hex(SEED[3])
     palette["LIGHT_SURFACE"] = palette["SURFACE"] + mid
     palette["DARK_SURFACE"] = palette["LIGHT_SURFACE"].invert()
-    palette["LIGHT_ON_SURFACE"] = palette["LIGHT_SURFACE"].invert()
-    palette["DARK_ON_SURFACE"] = palette["DARK_SURFACE"].invert()
+    palette["LIGHT_ON_SURFACE"] = palette["LIGHT_SURFACE"] - mid
+    palette["DARK_ON_SURFACE"] = palette["DARK_SURFACE"] + mid
 
     # print({k: "#" + str(v.hex) for (k, v) in palette.items()})
     return palette

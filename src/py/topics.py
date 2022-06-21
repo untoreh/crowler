@@ -9,7 +9,8 @@ CATEGORIES = None
 _CAT_FILE = cfg.DATA_DIR / "google" / "categories.json"
 _KEYWORDS = None
 LAST_TOPIC_FILE = cfg.TOPICS_DIR / "last_topic.json"
-
+if cfg.TOPICS_DIR.exists():
+    LAST_TOPIC_FILE.touch()
 
 def load_categories(reset=False):
     global CATEGORIES, DONE

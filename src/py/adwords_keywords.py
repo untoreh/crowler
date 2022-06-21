@@ -158,7 +158,7 @@ class Keywords:
             if sugs is None:
                 sugs = []
             if langloc is None:
-                langloc = {("1000", "en"): [""]}
+                langloc = {("1000", "en"): []}
             for lang, loc_id in langloc.items():
                 lang_id, lang_code = lang
                 # print("lang: ", lang_id, " loc: ", loc_id)

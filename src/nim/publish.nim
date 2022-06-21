@@ -180,7 +180,6 @@ proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
             a.slug = uslug
             a.title = utitle
             a.page = pagenum
-            echo a.topic
             if a.topic == "":
                 a.topic = topic
                 a.py["topic"] = topic

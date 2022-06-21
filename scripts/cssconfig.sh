@@ -26,6 +26,4 @@ rm -f src/css/colors.scss
 if [ $CONFIG_NAME != wsl ]; then
     python scripts/color-palette.py
 fi
-# .
-# envsubst < $template > $target_colors
 ln -sr "$target_colors" src/css/colors.scss

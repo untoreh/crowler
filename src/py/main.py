@@ -202,7 +202,7 @@ def run_server(topics):
     delay = 3600 * 8
     random.shuffle(topics) # in case of crashes helps to distribute queryies more uniformly
     while True:
-        print(h.heap())
+        # print(h.heap())
         for topic in topics:
             run_parse1_job(topic)
         if random.randrange(3) == 0:

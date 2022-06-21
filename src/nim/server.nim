@@ -157,7 +157,6 @@ template dispatchImg(relpath: var string, ctx: auto) {.dirty.} =
 template handleTopic(capts: auto, ctx: HttpCtx) {.dirty.} =
     debug "topic: looking for {capts.topic}"
     if capts.topic in topicsCache:
-        echo reqFile
         page = pageCache[].lcheckOrPut(reqKey):
             let
                 topic = capts.topic
@@ -319,8 +318,11 @@ proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
 template initSpawn(code) =
     threadpool.spawn (() => (initThread(); code))()
 
-proc start*(doclear = false, port = 5050) =
+proc start*(doclear = false, port = 0) =
     var server = new GuildenServer
+    let serverPort = if port == 0:
+                         os.getEnv("SITE_PORT", "5050").parseInt
+                     else: port
     # main Thread
     initThread()
     # cache and stats are global
@@ -346,7 +348,7 @@ proc start*(doclear = false, port = 5050) =
 
     # Configure and start server
     registerThreadInitializer(initThread)
-    server.initHeaderCtx(handleGet, port, false)
+    server.initHeaderCtx(handleGet, serverPort, false)
     echo fmt"HTTP server listening on port {port}"
     synctopics()
     server.serve(loglevel = INFO)

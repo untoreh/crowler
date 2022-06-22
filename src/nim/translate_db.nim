@@ -49,7 +49,7 @@ var
     MAX_DB_SIZE* = 4096 * 1024 * 1024
     DB_PATH*: ptr string
 
-const DEFAULT_DB_PATH = DATA_PATH / "translate.db"
+const DEFAULT_DB_PATH = DATA_PATH / "sites" / WEBSITE_NAME / "translate.db"
 DB_PATH = createShared(string)
 
 # let transObj = new(LRUTrans)

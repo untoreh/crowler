@@ -10,7 +10,7 @@ from random import choice
 
 import config as cfg
 import utils as ut
-from utils import ZarrKey, save_zarr, load_zarr
+from utils import ZarrKey, save_zarr, load_zarr, strtobool
 
 import blacklist
 
@@ -39,6 +39,8 @@ class Site:
 
     topics_arr: Optional[za.Array] = None
     topics_dict: Dict[str, str] = {}
+    new_topics_enabled: bool = False
+    topics_sync_freq = 3600
 
     def __init__(self, sitename=""):
         self._name = sitename
@@ -50,6 +52,11 @@ class Site:
         self.topics_dir = self.site_dir / "topics"
         self.topics_idx = self.topics_dir / "index"
         self._topics = self._config.get("topics", [])
+        self.new_topics_enabled = strtobool(self._config.get("new_topics", "false"))
+        self.last_topic_file = self.topics_dir / "last_topic.json"
+        if self.topics_dir.exists():
+            self.last_topic_file.touch()
+        self._init_data()
         SITES[sitename] = self
 
     def topic_dir(self, topic: str):
@@ -159,13 +166,13 @@ class Site:
             save_zarr([], k=ZarrKey.articles, root=self.topic_dir(topic))
 
     def _init_data(self):
-        assert not os.path.exists(self.topics_idx)
-        os.makedirs(self.topics_idx)
-        load_zarr(k=ZarrKey.topics, root=self.topics_idx, dims=2, overwrite=True)
+        if not os.path.exists(self.topics_idx):
+            os.makedirs(self.topics_idx)
+            load_zarr(k=ZarrKey.topics, root=self.topics_idx, dims=2, overwrite=True)
 
     def load_topics(self, force=False):
         if self.topics_arr is None or force:
-            self.topics_arr = load_zarr(k=ZarrKey.topics, root=self.topics_idx, dims=2)
+            self.topics_arr = load_zarr(k=ZarrKey.topics, root=self.topics_idx, dims=2, nocache=force)
             if self.topics_arr is None:
                 raise IOError(f"Couldn't load topics. for root {self.topics_idx}")
             if len(self.topics_arr) > 0:
@@ -263,6 +270,11 @@ class Site:
             if a is not int:
                 valid.append(a)
         self.save_articles(valid, topic=topic, reset=True)
+
+    def topicsWatcher(self):
+        while True:
+            self.load_topics(force=True)
+            time.sleep(self.topics_sync_freq)
 
 
 # def init_topic(topic: str):

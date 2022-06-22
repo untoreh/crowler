@@ -358,7 +358,7 @@ proc start*(doclear = false, port = 0) =
     server.serve(loglevel = INFO)
 
 when isMainModule:
-    # initThread()
+    initThread()
     # let topic = "vps"
     # let page = buildHomePage("en", "")
     # page.writeHtml(SITE_PATH / "index.html")

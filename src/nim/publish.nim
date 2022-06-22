@@ -42,8 +42,7 @@ proc initLS(): LocalitySensitive[uint64] =
     return lsh
 
 proc getLSPath(topic: string): string =
-    DATA_PATH / "topics" / topic / "lsh"
-
+    DATA_PATH / "sites" / WEBSITE_NAME / "topics" / topic / "lsh"
 
 import zstd / [compress, decompress]
 type
@@ -99,7 +98,7 @@ proc addArticle(lsh: LocalitySensitive[uint64], a: Article): bool =
 
 proc curPageNumber(topic: string): int =
     withPyLock:
-        return ut.get_top_page(topic).to(int)
+        return site.get_top_page(topic).to(int)
     # return getSubdirNumber(topic, curdir)
 
 proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, istop = false,
@@ -114,7 +113,7 @@ proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, i
     # if we pass a pagecount we mean to finalize
     if finalize:
         withPyLock:
-            discard ut.update_page_size(topic, pagenum.parseInt, pagecount, final = true)
+            discard site.update_page_size(topic, pagenum.parseInt, pagecount, final = true)
     if with_arts:
         for a in arts:
             processHtml(topic / pagenum, a.slug, buildPost(a), a)
@@ -148,7 +147,7 @@ proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
 #     ## and resets their page numbers
 #     let done = topicDonePages(topic)
 #     withPyLock:
-#         assert isa(done, ut.za.Group)
+#         assert isa(done, site.za.Group)
 #         let topdir = len(done)
 #         if topdir == 0:
 #             return
@@ -196,13 +195,13 @@ proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
             doneArts.add a
     updateTopicPubdate()
     withPyLock:
-        discard ut.save_done(topic, len(arts), donePy, pagenum)
+        discard site.save_done(topic, len(arts), donePy, pagenum)
     true
 
 proc pubTopic*(topic: string): bool {.gcsafe.} =
     ##  Generates html for a list of `Article` objects and writes to file.
     withPyLock:
-        doassert topic in ut.load_topics()[1]
+        doassert topic in site.load_topics()[1]
     info "pub: topic - {topic}"
     var pagenum = curPageNumber(topic)
     let newpage = pageSize(topic, pagenum) > cfg.MAX_DIR_FILES
@@ -248,11 +247,11 @@ proc pubTopic*(topic: string): bool {.gcsafe.} =
     withPyLock:
         if not newpage:
             # add previous published articles
-            let pagesize = ut.get_page_size(topic, pagenum)
+            let pagesize = site.get_page_size(topic, pagenum)
             # In case we didn't save the count, re-read from disk
             if not pyisnone(pagesize):
                 pagecount += pagesize[0].to(int)
-        discard ut.update_page_size(topic, pagenum, pagecount)
+        discard site.update_page_size(topic, pagenum, pagecount)
 
     finalizePages(topic, pagenum, newpage, pagecount)
     # update feed file
@@ -287,7 +286,7 @@ proc pub*() {.gcsafe.} =
 
 proc resetTopic(topic: string) =
     withPyLock:
-        discard ut.reset_topic_data(topic)
+        discard site.reset_topic_data(topic)
     pageCache[].del(topic.feedKey)
     saveLS(topic, initLS())
 
@@ -312,14 +311,14 @@ proc pubAllPages(topic: string, clear = true) =
 
 # proc refreshPageSizes(topic: string) =
 #     withPyLock:
-#         let grp = ut.topic_group(topic)
+#         let grp = site.topic_group(topic)
 #         let donearts = grp[$topicData.done]
-#         assert isa(donearts, ut.za.Group)
+#         assert isa(donearts, site.za.Group)
 #         assert len(donearts) == len(grp[$topicData.pages])
 #         let topdir = len(donearts) - 1
 #         for pagenum in 0..<topdir:
-#             discard ut.update_page_size(topic, pagenum, len(donearts[$pagenum]), final = true)
-#         discard ut.update_page_size(topic, topdir, len(donearts[$topdir]), final = false)
+#             discard site.update_page_size(topic, pagenum, len(donearts[$pagenum]), final = true)
+#         discard site.update_page_size(topic, topdir, len(donearts[$topdir]), final = false)
 
 # import translate
 # when isMainModule:

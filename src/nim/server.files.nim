@@ -34,7 +34,7 @@ from publish import ut
 type HtmlCache {.borrow: `.`.} = LRUTrans
 proc initHtmlCache(): HtmlCache =
     translate_db.MAX_DB_SIZE = 40 * 1024 * 1024 * 1024
-    translate_db.DB_PATH = DATA_PATH / "html.db"
+    translate_db.DB_PATH = DATA_PATH / "sites" / WEBSITE_DOMAIN / "html.db"
     result = initLRUTrans()
     openDB(result)
 

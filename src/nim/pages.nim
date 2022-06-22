@@ -194,7 +194,7 @@ proc buildHomePage*(lang, amp: string): (VNode, VNode) =
     for _ in 0..<cfg.N_TOPICS:
         var topic: string
         withPyLock:
-            topic = ut.get_random_topic().to(string)
+            topic = site.get_random_topic().to(string)
         if topic in processed:
             continue
         else:

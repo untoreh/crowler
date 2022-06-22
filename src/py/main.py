@@ -6,9 +6,7 @@ import shutil
 import argparse
 import time
 import random
-from pathlib import Path
 
-from searx.shared.shared_simple import schedule
 
 import config as cfg
 from sites import Site
@@ -19,12 +17,11 @@ import utils as ut
 import scheduler
 import blacklist
 from log import logger
-from datetime import datetime
 
 
 def get_kw_batch(site: Site, topic):
     """Get a batch of keywords to search and update lists accordingly."""
-    subdir = cfg.TOPICS_DIR / topic
+    subdir = site.topic_dir(topic)
     kwlist = subdir / "list.txt"
     assert os.path.exists(kwlist)
 
@@ -92,7 +89,7 @@ def run_sources_job(site: Site, topic):
             time.sleep(0.25)
 
 def get_kw_sources(site: Site, topic, remove=cfg.REMOVE_SOURCES):
-    root = site.topics_sources(topic)
+    root = site.topic_sources(topic)
     for _, _, files in os.walk(root):
         for f in files:
             if f not in ("list.txt", "queue.txt", "lsh.json"):
@@ -133,7 +130,7 @@ def run_parse1_job(site, topic):
         return None
 
     logger.info("Parsing %d sources...for %s:%s", len(sources), topic, site.name)
-    arts, feeds = cnt.fromsources(sources, topic)
+    arts, feeds = cnt.fromsources(sources, topic, site)
     topic_path = site.topic_dir(topic)
     sa = sf = None
 
@@ -191,14 +188,14 @@ def run_parse2_job(site: Site, topic):
         logger.info("%s@%s: No articles were found queued.", topic, site.name)
     return a
 
-def new_topic(force=False):
-    last_topic = tpm.get_last_topic()
+def new_topic(site: Site, force=False):
+    last_topic = tpm.get_last_topic(site)
     if force or time.time() - last_topic["time"] > cfg.NEW_TOPIC_FREQ:
-        newtopic = tpm.new_topic()
+        newtopic = tpm.new_topic(site)
         logger.info("topics: added new topic %s", newtopic)
 
 def site_loop(site: Site, target_delay=3600 * 8):
-    topics = list(site.topics)
+    topics = list(site.topics_dict.keys())
     while True:
         # print(h.heap())
         loop_start = time.time()
@@ -207,8 +204,8 @@ def site_loop(site: Site, target_delay=3600 * 8):
         if random.randrange(3) == 0:
             for topic in topics:
                 run_parse2_job(site, topic)
-        if cfg.NEW_TOPICS_ENABLED:
-            new_topic()
+        if site.new_topics_enabled:
+            new_topic(site)
         time.sleep(target_delay - (time.time() - loop_start))
         random.shuffle(topics) # in case of crashes helps to distribute queryies more uniformly
 
@@ -246,4 +243,4 @@ if __name__ == "__main__":
             JOBS_MAP[args.job](args.topic)
         else:
             assert args.job == "newtopic", "Job not understood."
-            JOBS_MAP[args.job](force=True)
+            JOBS_MAP[args.job](Site(sites[0]), force=True)

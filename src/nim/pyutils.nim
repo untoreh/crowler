@@ -67,6 +67,9 @@ proc relpyImport*(relpath: string, prefix = prefixPy): PyObject =
 let pycfg* = relpyImport("config")
 discard relpyImport("log")
 let ut* = relpyImport("utils")
+import cfg
+discard relpyImport("blacklist")
+let site* = relpyImport("sites").Site(WEBSITE_NAME)
 let pySched* = relpyImport("scheduler")
 discard pySched.initPool()
 {.pop guard:pyLock.}
@@ -229,4 +232,3 @@ proc pyget*[T](py: PyObject, k: string, def: T = ""): T =
 #     multireplace(text, [("\n", "\n\n"),
 #                         ("(.)\1{4,}", "\n\n\1")
 #                         ])
-

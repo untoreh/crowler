@@ -52,7 +52,7 @@ proc getArticles*(topic: string, n = 3, pagenum: int = -1): seq[Article] =
 proc getDoneArticles*(topic: string, pagenum: int): seq[Article] =
     withPyLock:
         let
-            grp = ut.topic_group(topic)
+            grp = site.topic_group(topic)
             arts = pyget(grp, $topicData.done / pagenum.intToStr, PyNone)
 
         if arts.isnil or pyisnone(arts):

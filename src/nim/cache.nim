@@ -12,7 +12,7 @@ var pageCache*: ptr PageCache
 let searchCache* = initLockLruCache[int64, string](1000)
 
 proc initPageCache*(): PageCache =
-    let dbpath = DATA_PATH / (WEBSITE_DOMAIN & ".page.db")
+    let dbpath = DATA_PATH / "sites" / WEBSITE_NAME / "page.db"
     translate_db.MAX_DB_SIZE = 40 * 1024 * 1024 * 1024
     debug "cache: storing cache at {dbpath}"
     translate_db.DB_PATH[] = dbpath

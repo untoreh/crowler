@@ -218,12 +218,14 @@ def save_zarr(
 
 
 def load_zarr(
-    k=ZarrKey.articles, subk="", root=cfg.DATA_DIR, dims=1, overwrite=OVERWRITE_FLAG
+        k=ZarrKey.articles, subk="", root=cfg.DATA_DIR, dims=1, overwrite=OVERWRITE_FLAG, nocache=False
 ):
     path = ZarrKey(k).name
     if subk != "":
         path += f"/{subk}"
     cache_key = (path, root)
+    if nocache:
+        del PUBCACHE[cache_key]
     try:
         return PUBCACHE[cache_key]
     except KeyError:

@@ -8,6 +8,15 @@ proc pubTask*() {.gcsafe.} =
     # Give some time to services to warm up
     sleep(10000)
     let t = getTime()
+    var backoff = 1000
+    # start the topic sync thread from python
+    discard pysched.apply(site.topicsWatcher)
+
+    while len(topicsCache) == 0:
+        debug "pubtask: waiting for topics to be created..."
+        sleep(backoff)
+        syncTopics()
+        backoff += 1000
     # Only publish one topic every `CRON_TOPIC`
     var n = len(topicsCache)
     while true:
@@ -71,7 +80,7 @@ proc deleteLowTrafficArts*(topic: string) {.gcsafe.} =
                     deleteArt(capts)
     for n in pagesToReset:
         withPyLock:
-            discard ut.update_pubtime(topic, n)
+            discard site.update_pubtime(topic, n)
 
 const cleanupInterval = 60 * 3600 * 2
 proc cleanupTask*() =

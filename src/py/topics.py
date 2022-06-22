@@ -4,13 +4,11 @@ import os, json, random, time
 import adwords_keywords as adk
 import config as cfg
 import utils as ut
+from sites import Site
 
 CATEGORIES = None
 _CAT_FILE = cfg.DATA_DIR / "google" / "categories.json"
 _KEYWORDS = None
-LAST_TOPIC_FILE = cfg.TOPICS_DIR / "last_topic.json"
-if cfg.TOPICS_DIR.exists():
-    LAST_TOPIC_FILE.touch()
 
 def load_categories(reset=False):
     global CATEGORIES, DONE
@@ -43,8 +41,8 @@ def flatten_categories(flat=[], cats=CATEGORIES):
     return flat
 
 
-def get_last_topic():
-    with open(LAST_TOPIC_FILE, "r") as lt:
+def get_last_topic(site: Site):
+    with open(site.last_topic_file, "r") as lt:
         try:
             last_topic = json.load(lt)
         except:
@@ -52,42 +50,40 @@ def get_last_topic():
     return last_topic
 
 
-def set_last_topic(data):
-    with open(LAST_TOPIC_FILE, "w") as lt:
+def set_last_topic(site: Site, data):
+    with open(site.last_topic_file, "w") as lt:
         json.dump(data, lt)
 
-
-def get_category():
-    last_topic = get_last_topic()
+def get_category(site: Site):
+    last_topic = get_last_topic(site)
     # if the last topic processing ended correctly the topic should be indexed
     tpslug = ut.slugify(last_topic["name"])
-    if tpslug and not ut.is_topic(tpslug):
+    if tpslug and not site.is_topic(tpslug):
         return last_topic["name"]
     if CATEGORIES is None:
         load_categories()
     assert CATEGORIES is not None
     n = random.randrange(len(CATEGORIES))
     v = CATEGORIES.pop(n)
-    set_last_topic({"name": v, "time": int(time.time())})
+    set_last_topic(site, {"name": v, "time": int(time.time())})
     with open(_CAT_FILE, "w") as f:
         json.dump(CATEGORIES, f)
     return v
 
-
-def new_topic():
+def new_topic(site: Site):
     global _KEYWORDS
-    cat = get_category()
+    cat = get_category(site)
     tpslug = ut.slugify(cat)
-    topic_path = cfg.TOPICS_DIR / tpslug
+    topic_dir = site.topic_dir(tpslug)
     try:
-        os.makedirs(topic_path)
+        os.makedirs(topic_dir)
     except:
         pass
     suggestions = suggest(cat)
     assert suggestions is not None
-    with open(topic_path / "list.txt", "w") as f:
+    with open(topic_dir / "list.txt", "w") as f:
         f.write("\n".join(suggestions))
-    ut.add_topics_idx([(tpslug, cat, 0)])
+    site.add_topics_idx([(tpslug, cat, 0)])
     # clear last topic since we saved
     return tpslug
 
@@ -106,9 +102,10 @@ def suggest(topic: str):
     cfg.setproxies()
     return list(dict.fromkeys(sugs))  ## dedup
 
-def save_kws(topic: str, kws: list):
-    topic_path = cfg.TOPICS_DIR / topic
-    sugs = suggest(topic)
-    with open(topic_path / "list.txt", "w") as f:
+def save_kws(site: Site, topic: str, kws: list):
+    topic_dir = site.topic_dir(topic)
+    if not kws:
+        kws.extend(suggest(topic))
+    with open(topic_dir / "list.txt", "w") as f:
         f.seek(0)
         f.write("\n".join(kws))

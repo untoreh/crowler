@@ -37,7 +37,7 @@ proc `[]=`*(t: StatsDB, k: string, v: int32) {.gcsafe.} =
         debug "nimdbx: commited key {k}"
 
 proc initStatsDB*(): StatsDB =
-    let dbpath = DATA_PATH / (WEBSITE_DOMAIN & ".stats.db")
+    let dbpath = DATA_PATH / "sites" / WEBSITE_NAME / "stats.db"
     translate_db.MAX_DB_SIZE = 40 * 1024 * 1024 * 1024
     debug "cache: storing stats at {dbpath}"
     translate_db.DB_PATH[] = dbpath

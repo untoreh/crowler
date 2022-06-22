@@ -85,9 +85,6 @@ DATA_DIR = Path(
 assert DATA_DIR is not None  # and isdir(Path(dirname(DATA_DIR)) / ".venv")
 
 PROXIES_DIR = DATA_DIR / "proxies"
-TOPICS_DIR = DATA_DIR / "topics"
-TOPICS_IDX = TOPICS_DIR / "index"
-KW_HISTORY = "history"
 # how many keywords to try for extracting source links from search engines
 KW_SAMPLE_SIZE = 10
 # How much should a source job take
@@ -107,7 +104,6 @@ PROFANITY_THRESHOLD = 0.5
 # When cap is reached queue gets discarded as FIFO.
 MAX_BACKLOG_SIZE = 100
 
-BLACKLIST_PATH = DATA_DIR / "blacklist.txt"
 NEW_TOPICS_ENABLED = strtobool(
     os.getenv("NEW_TOPICS_ENABLED", "False")
 )  # If the job server should keep adding new topics to the current website

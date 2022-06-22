@@ -21,8 +21,8 @@ let
 
 proc lastPageNum*(topic: string): int =
     withPyLock:
-        assert not ut.get_top_page(topic).isnil
-        return ut.get_top_page(topic).to(int)
+        assert not site.get_top_page(topic).isnil
+        return site.get_top_page(topic).to(int)
 
 import quirks # PySequence requires quirks
 import strutils
@@ -30,16 +30,16 @@ export nimpy
 proc loadTopicsIndex*(): PyObject =
     try:
         withPyLock:
-            return ut.load_topics()[0]
+            return site.load_topics()[0]
     except:
         let m = getCurrentExceptionMsg()
         if "shape is None" in m:
             qdebug "Couldn't load topics, is data dir present?"
 
 type TopicTuple* = (string, string, int)
-proc loadTopics*(): PySequence[TopicTuple] =
+proc loadTopics*(force=false): PySequence[TopicTuple] =
     withPyLock:
-        return initPySequence[TopicTuple](ut.load_topics()[0])
+        return initPySequence[TopicTuple](site.load_topics(force)[0])
 
 proc loadTopics*(n: int): PySequence[TopicTuple] =
     let tp  = loadTopics()
@@ -48,12 +48,12 @@ proc loadTopics*(n: int): PySequence[TopicTuple] =
 
 proc topicDesc*(topic: string): string =
     withPyLock:
-        return ut.get_topic_desc(topic).to(string)
+        return site.get_topic_desc(topic).to(string)
 proc topicUrl*(topic: string, lang: string): string = $(WEBSITE_URL / lang / topic)
 
 proc pageSize*(topic: string, pagenum: int): int =
     withPyLock:
-        let py = ut.get_page_size(topic, pagenum)
+        let py = site.get_page_size(topic, pagenum)
         if pyisnone(py):
             error fmt"Page number: {pagenum} not found for topic: {topic} ."
             return 0
@@ -79,28 +79,28 @@ proc nextTopic*(): string =
 
 proc topicPubdate*(idx: int): Time =
     withPyLock:
-        return ut.get_topic_pubDate(idx).to(int).fromUnix
+        return site.get_topic_pubDate(idx).to(int).fromUnix
 proc topicPubdate*(): Time = topicPubdate(max(0, topicIdx - 1))
 proc updateTopicPubdate*(idx: int) =
     withPyLock:
-        discard ut.set_topic_pubDate(idx)
+        discard site.set_topic_pubDate(idx)
 proc updateTopicPubdate*() =  updateTopicPubdate(max(0, topicIdx - 1))
 
 proc getTopicGroup*(topic: string): PyObject =
     withPyLock:
-        return ut.topic_group(topic)
+        return site.topic_group(topic)
 
 proc topicDonePages*(topic: string): PyObject =
     withPyLock:
-        return ut.topic_group(topic)[$topicData.done]
+        return site.topic_group(topic)[$topicData.done]
 
 proc topicPages*(topic: string): PyObject =
     withPyLock:
-        return ut.topic_group(topic)[$topicData.pages]
+        return site.topic_group(topic)[$topicData.pages]
 
 proc topicArticles*(topic: string): PyObject =
     withPyLock:
-        return ut.topic_group(topic)[$topicData.articles]
+        return site.topic_group(topic)[$topicData.articles]
 
 iterator publishedArticles*[V](topic: string, attr: string = ""): (PyObject, V) =
     var
@@ -111,7 +111,7 @@ iterator publishedArticles*[V](topic: string, attr: string = ""): (PyObject, V) 
         n_arts : int
         v: V
     withPyLock:
-        pydone = ut.topic_group(topic)[$topicData.done]
+        pydone = site.topic_group(topic)[$topicData.done]
         n_pages = len(pydone)
     let getArticleAttr = if attr != "": (art: PyObject) => pyget[V](art, attr, default(V))
                          else: (art: PyObject) => ""
@@ -148,13 +148,13 @@ proc getState*(topic: string): (int, int) =
     assert topdir == lastPageNum(topic)
     return (topdir, numdone)
 
-proc syncTopics*() {.gcsafe} =
+proc syncTopics*(force=false) {.gcsafe} =
     # NOTE: the [0] is required because quirky zarray `getitem`
     withPyLock:
-        assert not ut.isnil
+        assert not site.isnil
     try:
         var
-            pytopics = loadTopics()
+            pytopics = loadTopics(force)
             n_topics: int
         withPyLock:
             n_topics = pytopics.len

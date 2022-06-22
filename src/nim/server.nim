@@ -52,6 +52,7 @@ var
     reqMime {.threadvar.}: string
     reqFile {.threadvar.}: string
     reqKey {.threadvar.}: int64
+    threadInitialized {.threadvar.}: bool
 
 proc initThreadBase*() {.gcsafe, raises: [].} =
     initPy()
@@ -59,6 +60,8 @@ proc initThreadBase*() {.gcsafe, raises: [].} =
     initLogging()
 
 proc initThread*() {.gcsafe, raises: [].} =
+    if threadInitialized:
+        return
     initThreadBase()
     initHtml()
     addLocks()
@@ -76,6 +79,7 @@ proc initThread*() {.gcsafe, raises: [].} =
         translate.initThread()
     except:
         qdebug "failed to init translate"
+    threadInitialized = true
 
 template setEncoding() {.dirty.} =
     var headers: array[1, string]

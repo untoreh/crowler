@@ -1,0 +1,11 @@
+{
+    "strategy": "random",
+    "max_fails": 2,
+    "fail_timeout": "10s",
+    "reload": "10m",
+    "nodes": [
+        "socks5://:?ip=proxies_socks5.txt",
+        "socks4://:?ip=proxies_socks4.txt",
+        "http://:?ip=proxies_http.txt"
+    ]
+}

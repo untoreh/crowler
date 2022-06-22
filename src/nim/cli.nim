@@ -32,6 +32,16 @@ proc clearPage*(url: string) =
             pageCache[].del(SITE_PATH / "amp" / lang / relpath)
             pageCache[].del(SITE_PATH / lang / relpath)
 
+import topics, uri
+proc clearSource(domain: string) =
+    initThread()
+    for topic in topicsCache.keys:
+        for pn in 0..lastPageNum(topic):
+            let arts = getDoneArticles(topic, pn)
+            for ar in arts:
+                if parseUri(ar.url).hostname == domain:
+                    let capts = uriTuple("/" & topic & "/" & $pn & "/" & ar.slug)
+                    deleteArt(capts)
 
 proc cliPubTopic(topic: string) =
     initThread()
@@ -42,7 +52,7 @@ proc cliReindexSearch() =
     pushAllSonic(clear=true)
 
 when isMainModule:
-    dispatchMulti([start], [clearPage], [cliPubTopic], [cliReindexSearch])
+    dispatchMulti([start], [clearPage], [cliPubTopic], [cliReindexSearch], [clearSource])
     # initCache()
     # let url = "http://wsl:5050/web/0/6-best-shared-web-hosting-services-companies-2022"
     # clearPage(url)

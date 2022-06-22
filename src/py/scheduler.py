@@ -17,3 +17,7 @@ def initPool(restart=False):
 
 def apply(f, *args, **kwargs):
     return POOL.apply_async(f, args=args, kwds=kwargs)
+
+def join():
+    assert POOL is not None
+    POOL.join()

@@ -1,0 +1,10 @@
+{
+    "timeout": 30000,
+    "ServeNodes": [
+        "socks5://:8877"
+    ],
+    "ChainNodes": [
+        ":?peer=freepeer.json&keepalive=1"
+    ],
+    "Routes": []
+}

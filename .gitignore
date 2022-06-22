@@ -14,6 +14,16 @@ run/*
 vendor/**/
 docker/
 !docker/*Dockerfile*
+**data/**/cache
+**data/**/sonic/*
+**data/proxies/*.txt
+**data/proxies/pbproxies.json
+# **data/sites/*/topics/*
+# **data/sites/*/*.db
+# **data/sites/*/articles/*
+# **data/sites/*/done/*
+# **data/sites/*/blacklist.txt
+**data/sites/*
 
 # Added by cargo
 

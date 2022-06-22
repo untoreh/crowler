@@ -34,10 +34,12 @@ def get_curlproxy(p=STATIC_PROXY_EP):
         traset.TIMEOUT = REQ_TIMEOUT
         tradl.TIMEOUT = REQ_TIMEOUT
         return c
+
     return curlproxy
 
 
 PROXY_VARS = ("HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy")
+
 
 def setproxies(p=STATIC_PROXY_EP):
     if p:
@@ -99,14 +101,19 @@ DEFAULT_LANG = "en"
 SPACY_MODEL = "en_core_web_sm"
 TAGS_MAX_LEN = 4
 
-ART_MIN_LEN = (
-    400 # minimum article len
-)
+ART_MIN_LEN = 400  # minimum article len
 PROFANITY_THRESHOLD = 0.5
 # The maximum number of articles/feeds to store `unprocessed` for each topic
 # When cap is reached queue gets discarded as FIFO.
 MAX_BACKLOG_SIZE = 100
 
 BLACKLIST_PATH = DATA_DIR / "blacklist.txt"
-NEW_TOPICS_ENABLED = strtobool(os.getenv("NEW_TOPICS_ENABLED", "False")) # If the job server should keep adding new topics to the current website
-NEW_TOPIC_FREQ = 3600 * 8 # Delay between adding new topics
+NEW_TOPICS_ENABLED = strtobool(
+    os.getenv("NEW_TOPICS_ENABLED", "False")
+)  # If the job server should keep adding new topics to the current website
+NEW_TOPIC_FREQ = 3600 * 8  # Delay between adding new topics
+
+SITES_CONFIG_FILE = DATA_DIR / "sites.toml"
+SITES_DIR = DATA_DIR / "sites"
+
+SITES_CONFIG = None

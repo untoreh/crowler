@@ -1,0 +1,14 @@
+{
+    "strategy": "random",
+    "timeout": "30s",
+    "max_fails": 1,
+    "fail_timeout": "30s",
+    "reload": null,
+    "nodes": [
+        "ss+quic://aes-128-cfb:128@:?ip=hostips.txt&keepalive=1",
+        "ss+quic:://tlogin:123@:?ip=torips.txt&keepalive=1",
+        "ss+quic://aes-128-cfb:128@:?ip=hostips.txt&keepalive=1",
+        "ss+quic:://tlogin:123@:?ip=torips.txt&keepalive=1",
+        "ss+quic://aes-128-cfb:128@:?ip=hostips.txt&keepalive=1"
+    ]
+}

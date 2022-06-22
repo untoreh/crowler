@@ -51,8 +51,9 @@ phrasemachine
 textacy
 rake_nltk
 
-# theming
+# config
 git+https://github.com/untoreh/colors.py
+tomli
 # not needed...
 # textacy
 

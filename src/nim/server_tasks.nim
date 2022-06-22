@@ -1,4 +1,4 @@
-import std/times, std/os, strutils
+import std/times, std/os, strutils, hashes
 
 import server_types,
     cfg, types, topics, pyutils, publish, quirks, stats, articles, cache
@@ -21,7 +21,8 @@ proc pubTask*() {.gcsafe.} =
                 # clear homepage and topic page cache
                 {.cast(gcsafe).}:
                     pageCache[].del(fp(""))
-                    pageCache[].del(fp("/" & topic))
+                    pageCache[].del(fp("").hash)
+                    pageCache[].del(fp("/" & topic).hash)
         sleep(cfg.CRON_TOPIC * 1000)
         n -= 1
 

@@ -11,6 +11,7 @@ from pathlib import Path
 from searx.shared.shared_simple import schedule
 
 import config as cfg
+from sites import Site
 import contents as cnt
 import topics as tpm
 import sources # NOTE: searx has some namespace conflicts with google.ads, initialize after the `adwords_keywords` module
@@ -21,7 +22,7 @@ from log import logger
 from datetime import datetime
 
 
-def get_kw_batch(topic):
+def get_kw_batch(site: Site, topic):
     """Get a batch of keywords to search and update lists accordingly."""
     subdir = cfg.TOPICS_DIR / topic
     kwlist = subdir / "list.txt"
@@ -46,15 +47,15 @@ def get_kw_batch(topic):
     return batch
 
 
-def run_sources_job(topic):
+def run_sources_job(site: Site, topic):
     """
     Run one iteration of the job to find source links from keywords. Sources are used to find articles.
     This function should never be called directly, instead `parse1` should use it when it runs out of sources.
     """
     logger.info("Getting kw batch...")
     scheduler.initPool()
-    batch = get_kw_batch(topic)
-    root = cfg.TOPICS_DIR / topic / "sources"
+    batch = get_kw_batch(site, topic)
+    root = site.topic_sources(topic)
     results = dict()
     jobs = dict()
     ready = dict()
@@ -81,7 +82,7 @@ def run_sources_job(topic):
                         results[kw].extend(res)
                         ready[kw] += 1
             if ready[kw] == 3 and ready[kw] >= 0:
-                kwresults = blacklist.exclude_blacklist_sources(results[kw])
+                kwresults = blacklist.exclude_blacklist_sources(site, results[kw])
                 kwresults = sources.dedup_results(kwresults)
                 if kwresults:
                     ut.save_file(kwresults, ut.slugify(kw), root=root)
@@ -90,8 +91,8 @@ def run_sources_job(topic):
                 logger.debug(f"Processed kw: {kw}")
             time.sleep(0.25)
 
-def get_kw_sources(topic, remove=cfg.REMOVE_SOURCES):
-    root = cfg.TOPICS_DIR / topic / "sources"
+def get_kw_sources(site: Site, topic, remove=cfg.REMOVE_SOURCES):
+    root = site.topics_sources(topic)
     for _, _, files in os.walk(root):
         for f in files:
             if f not in ("list.txt", "queue.txt", "lsh.json"):
@@ -110,55 +111,55 @@ def get_kw_sources(topic, remove=cfg.REMOVE_SOURCES):
                 return kws
 
 
-def ensure_sources(topic):
-    sources = get_kw_sources(topic)
+def ensure_sources(site, topic):
+    sources = get_kw_sources(site, topic)
     if not sources:
         logger.info("No sources remaining, fetching new sources...")
-        run_sources_job(topic)
-        sources = get_kw_sources(topic)
+        run_sources_job(site, topic)
+        sources = get_kw_sources(site, topic)
     if not sources:
         raise ValueError("Could not ensure sources for topic %s.", topic)
     return sources
 
 
-def run_parse1_job(topic):
+def run_parse1_job(site, topic):
     """
     Run one iteration of the job to find articles and feeds from source links.
     """
     try:
-        sources = ensure_sources(topic)
+        sources = ensure_sources(site, topic)
     except ValueError:
-        logger.warning("Couldn't find sources for topic %s.", topic)
+        logger.warning("Couldn't find sources for topic %s, site: %s.", topic, site.name)
         return None
 
-    logger.info("Parsing %d sources...for %s", len(sources), topic)
+    logger.info("Parsing %d sources...for %s:%s", len(sources), topic, site.name)
     arts, feeds = cnt.fromsources(sources, topic)
-    topic_path = cfg.TOPICS_DIR / Path(topic)
+    topic_path = site.topic_dir(topic)
     sa = sf = None
 
     if arts:
-        logger.info("%s: Saving %d articles.", topic, len(arts))
+        logger.info("%s@%s: Saving %d articles.", topic, site.name, len(arts))
         sa = ut.save_zarr(arts, k=ut.ZarrKey.articles, root=topic_path)
     else:
-        logger.info("%s: No articles found.", topic)
+        logger.info("%s@%s: No articles found.", topic, site.name)
 
     if feeds:
-        logger.info("%s: Saving %d articles.", topic, len(feeds))
+        logger.info("%s@%s: Saving %d articles.", topic, site.name, len(feeds))
         sf = ut.save_zarr(feeds, k=ut.ZarrKey.feeds, root=topic_path)
     else:
-        logger.info("%s: No feeds found.", topic)
+        logger.info("%s@%s: No feeds found.", topic, site.name)
 
     return (sa, sf)
 
 
-def get_feeds(topic, n=3, resize=True):
+def get_feeds(site: Site, topic, n=3, resize=True):
     while True:
-        z = ut.load_zarr(k=ut.ZarrKey.feeds, root=cfg.TOPICS_DIR / topic)
+        z = ut.load_zarr(k=ut.ZarrKey.feeds, root=site.topic_dir(topic))
         if len(z) > 0:
             break
         else:
             logger.info("No feeds found to parse for topic %s, searching new ones", topic)
-            run_parse1_job(topic)
+            run_parse1_job(site, topic)
     if len(z) < n:
         if resize:
             z.resize(0)
@@ -170,24 +171,24 @@ def get_feeds(topic, n=3, resize=True):
         return f
 
 
-def run_parse2_job(topic):
+def run_parse2_job(site: Site, topic):
     """
     Run one iteration of the job to find articles from feed links.
     """
-    feed_links = get_feeds(topic, 3)
+    feed_links = get_feeds(site, topic, 3)
     if not feed_links:
-        logger.warning("Couldn't find feeds for topic %s", topic)
+        logger.warning("Couldn't find feeds for topic %s@%s", topic, site.name)
         return None
     logger.info("Search %d feeds for articles...", len(feed_links))
     articles = cnt.fromfeeds(feed_links)
     a = None
     if articles:
-        logger.info("%s: Saving %d articles.", topic, len(articles))
+        logger.info("%s@%s: Saving %d articles.", topic, site.name, len(articles))
         a = ut.save_zarr(
-            articles, k=ut.ZarrKey.articles, root=cfg.TOPICS_DIR / Path(topic)
+            articles, k=ut.ZarrKey.articles, root=site.topic_dir(topic)
         )
     else:
-        logger.info("%s: No articles were found queued.", topic)
+        logger.info("%s@%s: No articles were found queued.", topic, site.name)
     return a
 
 def new_topic(force=False):
@@ -196,21 +197,28 @@ def new_topic(force=False):
         newtopic = tpm.new_topic()
         logger.info("topics: added new topic %s", newtopic)
 
-def run_server(topics):
-    from guppy import hpy
-    h = hpy()
-    delay = 3600 * 8
-    random.shuffle(topics) # in case of crashes helps to distribute queryies more uniformly
+def site_loop(site: Site, target_delay=3600 * 8):
+    topics = list(site.topics)
     while True:
         # print(h.heap())
+        loop_start = time.time()
         for topic in topics:
-            run_parse1_job(topic)
+            run_parse1_job(site, topic)
         if random.randrange(3) == 0:
             for topic in topics:
-                run_parse2_job(topic)
+                run_parse2_job(site, topic)
         if cfg.NEW_TOPICS_ENABLED:
             new_topic()
-        time.sleep(delay)
+        time.sleep(target_delay - (time.time() - loop_start))
+        random.shuffle(topics) # in case of crashes helps to distribute queryies more uniformly
+
+def run_server(sites):
+    # from guppy import hpy
+    # h = hpy()
+    for sitename in sites:
+        site = Site(sitename)
+        scheduler.apply(site_loop, site)
+    scheduler.join()
 
 JOBS_MAP = {
     "sources": run_sources_job,
@@ -222,21 +230,20 @@ JOBS_MAP = {
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-job", help="What kind of job to perform", default="parse1")
-    parser.add_argument("-topics", help="The topics to fetch articles for.", default="")
+    parser.add_argument("-sites", help="The sites to run the server for.", default="")
     parser.add_argument("-workers", help="How many workers.", default=cfg.POOL_SIZE)
     parser.add_argument("-server", help="Start the server.", default=False)
+    parser.add_argument("-topic", help="Specify a single topic.", default="")
     args = parser.parse_args()
     cfg.POOL_SIZE = int(args.workers)
-    topics = args.topics.split(",")
-    if topics and topics[0] != "":
-        if topics[0] == "all":
-            topics = list(ut.load_topics()[1].keys())
-        if args.server:
-            run_server(topics)
-        else:
-            for tp in topics:
-                JOBS_MAP[args.job](tp)
-    elif args.job == "newtopic":
-        JOBS_MAP[args.job](force=True)
+    sites = args.sites.split(",")
+    if args.server:
+        assert len(sites) > 0 and sites[0] != "", "Invalid sites list."
+        run_server(sites)
     else:
-        raise ValueError("Pass `-topics` as argument to run a job.")
+        assert len(sites) == 1, "Can only execute jobs on a single site:topic combination."
+        if args.topic != "":
+            JOBS_MAP[args.job](args.topic)
+        else:
+            assert args.job == "newtopic", "Job not understood."
+            JOBS_MAP[args.job](force=True)

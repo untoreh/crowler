@@ -2,6 +2,7 @@ import uri
 import ./base
 
 const
+    WEBSITE_NAME* = "wsl"
     WEBSITE_DOMAIN* = "wsl"
     WEBSITE_URL* = parseUri("http://" & WEBSITE_DOMAIN & WEBSITE_DEBUG_PORT)
     WEBSITE_TITLE* = "wsl"

@@ -2,6 +2,7 @@
 set -e
 trg=docker
 site=${1:-wsl}
+dobuild=${2}
 
 [ -e $trg/cli ] && rm -f $trg/cli
 cp requirements.txt $trg/
@@ -13,7 +14,8 @@ mkdir -p $trg/{site,lib,data}
     echo data dir is a volume and should be empty
     exit 1
 }
-cp -aL src/assets/logo $trg/site/assets
+mkdir -p $trg/site/assets/logo
+cp -aL src/assets/logo/* $trg/site/assets/logo/
 cp -a src/{assets,css,js} $trg/src/ &>/dev/null
 mkdir -p $trg/src/nim
 cp -a src/nim/*.nim $trg/src/nim/
@@ -23,7 +25,8 @@ mkdir -p $trg/{src/py,lib}
 cp -a src/py/*.py $trg/src/py/
 ln -srf $trg/src/py $trg/lib/
 
-scripts/cssconfig.sh $site
+scripts/cssconfig.sh -b $site
+
 cp -a dist/*{.js,.css,.png} $trg/site/assets
 cp -a dist/*{.js,.css,.png} $trg/site/assets
 libminify=src/rust/target/release/libminify_html_c.a

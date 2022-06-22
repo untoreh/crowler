@@ -1,0 +1,11 @@
+{
+    "strategy": "random",
+    "max_fails": 2,
+    "fail_timeout": "10s",
+    "reload": "10m",
+    "nodes": [
+        "http://:?ip=pbproxies_http.txt",
+        "socks5://:?ip=pbproxies_s5.txt",
+        "socks4://:?ip=pbproxies_s4.txt"
+    ]
+}

@@ -17,7 +17,7 @@ import blacklist
 SITES = {}
 
 
-def read_sites_config(sitename: str):
+def read_sites_config(sitename: str, ensure=False):
     global SITES_CONFIG
     if cfg.SITES_CONFIG is None:
         try:
@@ -27,10 +27,11 @@ def read_sites_config(sitename: str):
             print(e)
             cfg.SITES_CONFIG_FILE.touch()
             SITES_CONFIG = {}
-    assert (
-        sitename in SITES_CONFIG
-    ), f"Site name provided not found in main config file, {cfg.SITES_CONFIG_FILE}"
-    return SITES_CONFIG[sitename]
+    if ensure:
+        assert (
+            sitename in SITES_CONFIG
+        ), f"Site name provided not found in main config file, {cfg.SITES_CONFIG_FILE}"
+    return SITES_CONFIG.get(sitename, {})
 
 
 class Site:
@@ -52,7 +53,7 @@ class Site:
         self.topics_dir = self.site_dir / "topics"
         self.topics_idx = self.topics_dir / "index"
         self._topics = self._config.get("topics", [])
-        self.new_topics_enabled = strtobool(self._config.get("new_topics", "false"))
+        self.new_topics_enabled = self._config.get("new_topics", False)
         self.last_topic_file = self.topics_dir / "last_topic.json"
         if self.topics_dir.exists():
             self.last_topic_file.touch()
@@ -69,11 +70,15 @@ class Site:
     def name(self):
         return self._name
 
-    def load_articles(self, topic: str, k=ZarrKey.articles):
-        return load_zarr(k=k, subk="", root=self.topic_dir(topic))
+    def load_articles(self, topic: str, k=ZarrKey.articles, subk=""):
+        return load_zarr(k=k, subk=subk, root=self.topic_dir(topic))
 
-    def load_done(self, topic: str):
-        return self.load_articles(topic, k=ZarrKey.done)
+    def load_done(self, topic: str, pagenum: Optional[int] = None):
+        return (
+            self.topic_group(topic)["done"]
+            if pagenum is None
+            else self.load_articles(topic, k=ZarrKey.done, subk=pagenum)
+        )
 
     def save_done(self, topic: str, n_processed: int, done: MutableSequence, pagenum):
         assert topic != ""
@@ -172,7 +177,9 @@ class Site:
 
     def load_topics(self, force=False):
         if self.topics_arr is None or force:
-            self.topics_arr = load_zarr(k=ZarrKey.topics, root=self.topics_idx, dims=2, nocache=force)
+            self.topics_arr = load_zarr(
+                k=ZarrKey.topics, root=self.topics_idx, dims=2, nocache=force
+            )
             if self.topics_arr is None:
                 raise IOError(f"Couldn't load topics. for root {self.topics_idx}")
             if len(self.topics_arr) > 0:

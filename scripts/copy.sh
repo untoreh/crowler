@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -e
 trg=docker
-site=${1:-wsl}
-dobuild=${2}
+sites=$(echo "${1:-wsl}" | tr "," "\n")
 
 [ -e $trg/cli ] && rm -f $trg/cli
 cp requirements.txt $trg/
@@ -16,6 +15,7 @@ mkdir -p $trg/{site,lib,data}
 }
 mkdir -p $trg/site/assets/logo
 cp -aL src/assets/logo/* $trg/site/assets/logo/
+mkdir -p $trg/src
 cp -a src/{assets,css,js} $trg/src/ &>/dev/null
 mkdir -p $trg/src/nim
 cp -a src/nim/*.nim $trg/src/nim/
@@ -25,13 +25,20 @@ mkdir -p $trg/{src/py,lib}
 cp -a src/py/*.py $trg/src/py/
 ln -srf $trg/src/py $trg/lib/
 
-scripts/cssconfig.sh -b $site
+for site in $sites; do
+    [ "$site" = scraper ] && continue
+    scripts/cssconfig.sh -b $site
+    for fn in dist/*{.js,.css,.png}; do
+        # name=$(basename ${fn%%.*})
+        # ext=${fn##*.}
+        mkdir -p $trg/site/assets/${site}
+        cp -a $fn $trg/site/assets/${site}/$(basename ${fn})
+    done
+done
 
-cp -a dist/*{.js,.css,.png} $trg/site/assets
-cp -a dist/*{.js,.css,.png} $trg/site/assets
 libminify=src/rust/target/release/libminify_html_c.a
 mkdir -p "$trg/$(dirname $libminify)"
-cp -a $libminify $trg/$libminify
+cp -a $libminify "${trg}/${libminify}"
 cp -a lib/vendor/imageflow.dist/libimageflow.so $trg/lib
 cp -a nim.cfg $trg/
 cp -a site.nimble $trg/

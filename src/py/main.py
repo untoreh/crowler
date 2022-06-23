@@ -212,10 +212,15 @@ def site_loop(site: Site, target_delay=3600 * 8):
 def run_server(sites):
     # from guppy import hpy
     # h = hpy()
+    scheduler.initPool()
+    jobs = []
     for sitename in sites:
         site = Site(sitename)
-        scheduler.apply(site_loop, site)
-    scheduler.join()
+        j = scheduler.apply(site_loop, site)
+        jobs.append(j)
+    # NOTE: this runs indefinitely
+    for j in jobs:
+        j.wait()
 
 JOBS_MAP = {
     "sources": run_sources_job,

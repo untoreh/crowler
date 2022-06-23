@@ -23,9 +23,9 @@ const
     SITE_ASSETS_DIR* = DirSep & "assets"
     DATA_PATH* = PROJECT_PATH / "data"
     ASSETS_PATH* = PROJECT_PATH / "src" / "assets"
-    CSS_REL_URL* = SITE_ASSETS_DIR / "/bundle.css"
-    JS_REL_URL* = SITE_ASSETS_DIR / "/bundle.js"
-    LOGO_DIR* = WEBSITE_URL / SITE_ASSETS_DIR / "logo"
+    CSS_REL_URL* = SITE_ASSETS_DIR & "/" & WEBSITE_NAME & "/bundle.css"
+    JS_REL_URL* = SITE_ASSETS_DIR & "/" & WEBSITE_NAME & "/bundle.js"
+    LOGO_DIR* = WEBSITE_URL / SITE_ASSETS_DIR / "logo" / WEBSITE_NAME
     LOGO_URL* = $(LOGO_DIR / "logo.svg")
     LOGO_SMALL_URL* = $(LOGO_DIR / "logo-small.svg")
     LOGO_ICON_URL* = $(LOGO_DIR / "logo-icon.svg")

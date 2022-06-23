@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 from typing import MutableSequence
 from urllib.parse import urlparse
 from pathlib import Path
@@ -9,7 +10,11 @@ def load_blacklist(site):
         with open(site.blacklist_path, "r") as f:
             return set(f.read())
     except:
-        Path(site.blacklist_path).touch()
+        blacklist_path = Path(site.blacklist_path)
+        if not blacklist_path.exists():
+            os.makedirs(blacklist_path.parent)
+        blacklist_path.touch()
+        return set()
 
 def exclude(site, k):
     u = urlparse(k)

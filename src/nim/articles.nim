@@ -99,7 +99,7 @@ proc getArticle*(topic, page, slug: auto): Article =
         else:
             emptyArt
 
-proc isEmpty*(a: Article): bool = a.title == ""
+proc isEmpty*(a: Article): bool = a.isnil or a.title == ""
 
 proc getAuthor*(a: Article): string {.inline.} =
     if a.author.isEmptyOrWhitespace:

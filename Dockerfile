@@ -44,6 +44,7 @@ RUN pip3 install pyyaml supervisor && \
     pip3 install -r requirements.txt
 
 FROM sitedeps2 AS scraper
+ENV SITES wsl,wsl
 COPY / /site/
 RUN python3 lib/py/main.py; true # perform modules setups on imports
 CMD /site/scripts/scraper.sh

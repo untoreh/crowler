@@ -26,12 +26,12 @@ compressor = Blosc(cname="zstd", clevel=2, shuffle=Blosc.BITSHUFFLE)
 codec = numcodecs.Pickle()
 TOPICS: Optional[za.Array] = None
 TPDICT: Dict[str, str] = dict()
-PUBCACHE = LRUCache(2**20)
+PUBCACHE = LRUCache(16)
 OVERWRITE_FLAG = strtobool(os.getenv("RESET_ARTICLES", "False"))
 
 
 def init_lru(n=1000):
-    zict_storage = za.DirectoryStore(cfg.REQ_CACHE_DIR)
+    zict_storage = za.DirectoryStore(cfg.CACHE_DIR)
     zict_compressor = Func(compressor.encode, compressor.decode, zict_storage)
     zict_codec = Func(codec.encode, codec.decode, zict_compressor)
     return LRU(n, zict_codec)
@@ -208,7 +208,7 @@ def save_zarr(
             "compressor": compressor,
             "dtype": object,
         }
-        if not data:
+        if len(data) == 0:
             kwargs["shape"] = (0, 3) if k == ZarrKey.topics else (0,)
             zfun = za.empty
         else:
@@ -216,14 +216,17 @@ def save_zarr(
             zfun = za.save_array
         zfun(**kwargs)
 
-
-def load_zarr(
-        k=ZarrKey.articles, subk="", root=cfg.DATA_DIR, dims=1, overwrite=OVERWRITE_FLAG, nocache=False
-):
+def arr_key(k=ZarrKey.articles, subk="", root=cfg.DATA_DIR):
     path = ZarrKey(k).name
     if subk != "":
         path += f"/{subk}"
     cache_key = (path, root)
+    return cache_key, path
+
+def load_zarr(
+        k=ZarrKey.articles, subk="", root=cfg.DATA_DIR, dims=1, overwrite=OVERWRITE_FLAG, nocache=False
+):
+    cache_key, path = arr_key(k, subk, root)
     if nocache:
         del PUBCACHE[cache_key]
     try:

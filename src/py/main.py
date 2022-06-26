@@ -12,7 +12,7 @@ import config as cfg
 from sites import Site
 import contents as cnt
 import topics as tpm
-import sources # NOTE: searx has some namespace conflicts with google.ads, initialize after the `adwords_keywords` module
+import sources  # NOTE: searx has some namespace conflicts with google.ads, initialize after the `adwords_keywords` module
 import utils as ut
 import scheduler
 import blacklist
@@ -23,7 +23,7 @@ def get_kw_batch(site: Site, topic):
     """Get a batch of keywords to search and update lists accordingly."""
     subdir = site.topic_dir(topic)
     kwlist = subdir / "list.txt"
-    assert os.path.exists(kwlist)
+    assert kwlist.exists(), f"kwbatch: {kwlist} was not found on storage"
 
     queue = subdir / "queue"
     kws = ut.read_file(queue)
@@ -79,7 +79,9 @@ def run_sources_job(site: Site, topic):
                         results[kw].extend(res)
                         ready[kw] += 1
             if ready[kw] == 3 and ready[kw] >= 0:
-                kwresults = blacklist.exclude_blacklist_sources(site, results[kw])
+                kwresults = blacklist.exclude_blacklist_sources(
+                    site, results[kw], blacklist.exclude_sources
+                )
                 kwresults = sources.dedup_results(kwresults)
                 if kwresults:
                     ut.save_file(kwresults, ut.slugify(kw), root=root)
@@ -87,6 +89,7 @@ def run_sources_job(site: Site, topic):
                 ready[kw] = -1
                 logger.debug(f"Processed kw: {kw}")
             time.sleep(0.25)
+
 
 def get_kw_sources(site: Site, topic, remove=cfg.REMOVE_SOURCES):
     root = site.topic_sources(topic)
@@ -126,7 +129,9 @@ def run_parse1_job(site, topic):
     try:
         sources = ensure_sources(site, topic)
     except ValueError:
-        logger.warning("Couldn't find sources for topic %s, site: %s.", topic, site.name)
+        logger.warning(
+            "Couldn't find sources for topic %s, site: %s.", topic, site.name
+        )
         return None
 
     logger.info("Parsing %d sources...for %s:%s", len(sources), topic, site.name)
@@ -155,7 +160,9 @@ def get_feeds(site: Site, topic, n=3, resize=True):
         if len(z) > 0:
             break
         else:
-            logger.info("No feeds found to parse for topic %s, searching new ones", topic)
+            logger.info(
+                "No feeds found to parse for topic %s, searching new ones", topic
+            )
             run_parse1_job(site, topic)
     if len(z) < n:
         if resize:
@@ -181,12 +188,11 @@ def run_parse2_job(site: Site, topic):
     a = None
     if articles:
         logger.info("%s@%s: Saving %d articles.", topic, site.name, len(articles))
-        a = ut.save_zarr(
-            articles, k=ut.ZarrKey.articles, root=site.topic_dir(topic)
-        )
+        a = ut.save_zarr(articles, k=ut.ZarrKey.articles, root=site.topic_dir(topic))
     else:
         logger.info("%s@%s: No articles were found queued.", topic, site.name)
     return a
+
 
 def new_topic(site: Site, force=False):
     last_topic = tpm.get_last_topic(site)
@@ -194,9 +200,11 @@ def new_topic(site: Site, force=False):
         newtopic = tpm.new_topic(site)
         logger.info("topics: added new topic %s", newtopic)
 
+
 def site_loop(site: Site, target_delay=3600 * 8):
-    topics = list(site.topics_dict.keys())
+    site.load_topics()
     while True:
+        topics = list(site.topics_dict.keys())
         # print(h.heap())
         loop_start = time.time()
         for topic in topics:
@@ -207,7 +215,10 @@ def site_loop(site: Site, target_delay=3600 * 8):
         if site.new_topics_enabled:
             new_topic(site)
         time.sleep(target_delay - (time.time() - loop_start))
-        random.shuffle(topics) # in case of crashes helps to distribute queryies more uniformly
+        random.shuffle(
+            topics
+        )  # in case of crashes helps to distribute queryies more uniformly
+
 
 def run_server(sites):
     # from guppy import hpy
@@ -222,11 +233,12 @@ def run_server(sites):
     for j in jobs:
         j.wait()
 
+
 JOBS_MAP = {
     "sources": run_sources_job,
     "parse1": run_parse1_job,
     "parse2": run_parse2_job,
-    "newtopic": new_topic
+    "newtopic": new_topic,
 }
 
 if __name__ == "__main__":
@@ -243,9 +255,12 @@ if __name__ == "__main__":
         assert len(sites) > 0 and sites[0] != "", "Invalid sites list."
         run_server(sites)
     else:
-        assert len(sites) == 1, "Can only execute jobs on a single site:topic combination."
+        assert (
+            len(sites) == 1
+        ), "Can only execute jobs on a single site:topic combination."
+        st = Site(sites[0])
         if args.topic != "":
-            JOBS_MAP[args.job](args.topic)
+            JOBS_MAP[args.job](st, args.topic)
         else:
             assert args.job == "newtopic", "Job not understood."
-            JOBS_MAP[args.job](Site(sites[0]), force=True)
+            JOBS_MAP[args.job](st, force=True)

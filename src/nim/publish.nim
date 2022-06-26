@@ -20,7 +20,8 @@ import cfg,
        articles,
        cache,
        search,
-       pyutils
+       pyutils,
+       sitemap
 
 privateAccess(LocalitySensitive)
 let pageset = initLockTable[string, bool]()
@@ -228,7 +229,7 @@ proc pubTopic*(topic: string): bool {.gcsafe.} =
     let newposts = len(posts)
     if newposts == 0:
         info "No new posts written for topic: {topic}"
-        return
+        return false
     # only write articles after having saved LSH (within `filterDuplicates)
     # to avoid duplicates. It is fine to add articles to the set
     # even if we don't publish them, but we never want duplicates
@@ -262,10 +263,12 @@ proc pubTopic*(topic: string): bool {.gcsafe.} =
         for ar in doneArts:
             var relpath = topic / $pagenum / ar.slug
             search.push(relpath)
+    clearSiteMap(topic)
     # update ydx turbo items
     when cfg.YDX:
         writeFeed()
     info "pub: published {len(doneArts)} new posts."
+    return true
 
 let lastPubTime = create(Time)
 var pubLock: Lock
@@ -288,6 +291,7 @@ proc resetTopic(topic: string) =
     withPyLock:
         discard site.reset_topic_data(topic)
     pageCache[].del(topic.feedKey)
+    clearSiteMap(topic)
     saveLS(topic, initLS())
 
 proc pubAllPages(topic: string, clear = true) =

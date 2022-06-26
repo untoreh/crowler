@@ -10,10 +10,12 @@ import nltk
 from textacy import similarity
 from re import sub
 
-nltk.download("stopwords")
+try:
+    nltk.data.find("corpora/stopwords")
+except LookupError:
+    nltk.download("stopwords")
 rk = Rake()
 rk.max_length = cfg.TAGS_MAX_LEN
-
 
 def ate(text, n=3):
     tags = combo_basic(text)

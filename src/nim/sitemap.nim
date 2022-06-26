@@ -62,8 +62,13 @@ proc buildTopicSitemap(topic: string): XmlNode =
             warn "Number of URLs for sitemap of topic: {topic} exceeds limit! {n_entries}/{maxEntries}"
             break
         for a in done[pagenum]:
-            let url = newElement("url")
-            url.attrs = {"loc": getArticleUrl(a, topic).escape}.toXmlAttributes
+            if pyisnone(a):
+                continue
+            let
+                url = newElement("url")
+                loc = newElement("loc")
+            loc.add getArticleUrl(a, topic).escape.newText
+            url.add loc
             for lang in TLangsCodes:
                 let link = newElement("xhtml:link")
                 link.attrs = {"href": getArticleUrl(a, topic, lang).escape,
@@ -82,6 +87,10 @@ proc fetchSiteMap*(topic: string): string =
             else: buildTopicSitemap(topic)).toXmlString
         doassert sizeof(sm) * sm.len < maxSize
         sm
+
+proc clearSiteMap*(topic: string) =
+    {.cast(gcsafe)}:
+        pageCache[].del(topic.sitemapKey)
 
 {.pop gcsafe.}
 

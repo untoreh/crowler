@@ -14,10 +14,12 @@ proc minify*(code: cstring,
              minify_css = true,
              minify_js = true,
              remove_bangs = false,
-             remove_processing_instructions = false): cstring {.importc: "minify".}
+             remove_processing_instructions = true): cstring {.importc: "minify".}
 
 proc minifyHtml*(tree: VNode): string = $minify(($tree).cstring)
 proc minifyHtml*(data: string): string = $minify(data.cstring)
+template minifyHtml*(data: string, args: varargs[untyped]): string =
+    $minify(data.cstring, args)
 
 when isMainModule:
     let html: cstring = "<!doctype html> <body> asd </body> </html>"

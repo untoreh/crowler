@@ -39,13 +39,17 @@ proc join*(tup: UriCaptures, sep = "/", n = 0): string =
             c += 1
     s.join(sep)
 
-proc fp*(relpath: string): string =
-    ## Full file path
-    SITE_PATH / (if relpath == "":
+proc suffixPath*(relpath: string): string =
+    if relpath == "":
         "index.html"
     elif relpath.splitFile.ext == "":
         relpath & ".html"
-    else: relpath)
+    else: relpath
+
+proc fp*(relpath: string): string =
+    ## Full file path
+    # NOTE: Only Unix paths make sense! because `/` operator would output `\` on windows
+    SITE_PATH / relpath.suffixPath()
 
 var mimes {.threadvar.}: MimeDB
 proc mimePath*(url: string): string {.gcsafe.} =

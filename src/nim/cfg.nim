@@ -68,9 +68,18 @@ const
     PUBLISH_TIMEOUT* = 10 ## In seconds
     N_RELATED* = 3 # how many related articles to display at the bottom of an article page
     N_TOPICS* = 10 # Number of articles (1 per topic) to display on the homepage
-    CRON_TOPIC* = 10 # Seconds between a `pub` job run
-    CRON_TOPIC_FREQ* = 8 # Hours between a specific topic `pub` job run
-    CLEANUP_AGE* = 3600 * 24 * 30 * 4 # Period in seconds, after which an article can be removed
-    CLEANUP_HITS* = 2 # Minimum number of hits an article has to have to avoid cleanup
+
+# Seconds between a `pub` job run
+when not declared(CRON_TOPIC):
+    const CRON_TOPIC* = 10
+# Hours between a specific topic `pub` job run
+when not declared(CRON_TOPIC_FREQ):
+    const CRON_TOPIC_FREQ* = 8
+# Period in seconds, after which an article can be removed
+when not declared(CLEANUP_AGE):
+    const CLEANUP_AGE* = 3600 * 24 * 30 * 4
+# Minimum number of hits an article has to have to avoid cleanup
+when not declared(CLEANUP_HITS):
+    const CLEANUP_HITS* = 2
 
 static: echo "Project Path is '" & PROJECT_PATH & "'"

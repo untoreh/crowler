@@ -17,6 +17,7 @@ mkdir -p $trg/site/assets/logo
 cp -aL src/assets/logo/* $trg/site/assets/logo/
 mkdir -p $trg/src
 cp -a src/{assets,css,js} $trg/src/ &>/dev/null
+
 mkdir -p $trg/src/nim
 cp -a src/nim/*.nim $trg/src/nim/
 cp -a src/nim/{config,vendor} $trg/src/nim/

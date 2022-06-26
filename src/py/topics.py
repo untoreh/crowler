@@ -1,5 +1,6 @@
 from pytrends.request import TrendReq
 import os, json, random, time
+from textblob import TextBlob
 
 import adwords_keywords as adk
 import config as cfg
@@ -9,6 +10,12 @@ from sites import Site
 CATEGORIES = None
 _CAT_FILE = cfg.DATA_DIR / "google" / "categories.json"
 _KEYWORDS = None
+if os.path.exists(cfg.TOPICS_BLACKLIST):
+    with open(cfg.TOPICS_BLACKLIST, "r") as f:
+        BLACKLIST = set(f.read().split("\n"))
+else:
+    BLACKLIST = set()
+MIN_SENTIMENT = 0.17
 
 def load_categories(reset=False):
     global CATEGORIES, DONE
@@ -54,11 +61,11 @@ def set_last_topic(site: Site, data):
     with open(site.last_topic_file, "w") as lt:
         json.dump(data, lt)
 
-def get_category(site: Site):
+def get_category(site: Site, force=False):
     last_topic = get_last_topic(site)
     # if the last topic processing ended correctly the topic should be indexed
     tpslug = ut.slugify(last_topic["name"])
-    if tpslug and not site.is_topic(tpslug):
+    if (not force) and (tpslug and not site.is_topic(tpslug)):
         return last_topic["name"]
     if CATEGORIES is None:
         load_categories()
@@ -70,9 +77,14 @@ def get_category(site: Site):
         json.dump(CATEGORIES, f)
     return v
 
-def new_topic(site: Site):
+def gen_topic(site: Site, check_sentiment=True, max_cat_tries=3):
     global _KEYWORDS
-    cat = get_category(site)
+    cat_tries = 0
+    while cat_tries < max_cat_tries:
+        cat = get_category(site)
+        if cat not in BLACKLIST:
+            break
+        cat_tries += 1
     tpslug = ut.slugify(cat)
     topic_dir = site.topic_dir(tpslug)
     try:
@@ -81,11 +93,24 @@ def new_topic(site: Site):
         pass
     suggestions = suggest(cat)
     assert suggestions is not None
-    with open(topic_dir / "list.txt", "w") as f:
-        f.write("\n".join(suggestions))
-    site.add_topics_idx([(tpslug, cat, 0)])
-    # clear last topic since we saved
-    return tpslug
+    sugstr = "\n".join(suggestions)
+    sentiment = TextBlob(sugstr).sentiment.polarity
+    if (not check_sentiment) or (sentiment >= MIN_SENTIMENT):
+        with open(topic_dir / "list.txt", "w") as f:
+            f.write(sugstr)
+        site.add_topics_idx([(tpslug, cat, 0)])
+        # clear last topic since we saved
+        return tpslug
+    else:
+        return None
+
+def new_topic(site: Site, max_tries=3):
+    tries = 0
+    while tries < max_tries:
+        tpslug = gen_topic(site, check_sentiment=True)
+        if tpslug is not None:
+            return tpslug
+        tries += 1
 
 def suggest(topic: str):
     assert topic

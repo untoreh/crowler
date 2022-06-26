@@ -4,7 +4,7 @@ import ./base
 const
     WEBSITE_NAME* = "wsl"
     WEBSITE_DOMAIN* = "wsl"
-    WEBSITE_URL* = parseUri("http://" & WEBSITE_DOMAIN & WEBSITE_DEBUG_PORT)
+    WEBSITE_URL* = parseUri("https://" & WEBSITE_DOMAIN & WEBSITE_DEBUG_PORT)
     WEBSITE_TITLE* = "wsl"
     WEBSITE_DESCRIPTION* = "Everything about server hosting."
     WEBSITE_CONTACT* = "contact@wsl"
@@ -13,3 +13,4 @@ const
     WEBSITE_PINTEREST* = "wslpinterest"
     WEBSITE_WEIBO* = "wslweibo"
     WEBSITE_REDDIT* = "wslreddit"
+    CRON_TOPIC_FREQ* = 2

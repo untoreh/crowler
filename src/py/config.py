@@ -92,7 +92,7 @@ KW_SEARCH_TIMEOUT = 60
 # how many source links to process for extracting feeds and articles
 SRC_MAX_TRIES = 2
 REMOVE_SOURCES = json.loads(os.getenv("REMOVE_SOURCES", "true").lower())
-REQ_CACHE_DIR = DATA_DIR / "cache"
+CACHE_DIR = DATA_DIR / "cache"
 
 DEFAULT_LANG = "en"
 SPACY_MODEL = "en_core_web_sm"
@@ -113,3 +113,4 @@ SITES_CONFIG_FILE = DATA_DIR / "sites.toml"
 SITES_DIR = DATA_DIR / "sites"
 
 SITES_CONFIG = None
+TOPICS_BLACKLIST = DATA_DIR / "topics-blacklist.txt"

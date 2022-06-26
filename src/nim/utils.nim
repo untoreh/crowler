@@ -82,6 +82,10 @@ macro warn*(code: untyped): untyped =
         quote do:
             discard
 
+template swarn*(code) =
+    try: warn code
+    except: discard
+
 macro info*(code: untyped): untyped =
     if logLevelMacro <= lvlInfo:
         quote do:

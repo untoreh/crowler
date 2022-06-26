@@ -1,7 +1,19 @@
 import std/times, std/os, strutils, hashes
 
 import server_types,
-    cfg, types, topics, pyutils, publish, quirks, stats, articles, cache
+    cfg, types, topics, pyutils, publish, quirks, stats, articles, cache, sitemap, translate_types, server_types
+
+proc deletePage*(relpath: string) {.gcsafe.} =
+    let
+        sfx = relpath.suffixPath()
+        fpath = SITE_PATH / sfx
+        fkey = fpath.hash
+    {.cast(gcsafe).}:
+        pageCache[].del(fkey)
+        pageCache[].del(hash(SITE_PATH / "amp" / sfx))
+        for lang in TLangsCodes:
+            pageCache[].del(hash(SITE_PATH / "amp" / lang / sfx))
+            pageCache[].del(hash(SITE_PATH / lang / sfx))
 
 proc pubTask*() {.gcsafe.} =
     syncTopics()
@@ -18,20 +30,26 @@ proc pubTask*() {.gcsafe.} =
         syncTopics()
         backoff += 1000
     # Only publish one topic every `CRON_TOPIC`
-    var n = len(topicsCache)
+    var
+        prev_size = len(topicsCache)
+        n = prev_size
     while true:
         if n == 0:
             syncTopics()
             n = len(topicsCache)
+            # if new topics have been added clear homepage/sitemap
+            if n != prev_size:
+                prev_size = n
+                clearSitemap("")
+                deletePage("")
         let topic = nextTopic()
         # Don't publish each topic more than `CRON_TOPIC_FREQ`
+        debug "pubtask: {topic} was published {inHours(t - topicPubdate())} hours ago."
         if inHours(t - topicPubdate()) > cfg.CRON_TOPIC_FREQ:
             if pubTopic(topic):
                 # clear homepage and topic page cache
-                {.cast(gcsafe).}:
-                    pageCache[].del(fp(""))
-                    pageCache[].del(fp("").hash)
-                    pageCache[].del(fp("/" & topic).hash)
+                deletePage("")
+                deletePage("/" & topic)
         sleep(cfg.CRON_TOPIC * 1000)
         n -= 1
 

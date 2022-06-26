@@ -34,3 +34,4 @@ proc `[]=`*[K, V](c: ptr PageCache, k: K, v: V) {.inline.} =
 proc `[]`*[K](c: ptr PageCache, k: K): string = c[][k]
 
 # proc `get`*[K](c: ptr PageCache, k: K): string = c[].get(k)
+

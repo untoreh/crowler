@@ -51,6 +51,10 @@ proc topicDesc*(topic: string): string =
         return site.get_topic_desc(topic).to(string)
 proc topicUrl*(topic: string, lang: string): string = $(WEBSITE_URL / lang / topic)
 
+proc isEmptyTopic*(topic: string): bool =
+    withPyLock:
+        result = site.getattr("is_empty")(topic).to(bool)
+
 proc pageSize*(topic: string, pagenum: int): int =
     withPyLock:
         let py = site.get_page_size(topic, pagenum)

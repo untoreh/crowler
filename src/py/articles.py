@@ -24,11 +24,22 @@ def check_spacy_model():
     pp = info.get("pipelines", dict())
     model_version = pp.get(cfg.SPACY_MODEL, "")
     spacy_version = info.get("spacy_version", "")
+    lsv_path = cfg.CACHE_DIR / "last_spacy_version.txt"
+    if not cfg.CACHE_DIR.exists():
+        import os
+        os.makedirs(cfg.CACHE_DIR)
+    lsv_path.touch()
+    with open(lsv_path, "r") as f:
+        last_spacy_version = f.read()
+        if last_spacy_version == spacy_version:
+            return
     assert spacy_version != ""
     if model_version != spacy_version:
         cfg.setproxies(None)
         spacy.cli.download(cfg.SPACY_MODEL)
         cfg.setproxies()
+        with open(cfg.CACHE_DIR / "last_spacy_version.txt", "w") as f:
+            f.write(spacy_version)
 
 
 check_spacy_model()

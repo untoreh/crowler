@@ -25,7 +25,7 @@ proc getArticleUrl*(a: PyObject, topic: string, lang: string): string {.inline.}
     $(WEBSITE_URL / lang / getArticlePath(a, topic))
 
 proc getArticlePath*(a: Article): string {.inline.} = $(baseUri / $a.topic / $a.page / a.slug)
-proc getArticleUrl*(a: Article): string = $WEBSITE_URL / getArticlePath(a)
+proc getArticleUrl*(a: Article): string = $(WEBSITE_URL / getArticlePath(a))
 proc getArticleUrl*(a: Article, lang: string): string {.inline.} = $(WEBSITE_URL / lang /
         getArticlePath(a))
 

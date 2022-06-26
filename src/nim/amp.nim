@@ -40,7 +40,7 @@ threadVars(
 const skipFiles = ["bundle.css"]
 
 proc asLocalUrl(path: string): string {.inline.} =
-    $WEBSITE_URL & ":" & WEBSITE_DEBUG_PORT & path.replace(SITE_PATH, "")
+    $(WEBSITE_URL / path.replace(SITE_PATH, ""))
 
 var fileUri {.threadvar.}: Uri
 var url {.threadvar.}: string
@@ -111,7 +111,7 @@ proc processHead(inHead: VNode, outHead: VNode) =
                 if canonicalUnset and el.isLink(canonical):
                     outHead.add el
                     canonicalUnset = false
-                elif el.isLink(stylesheet):
+                elif el.isLink(stylesheet) and (not ("flags-sprite" in el.getattr("href"))):
                     el.fetchStyle()
                 else:
                     outHead.add el
@@ -120,6 +120,11 @@ proc processHead(inHead: VNode, outHead: VNode) =
                     outHead.add el
             of VNodeKind.meta:
                 if (el.getAttr("name") == "viewport") or (el.getAttr("charset") != ""):
+                    continue
+                else:
+                    outHead.add el
+            of VNodeKind.verbatim:
+                if ($el).startsWith("<script"):
                     continue
                 else:
                     outHead.add el
@@ -244,8 +249,8 @@ proc ampPage*(tree: VNode): VNode {.gcsafe.} =
         raise newException(ValueError, "Style size above limit for amp pages.")
 
     styleScript.setLen 0
-    styleElCustom[0].text = styleStr
-
+    styleElCustom.delete(0)
+    styleElCustom.add verbatim(styleStr)
     ampDoc
 
 proc ampDir(target: string) {.error: "not implemented".} =
@@ -296,7 +301,7 @@ proc initAmp*() =
 initAmp()
 
 proc ampLink*(path: string): VNode {.gcsafe.} =
-    ampLinkEl.setAttr("href", pathLink(path, amp = true, rel = false))
+    ampLinkEl.setAttr("href", pathLink(path, amp = (not path.startsWith("/amp")), rel = false))
     deepCopy(ampLinkEl)
 
 # when isMainModule:

@@ -194,6 +194,11 @@ class Site:
         self.load_topics()
         return topic in self.topics_dict
 
+    def is_empty(self, topic: str):
+        self.load_topics()
+        done = self.load_done(topic)
+        return len(done) == 0 or len(done[0]) == 0
+
     def add_topics_idx(self, tp: List[Tuple[str, str, int]]):
         assert isinstance(tp, list)
         (topics, tpset) = self.load_topics()
@@ -215,12 +220,25 @@ class Site:
         - 1: descritpion
         - 2: last publication date
         """
-        assert isinstance(tp, (tuple, list))
-        assert isinstance(tp[0], (tuple, list))
+        assert isinstance(tp, (tuple, list, np.ndarray))
+        assert isinstance(tp[0], (tuple, list, np.ndarray))
         tp = np.asarray(tp)
         save_zarr(tp, self.topics_idx, ZarrKey.topics, reset=True)
+        del ut.PUBCACHE[ut.arr_key(root=tp, k=ZarrKey.topics)[0]]
         self.topics_arr = None
         self.topics_dict = dict()
+
+    def delete_topic(self, topic: str):
+        if "shutil" not in globals():
+            import shutil
+        self.load_topics()
+        assert self.topics_arr is not None
+        cleared = [t for t in self.topics_arr[:] if t[0] != topic]
+        try:
+            shutil.rmtree(self.topic_dir(topic))
+        except FileNotFoundError:
+            pass
+        self.reset_topics_idx(cleared)
 
     @staticmethod
     def _count_top_page(pages):

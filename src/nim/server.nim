@@ -107,9 +107,7 @@ proc doReply[T](ctx: HttpCtx, body: T, scode = Http200, headers: openarray[strin
         debug "reply: headers -- {baseHeaders}"
         hetag.add '"' & $reqKey & '"'
     except:
-        try:
-            warn "reply: troubles serving page {reqFile}"
-        except: discard
+        swarn "reply: troubles serving page {reqFile}"
     sdebug "reply: sending: {len(resp)}"
     ctx.reply(scode, resp, baseHeaders)
     sdebug "reply: sent: {len(resp)}"
@@ -121,13 +119,13 @@ template handle404*(body: var string) =
     ctx.doReply(body, scode = Http404, headers = ["Location:"&loc])
 
 template handleHomePage(relpath: string, capts: auto, ctx: HttpCtx) {.dirty.} =
-    const homePath = SITE_PATH / "index.html"
+    const homePath = hash(SITE_PATH / "index.html")
     page = pageCache[].lcheckOrPut(reqKey):
         # in case of translations, we to generate the base page first
         # which we cache too (`setPage only caches the page that should be served)
         let (tocache, toserv) = buildHomePage(capts.lang, capts.amp)
-        pageCache[homePath] = tocache.asHtml
-        toserv.asHtml
+        pageCache[homePath] = tocache.asHtml(minify_css=(capts.amp == ""))
+        toserv.asHtml(minify_css=(capts.amp == ""))
     ctx.doReply(page)
 
 template handleAsset() {.dirty.} =
@@ -148,14 +146,14 @@ template dispatchImg(relpath: var string, ctx: auto) {.dirty.} =
     var mime: string
     try:
         relpath.removePrefix("/i")
-        (mime, page) = pageCache[].get(relpath).split(";", maxsplit = 1)
+        (mime, page) = pageCache[].get(reqKey).split(";", maxsplit = 1)
     except KeyError, AssertionDefect:
         try: (page, mime) = handleImg(relpath)
         except: debug "server: could not handle image {relpath}"
         if likely(page != ""):
             # append the mimetype before the img data
-            pageCache[][relpath] = mime & ";" & page
-    hcontent.add(mime)
+            pageCache[][reqKey] = mime & ";" & page
+    reqMime = mime
     ctx.doReply(page)
 
 template handleTopic(capts: auto, ctx: HttpCtx) {.dirty.} =
@@ -165,9 +163,11 @@ template handleTopic(capts: auto, ctx: HttpCtx) {.dirty.} =
             let
                 topic = capts.topic
                 pagenum = if capts.page == "": $topic.lastPageNum else: capts.page
+            debug "topic: page: ", capts.page
             topicPage(topic, pagenum, false)
-            pageCache[SITE_PATH / capts.topic / capts.page] = pagetree.asHtml
-            processPage(capts.lang, capts.amp, pagetree).asHtml
+            let pageReqKey = (capts.topic / capts.page).fp.hash
+            pageCache[pageReqKey] = pagetree.asHtml
+            processPage(capts.lang, capts.amp, pagetree).asHtml(minify_css=(capts.amp == ""))
         updateHits(capts)
         ctx.doReply(page)
     elif capts.topic in customPages:
@@ -342,18 +342,11 @@ proc start*(doclear = false, port = 0) =
     # cleanup task for deleting low traffic articles
     initSpawn cleanupTask()
 
-    # Clear database before serving
-    if doclear:
-        if os.getenv("DO_SERVER_CLEAR", "") == "1":
-            echo fmt"Clearing pageCache at {pageCache[].path}"
-            pageCache[].clear()
-        else:
-            echo "Ignoring doclear flag because 'DO_SERVER_CLEAR' env var is not set to '1'."
 
     # Configure and start server
     registerThreadInitializer(initThread)
     server.initHeaderCtx(handleGet, serverPort, false)
-    echo fmt"HTTP server listening on port {port}"
+    echo fmt"HTTP server listening on port {serverPort}"
     synctopics()
     server.serve(loglevel = INFO)
 

@@ -39,3 +39,4 @@ data_*/proxies/*
 /wsl_data.zip
 /wsl-cli
 /supervisord.pid
+/data/topics-blacklist.txt

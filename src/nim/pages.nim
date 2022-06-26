@@ -123,6 +123,7 @@ proc buildShortPosts*(arts: seq[Article], homepage = false): string =
 template topicPage*(topic: string, pagenum: string, istop = false) {.dirty.} =
     ## Writes a single page (fetching its related articles, if its not a template) to storage
     let arts = getDoneArticles(topic, pagenum = pagenum.parseInt)
+    debug "topics: topic page for page {pagenum} ({len(arts)})"
     let content = buildShortPosts(arts)
     # if the page is not finalized, it is the homepage
     let footer = pageFooter(topic, pagenum, home = istop)
@@ -156,9 +157,11 @@ proc pageFromTemplate*(tpl, lang, amp: string): string =
         of "privacy-policy": (ppRep, "Privacy Policy", fmt"Privacy Policy for {WEBSITE_DOMAIN}")
         else: (tplRep, tpl, "")
     txt = multiReplace(txt, vars)
-    let slug = slugify(title)
-    let p = buildPage(title = title, content = txt)
-    return $processPage(lang, amp, p, relpath = tpl)
+    let
+        slug = slugify(title)
+        page = buildPage(title = title, content = txt)
+        processed = processPage(lang, amp, page, relpath = tpl)
+    return processed.asHtml(minify_css=(amp == ""))
 
 proc articleTree*(capts: auto): VNode =
     # every article is under a page number
@@ -180,7 +183,7 @@ proc articleTree*(capts: auto): VNode =
 proc articleHtml*(capts: auto): string {.gcsafe.} =
     let t = articleTree(capts)
     if not t.isnil:
-        t.asHtml
+        t.asHtml(minify_css=(capts.amp == ""))
     else: ""
 
 proc buildHomePage*(lang, amp: string): (VNode, VNode) =
@@ -244,7 +247,7 @@ proc buildSearchPage*(topic: string, kws: string, lang: string): string =
                          slug = "/s/" & kws,
                          pagefooter = footer,
                          topic = topic)
-    $processPage(lang, "", tree)
+    processPage(lang, "", tree).asHtml(minify_css=true)
 
 proc buildSuggestList*(topic, input: string, prefix = ""): string =
     let sgs = suggest(topic, input)

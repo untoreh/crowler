@@ -10,7 +10,8 @@ import
     normalize,
     unicode,
     nre,
-    json
+    json,
+    hashes
 
 import cfg,
        types,
@@ -29,7 +30,8 @@ import cfg,
     cache,
     articles,
     pyutils,
-    ads
+    ads,
+    server_types
 
 static: echo "loading html..."
 
@@ -116,6 +118,7 @@ proc buildHead*(path: string; description = ""; topic = ""; ar = emptyArt): VNod
         link(rel = "preconnect", href = "https://fonts.googleapis.com")
         link(rel = "preconnect", href = "https://fonts.gstatic.com", crossorigin = "")
         link(rel = "stylesheet", href = "https://fonts.googleapis.com/icon?family=Material+Icons")
+        link(rel = "stylesheet", href = "https://fonts.googleapis.com/css2?family=Noto+Serif+Display:ital,wght@0,100;0,300;0,700;1,100;1,300&family=Noto+Serif:ital,wght@0,400;0,700;1,400&family=Petrona:ital,wght@0,400;0,800;1,100;1,400&display=swap")
         link(rel = "stylesheet", href = CSS_REL_URL)
         title:
             text ar.title
@@ -194,11 +197,14 @@ proc topicsList*(ucls: string; icls: string; small: static[bool] = true): VNode 
     defer: pyLock.release()
     pyLock.acquire()
     for tpc in topics:
-        let topic_name = $tpc[0]
+        let topic_slug = $tpc[0]
+        let topic_name = $tpc[1]
         pyLock.release()
+        if isEmptyTopic(topic_slug):
+            continue
         let liNode = buildHtml(li(class = fmt"{icls} mdc-icon-button")):
             tdiv(class = "mdc-icon-button__ripple")
-            a(href = ($(WEBSITE_URL / topic_name)), title = topic_name):
+            a(href = ($(WEBSITE_URL / topic_slug)), title = topic_name):
                 when small:
                     # only use the first letter
                     text $topic_name.runeAt(0).toUpper # loadTopics iterator returns pyobjects
@@ -374,10 +380,10 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
 
 const pageContent* = postContent
 
-proc asHtml*(data: auto): string {.inline.} =
+proc asHtml*(data: auto, minify_css=true): string =
     let html = "<!DOCTYPE html>"&"\n" & $data
     sdebug "html: raw size {len(html)}"
-    let mhtml = html.minifyHtml
+    let mhtml = html.minifyHtml(minify_css=minify_css)
     sdebug "html: minified size {len(mhtml)}"
     return mhtml
 
@@ -400,7 +406,7 @@ proc processHtml*(relpath: string; slug: string; data: VNode; ar = emptyArt) =
         pagepath = relpath / slug & ".html"
         fpath = path / pagepath
     when cfg.SERVER_MODE:
-        pageCache[fpath] = data.asHtml
+        pageCache[relpath.fp.hash] = data.asHtml
         # data.writeHtml(SITE_PATH / pagepath)
         return
     when cfg.TRANSLATION_ENABLED:

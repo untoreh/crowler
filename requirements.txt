@@ -13,6 +13,7 @@ alt-profanity-check
 clean-text
 deep_translator
 git+https://github.com/nidhaloff/deep-translator@master
+textblob
 
 # requests
 pyssl

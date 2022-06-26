@@ -9,7 +9,6 @@
 
 @import "colors.scss";
 @import "mixins.scss";
-@import url("https://fonts.googleapis.com/css2?family=Noto+Serif+Display:ital,wght@0,100;0,300;0,700;1,100;1,300&family=Noto+Serif:ital,wght@0,400;0,700;1,400&family=Petrona:ital,wght@0,400;0,800;1,100;1,400&display=swap");
 
 body {
   min-height: 100vh;
@@ -348,12 +347,14 @@ header .page {
     width: 100%;
     line-height: 2rem;
     & a {
-      display: block;
+      display: block ruby;
       height: calc(100% - 1rem);
       padding: 0.5rem;
       font-family: Noto Serif;
       font-variant: simplified;
       font-size: 1.25rem;
+      text-overflow: ellipsis;
+      overflow: hidden;
     }
     & .separator {
       height: 100%;
@@ -365,6 +366,10 @@ header .page {
       border-color: var(--mdc-theme-on-secondary);
     }
   }
+}
+
+section[role="toolbar"] {
+  min-width: 18rem;
 }
 
 .menu-list-topics {

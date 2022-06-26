@@ -98,7 +98,7 @@ proc push*(capts: UriCaptures, content: string) =
                 capts.addToBackLog()
                 break
         except:
-            debug "sonic: couldn't push content, {getCurrentExceptionMsg()} \n {key} \n {cnt}"
+            debug "sonic: couldn't push content, {getCurrentExceptionMsg()} \n {capts} \n {key} \n {cnt}"
             capts.addToBackLog()
             block:
                 let f = open("/tmp/sonic_debug.log", fmWrite)
@@ -111,13 +111,14 @@ proc push*(relpath: var string) =
     let
         fpath = relpath.fp()
         capts = uriTuple(relpath)
-        content = if pageCache[][fpath] != "":
-                      let page = pageCache[].get(fpath).parseHtml
+    let content = if pageCache[][fpath.hash] != "":
+                      let page = pageCache[].get(fpath.hash).parseHtml
                       assert capts.lang == "" or page.findel("html").getAttr("lang") == (capts.lang)
                       page.findclass(HTML_POST_SELECTOR).innerText()
                   else:
-                      echo capts.topic, capts.page, capts.art
-                      getArticleContent(capts.topic, capts.page, capts.art)
+                      if capts.art != "":
+                        getArticleContent(capts.topic, capts.page, capts.art)
+                      else: ""
     if content == "":
         warn "search: content matching path {relpath} not found."
     else:

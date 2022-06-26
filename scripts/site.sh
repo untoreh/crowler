@@ -40,6 +40,6 @@ if [ $COPY_ONLY = 0 ]; then
     echo "done"
 fi
 
-mkdir -p $tmpdir/assets/logo
+mkdir -p $tmpdir/assets/{logo,$CONFIG_NAME}
 cp -aL "$proj/src/assets/logo/" "$tmpdir/assets/"
-cp -a "$proj/dist/"*{.js,.css,.png} "$tmpdir/assets/"
+cp -a "$proj/dist/"*{.js,.css,.png} "$tmpdir/assets/${CONFIG_NAME}"

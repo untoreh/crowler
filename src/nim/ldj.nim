@@ -72,7 +72,6 @@ template withSchema(json: JsonNode): JsonNode =
     json["@context"] = %"https://schema.org/"
     json
 
-
 proc asVNode*[T](data: T, wrap = true, id = "", class = ""): VNode {.gcsafe.} =
     ldjElement.clearChildren
     case wrap:
@@ -82,7 +81,7 @@ proc asVNode*[T](data: T, wrap = true, id = "", class = ""): VNode {.gcsafe.} =
                 result.setAttr("id", id)
             if class != "":
                 result.setAttr("class", class)
-            result.add text($data)
+            result.add verbatim($data)
         else:
             result = deepCopy(ldjElement)
 

@@ -115,10 +115,10 @@ proc doReply[T](ctx: HttpCtx, body: T, scode = Http200, headers: openarray[strin
     sdebug "reply: sent: {len(resp)}"
 
 template handle301*(loc: string = $WEBSITE_URL) {.dirty.} =
-    ctx.doReply(nobody, scode = Http301, headers = ["Location:"&loc])
+    ctx.doReply(nobody, scode = httpcore.Http301, headers = ["Location:"&loc])
 
 template handle404*(body: var string) =
-    ctx.doReply(body, scode = Http404, headers = ["Location:"&loc])
+    ctx.doReply(body, scode = httpcore.Http404, headers = ["Location:"&loc])
 
 template handleHomePage(relpath: string, capts: auto, ctx: HttpCtx) {.dirty.} =
     const homePath = hash(SITE_PATH / "index.html")
@@ -317,7 +317,7 @@ proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
             handle301()
             debug "Router failed, {msg}, \n {getStacktrace()}"
         except:
-            ctx.doReply("", scode = Http501)
+            ctx.doReply("", scode = httpcore.Http501)
             discard
         discard
 
@@ -337,9 +337,6 @@ proc start*(doclear = false, port = 0, loglevel = INFO) =
 
     # Publishes new articles for one topic every x seconds
     initSpawn pubTask()
-
-    # (python) Task for syncing proxy list
-    initSpawn proxyTask()
 
     # cleanup task for deleting low traffic articles
     initSpawn cleanupTask()

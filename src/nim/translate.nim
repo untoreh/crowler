@@ -18,7 +18,8 @@ import nimpy,
        weave/[runtime, contexts],
        locks,
        macros,
-       std/sharedtables
+       std/sharedtables,
+       asyncdispatch
 
 # from karax/vdom import nil
 import karax/vdom
@@ -105,7 +106,7 @@ template translateNode*(otree: XmlNode, q: QueueXml, tformsTags: auto, fin = fal
                 if el.text.isEmptyOrWhitespace:
                     continue
                 if isTranslatable(el):
-                    translate(q, el, srv)
+                    translate(q.addr, el, srv)
             else:
                 let t = el.tag
                 if t in tformsTags:
@@ -115,8 +116,8 @@ template translateNode*(otree: XmlNode, q: QueueXml, tformsTags: auto, fin = fal
                         rewriteUrl(el, rewrite_path, hostname)
                 elif ((el.hasAttr("alt")) and el.isTranslatable("alt")) or
                      ((el.hasAttr("title")) and el.isTranslatable("title")):
-                    translate(q, el, srv)
-    translate(q, srv, finish = fin)
+                    translate(q.addr, el, srv)
+    discard waitFor translate(q.addr, srv, finish = fin)
 
 template translateNode*(node: VNode, q: QueueXml) =
     assert node.kind == VNodeKind.verbatim
@@ -181,7 +182,7 @@ proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true)
                 if el.text.isEmptyOrWhitespace:
                     continue
                 if isTranslatable(el):
-                    translate(q, el, srv)
+                    translate(q.addr, el, srv)
             else:
                 let t = el.kind
                 if t in tformsTags:
@@ -194,9 +195,9 @@ proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true)
                     translateNode(el, xq)
                 elif ((el.hasAttr("alt")) and el.isTranslatable("alt")) or
                         ((el.hasAttr("title")) and el.isTranslatable("title")):
-                    translate(q, el, srv)
+                    translate(q.addr, el, srv)
     debug "dom: finishing translations"
-    translate(q, srv, finish = finish)
+    discard waitFor translate(q.addr, srv, finish = finish)
     (q, otree)
 
 template tryTranslateFunc(kind: FcKind, args: untyped, post: untyped) {.dirty.} =

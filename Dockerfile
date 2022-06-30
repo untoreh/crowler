@@ -58,12 +58,12 @@ CMD ./cli
 FROM site AS wsl
 ENV CONFIG_NAME wsl
 ENV SITE_PORT 5050
-HEALTHCHECK --timeout=5s CMD [ "/usr/bin/curl", "http://localhost:5050" ]
+HEALTHCHECK --timeout=5s CMD timeout 5 curl --fail http://localhost:5050 || exit 1
 RUN cd /site; nimble build # ; strip -s cli
 
 FROM site as wsl
 ENV CONFIG_NAME wsl
 ENV SITE_PORT 5051
 ENV NEW_TOPICS_ENABLED True
-HEALTHCHECK --timeout=5s CMD [ "/usr/bin/curl", "http://localhost:5051" ]
+HEALTHCHECK --timeout=5s CMD timeout 5 curl --fail http://localhost:5051 || exit 1
 RUN cd /site; nimble build # ; strip -s cli

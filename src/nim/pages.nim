@@ -4,7 +4,8 @@ import
     sequtils,
     unicode,
     xmltree,
-    algorithm
+    algorithm,
+    asyncdispatch
 
 import html_misc,
        translate,
@@ -134,7 +135,7 @@ template topicPage*(topic: string, pagenum: string, istop = false) {.dirty.} =
         topic = topic)
 
 {.push gcsafe.}
-proc processPage*(lang, amp: string, tree: VNode, relpath = "index"): VNode =
+proc processPage*(lang, amp: string, tree: VNode, relpath = "index"): Future[VNode] {.async.} =
     if lang in TLangsCodes:
         let
             filedir = SITE_PATH
@@ -142,14 +143,14 @@ proc processPage*(lang, amp: string, tree: VNode, relpath = "index"): VNode =
         var fc = initFileContext(tree, filedir, relpath,
             (src: SLang.code, trg: lang), tpath)
         debug "page: translating page to {lang}"
-        result = translateLang(fc)
+        result = await translateLang(fc)
     else:
         result = tree
     if amp != "":
         debug "page: amping"
         result = result.ampPage
 
-proc pageFromTemplate*(tpl, lang, amp: string): string =
+proc pageFromTemplate*(tpl, lang, amp: string): Future[string] {.async.} =
     var txt = readfile(ASSETS_PATH / "templates" / tpl & ".html")
     let (vars, title, desc) = case tpl:
         of "dmca": (tplRep, "DMCA", fmt"dmca compliance for {WEBSITE_DOMAIN}")
@@ -160,10 +161,10 @@ proc pageFromTemplate*(tpl, lang, amp: string): string =
     let
         slug = slugify(title)
         page = buildPage(title = title, content = txt)
-        processed = processPage(lang, amp, page, relpath = tpl)
+        processed = await processPage(lang, amp, page, relpath = tpl)
     return processed.asHtml(minify_css=(amp == ""))
 
-proc articleTree*(capts: auto): VNode =
+proc articleTree*(capts: auto): Future[VNode] {.async.} =
     # every article is under a page number
     let py = getArticlePy(capts.topic, capts.page, capts.art)
     pyLock.acquire()
@@ -173,20 +174,20 @@ proc articleTree*(capts: auto): VNode =
         var a: Article
         withPyLock:
             a = initArticle(py, parseInt(capts.page))
-        let post = buildPost(a)
+        let post = await buildPost(a)
         debug "article: processing"
-        return processPage(capts.lang, capts.amp, post, relpath = capts.art)
+        return await processPage(capts.lang, capts.amp, post, relpath = capts.art)
     else:
         debug "article: could not fetch python article"
         pyLock.release()
 
-proc articleHtml*(capts: auto): string {.gcsafe.} =
-    let t = articleTree(capts)
-    if not t.isnil:
+proc articleHtml*(capts: auto): Future[string] {.gcsafe, async.} =
+    let t = await articleTree(capts)
+    return if not t.isnil:
         t.asHtml(minify_css=(capts.amp == ""))
     else: ""
 
-proc buildHomePage*(lang, amp: string): (VNode, VNode) =
+proc buildHomePage*(lang, amp: string): Future[(VNode, VNode)] {.async.} =
     syncTopics()
     var a = default(Article)
     var
@@ -211,15 +212,15 @@ proc buildHomePage*(lang, amp: string): (VNode, VNode) =
                          content = content,
                          slug = "",
                          topic = "")
-    (pagetree, processPage(lang, amp, pagetree))
+    return (pagetree, await processPage(lang, amp, pagetree))
 
-proc buildSearchPage*(topic: string, kws: string, lang: string): string =
+proc buildSearchPage*(topic: string, kws: string, lang: string): Future[string] {.async.} =
     ## Builds a search page with 10 entries
     debug "search: lang:{lang}, topic:{topic}, kws:{kws}"
     var content, keywords: string
     if kws != "":
         keywords = kws.decodeUrl.sanitize
-        var pslugs = query(topic, keywords, lang)
+        var pslugs = await query(topic, keywords, lang)
         if pslugs.len == 0:
             let r = buildHtml(tdiv(class = "search-results")):
                 text "No results found."
@@ -247,10 +248,10 @@ proc buildSearchPage*(topic: string, kws: string, lang: string): string =
                          slug = "/s/" & kws,
                          pagefooter = footer,
                          topic = topic)
-    processPage(lang, "", tree).asHtml(minify_css=true)
+    return (await processPage(lang, "", tree)).asHtml(minify_css=true)
 
-proc buildSuggestList*(topic, input: string, prefix = ""): string =
-    let sgs = suggest(topic, input)
+proc buildSuggestList*(topic, input: string, prefix = ""): Future[string] {.async.} =
+    let sgs = await suggest(topic, input)
     let p = buildHtml(ul(class = "search-suggest")):
         for sug in sgs:
             li():

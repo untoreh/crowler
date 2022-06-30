@@ -5,6 +5,7 @@ import os,
        nimpy,
        karax/[vdom, karaxdsl],
        sets,
+       asyncdispatch,
        sequtils # zip
 
 import
@@ -52,7 +53,7 @@ proc fromSearchResult*(pslug: string): Article =
     if topic != "" and topic in topicsCache:
         result = getArticle(topic, page, slug)
 
-proc buildRelated*(a: Article): VNode =
+proc buildRelated*(a: Article): Future[VNode] {.async.} =
     ## Get a list of related articles by querying search db with tags and title words
     # try a full tag (or title) search first, then try word by word
     var kws = a.tags
@@ -68,7 +69,7 @@ proc buildRelated*(a: Article): VNode =
     for kw in kws:
         if kw.len < 3:
             continue
-        let sgs = query(a.topic, kw.toLower, limit = N_RELATED)
+        let sgs = await query(a.topic, kw.toLower, limit = N_RELATED)
         debug "html: suggestions {sgs}, from kw: {kw}"
         # if sgs.len == 1 and sgs[0] == "//":
         #     return

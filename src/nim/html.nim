@@ -11,7 +11,8 @@ import
     unicode,
     nre,
     json,
-    hashes
+    hashes,
+    asyncdispatch
 
 import cfg,
        types,
@@ -334,10 +335,11 @@ proc postFooter(pubdate: Time): VNode =
             italic:
                 text format(dt, "dd MMM yyyy")
 
-proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): VNode =
+proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): Future[VNode] {.async.} =
     let crumbs = toUpper(&"/ {a.topic} / Page-{a.page} /")
     let topic_uri = parseUri("/" & a.topic)
-    buildHtml(body(class = "", topic = (a.topic), style = preline_style)):
+    let related = await(buildRelated(a))
+    return buildHtml(body(class = "", topic = (a.topic), style = preline_style)):
         buildMenu(crumbs, topic_uri, a)
         buildMenuSmall(crumbs, topic_uri, a)
         main(class = "mdc-top-app-bar--fixed-adjust"):
@@ -345,7 +347,7 @@ proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): VNode =
             postContent(a.content)
             postFooter(a.pubdate)
             hr()
-            buildRelated(a)
+            related
         buildFooter(a.topic)
 
 proc pageTitle*(title: string; slug: string): VNode =
@@ -442,12 +444,13 @@ proc processHtml*(relpath: string; slug: string; data: VNode; ar = emptyArt) =
         else:
             page.writeHtml(SITE_PATH / pagepath)
 
-proc buildPost*(a: Article): VNode =
-    buildHtml(html(lang = DEFAULT_LANG_CODE,
+proc buildPost*(a: Article): Future[VNode] {.async.} =
+    let bbody = await buildBody(a)
+    return buildHtml(html(lang = DEFAULT_LANG_CODE,
                    prefix = opgPrefix(@[Opg.article, Opg.website]))
     ):
         buildHead(getArticlePath(a), a.desc, a.topic, ar = a)
-        buildBody(a)
+        bbody
 
 proc buildPage*(title: string; content: string; slug: string; pagefooter: VNode = nil; topic = "";
         desc: string = ""): VNode {.gcsafe.} =

@@ -10,8 +10,8 @@ const
     rxArt = fmt"(/.*?{rxend})"
     rxPath = fmt"{rxAmp}?{rxLang}?{rxTopic}?{rxPage}?{rxArt}?"
 
-const defaultHeaders = @[("Cache-Control", "no-store")]
-var baseHeaders* {.threadvar.}: seq[(string, string)]
+const defaultHeaders = @["Cache-Control: no-store"]
+var baseHeaders* {.threadvar.}: seq[string]
 
 type UriTuple = (string, string, string, string, string)
 type UriCaptures* = tuple[amp, lang, topic, page, art: string]
@@ -66,6 +66,11 @@ proc initMimes*() =
     baseHeaders = defaultHeaders
     mimes = newMimetypes()
 
+proc format*(headers: seq[string]): string =
+    for h in headers[0..^2]:
+        result.add h & "\c\L"
+    result.add headers[^1]
+
 proc resetHeaders*() = baseHeaders = defaultHeaders
 
 type Header* = enum
@@ -75,7 +80,7 @@ type Header* = enum
     hlang = "Accept-Language"
     hetag = "ETag"
 
-proc add*(h: Header, v: string) = baseHeaders.add ($h, v)
+proc add*(h: Header, v: string) = baseHeaders.add $h & ": " & v
 
 proc addHeaders*(headers: seq[(Header, string)]) =
     for (h, s) in headers:

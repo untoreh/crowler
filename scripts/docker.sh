@@ -6,10 +6,15 @@ set -e
     shift
 }
 
+[ "$1" = "-c" ] && {
+    nocopy=1
+    shift
+}
+
 targets=${1:-wsl}
 [ -n "$1" ] && sites="$(echo "$targets" | tr "," "\n")" || sites=wsl
 
-scripts/copy.sh $targets
+[ -z "$nocopy" ] && scripts/copy.sh $targets
 for site in $sites; do
     tag=untoreh/sites:$site
 

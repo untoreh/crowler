@@ -2,7 +2,8 @@ import
     os,
     karax/vdom,
     strutils,
-    xmltree
+    xmltree,
+    asyncdispatch
 
 import
     cfg,
@@ -30,7 +31,7 @@ proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN): auto =
                 if el.text.isEmptyOrWhitespace:
                     continue
                 if isTranslatable(el):
-                    translate(q, el, srv)
+                    translate(q.addr, el, srv)
             else:
                 let t = el.kind
                 if t in tformsTags:
@@ -43,9 +44,9 @@ proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN): auto =
                     translateNode(el, xq)
                 elif ((el.hasAttr("alt")) and el.isTranslatable("alt")) or
                         ((el.hasAttr("title")) and el.isTranslatable("title")):
-                    translate(q, el, srv)
+                    translate(q.addr, el, srv)
     debug "dom: finishing translations"
-    translate(q, srv, finish = true)
+    discard translate(q.addr, srv, finish = true)
     (q, otree)
 
 proc translateLang*(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath = "",
@@ -57,6 +58,6 @@ proc translateLang*(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath
     var fc = initFileContext(tree, filedir, relpath, lang, t_path)
     translateDom(fc)[1]
 
-proc translateLang*(fc: ptr FileContext, ar = emptyArt): VNode {.gcsafe.} =
+proc translateLang*(fc: ptr FileContext, ar = emptyArt): Future[VNode] {.gcsafe, async.} =
     result = translateDom(fc)[1]
 

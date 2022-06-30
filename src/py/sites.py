@@ -19,9 +19,9 @@ from utils import ZarrKey, load_zarr, save_zarr
 SITES = {}
 
 
-def read_sites_config(sitename: str, ensure=False):
+def read_sites_config(sitename: str, ensure=False, force=False):
     global SITES_CONFIG
-    if cfg.SITES_CONFIG is None:
+    if force or cfg.SITES_CONFIG is None:
         try:
             with open(cfg.SITES_CONFIG_FILE, "rb") as f:
                 SITES_CONFIG = tomli.load(f)
@@ -48,6 +48,8 @@ class Site:
     has_twitter = False
 
     def __init__(self, sitename=""):
+        if not cfg.SITES_CONFIG_FILE.exists():
+            return
         self._name = sitename
         self._config = read_sites_config(sitename)
         self.site_dir = cfg.DATA_DIR / "sites" / sitename
@@ -64,7 +66,7 @@ class Site:
         self.domain = self._config.get("domain", "")
         assert (
             self.domain != ""
-        ), f"domain not found in site configuration for {self._name}"
+        ), f"domain not found in site configuration for {self._name} read from {cfg.SITES_CONFIG_FILE}"
 
         self.last_topic_file = self.topics_dir / "last_topic.json"
         if self.topics_dir.exists():

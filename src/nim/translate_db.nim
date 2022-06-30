@@ -63,6 +63,9 @@ var slations* {.threadvar.}: ptr Table[int64, string]
 proc openDB*(t: var LRUTrans, kt = IntegerKeys) {.gcsafe.} =
     if DB_PATH[].len == 0:
         DB_PATH[] = DEFAULT_DB_PATH
+    let db_dir = splitPath(DB_PATH[])[0]
+    if not dirExists(db_dir):
+        createDir(db_dir)
     t.db = openDatabase(DB_PATH[], maxFileSize = MAX_DB_SIZE)
     var c: Collection = t.db.openCollectionOrNil("slations", keytype = kt)
     let cnn = cast[CollectionNotNil](createShared(Collection))

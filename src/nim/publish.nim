@@ -117,7 +117,7 @@ proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, i
             discard site.update_page_size(topic, pagenum.parseInt, pagecount, final = true)
     if with_arts:
         for a in arts:
-            processHtml(topic / pagenum, a.slug, buildPost(a), a)
+            processHtml(topic / pagenum, a.slug, (waitFor buildPost(a)), a)
 
 proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
     ## Always update both the homepage and the previous page
@@ -183,7 +183,7 @@ proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
             if a.topic == "":
                 a.topic = topic
                 a.py["topic"] = topic
-            posts.add((buildPost(a), a))
+            posts.add(((waitFor buildPost(a)), a))
             withPyLock:
                 a.py["slug"] = uslug
                 a.py["title"] = utitle

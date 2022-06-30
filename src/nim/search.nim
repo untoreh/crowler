@@ -8,7 +8,8 @@ import sonic,
        xmltree,
        parseutils,
        uri,
-       hashes
+       hashes,
+       asyncdispatch
 from unicode import runeSubStr, validateUtf8
 
 from sonic {.all.} import SonicServerError
@@ -139,7 +140,7 @@ proc resumeSonic() =
     writeFile(SONIC_BACKLOG, "")
 
 import asyncdispatch
-proc query*(topic: string, keywords: string, lang: string = SLang.code, limit = defaultLimit): seq[string] =
+proc query*(topic: string, keywords: string, lang: string = SLang.code, limit = defaultLimit): Future[seq[string]] {.async.} =
     ## translate the query to source language, because we only index
     ## content in source language
     ## the resulting entries are in the form {page}/{slug}
@@ -149,7 +150,7 @@ proc query*(topic: string, keywords: string, lang: string = SLang.code, limit = 
                   let lp = (src: lang, trg: SLang.code)
                   let translate = getTfun(lp)
                   # echo "?? ", translate(keywords, lp)
-                  something (waitFor translate(keywords, lp)), keywords
+                  something (await translate(keywords, lp)), keywords
               else: keywords
     debug "query: kws -- {kws}, keys -- {keywords}"
     try:
@@ -158,7 +159,7 @@ proc query*(topic: string, keywords: string, lang: string = SLang.code, limit = 
         debug "query: failed {getCurrentExceptionMsg()} "
         discard
 
-proc suggest*(topic, input: string, limit = defaultLimit): seq[string] =
+proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[string]] {.async.} =
     # Partial inputs language can't be handled if we
     # only injest the source language into sonic
     debug "suggest: topic: {topic}, input: {input}"

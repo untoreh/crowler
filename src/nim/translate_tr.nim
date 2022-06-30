@@ -177,29 +177,31 @@ proc doTrans*() {.async.} =
         await j
     saveToDB(force=true)
 
-proc translate*[Q, T](q: var Q, el: T, srv: auto) =
-    let (success, length) = setFromDB(q.pair, el)
+proc translate*[Q, T](q: ptr var Q, el: T, srv: service) =
+    let (success, length) = setFromDB(q[].pair, el)
     if not success:
-        if length > q.bufsize:
+        if length > q[].bufsize:
             debug "Translating element singularly since it is big"
-            elUpdate(q, el, srv)
+            elUpdate(q[], el, srv)
             debug "Saving translations! {slations[].len}"
         else:
-            if reachedBufSize(length, q):
-                q.push()
-            q.bucket.add(el)
-            q.sz += length
+            if reachedBufSize(length, q[]):
+                q[].push()
+            q[].bucket.add(el)
+            q[].sz += length
 
-proc translate*[Q, T](q: var Q, el: T, srv: auto, finish: bool) =
+proc translate*[Q, T](q: ptr var Q, el: T, srv: service, finish: bool): Future[bool] {.async.} =
     if finish:
-        let (success, _) = setFromDB(q.pair, el)
+        let (success, _) = setFromDB(q[].pair, el)
         if not success:
             var batches: seq[seq[string]]
-            addJob(@[el], q, el.getText)
-            waitFor doTrans()
+            addJob(@[el], q[], el.getText)
+            await doTrans()
+    return true
 
-proc translate*[Q](q: var Q, srv: auto, finish: bool) =
-    if finish and q.sz > 0:
-        q.push()
-        waitFor doTrans()
+proc translate*[Q](q: ptr var Q, srv: service, finish: bool): Future[bool] {.async.} =
+    if finish and q[].sz > 0:
+        q[].push()
+        await doTrans()
         saveToDB(force=true)
+    return true

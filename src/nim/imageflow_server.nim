@@ -1,6 +1,5 @@
 import
        httpcore,
-       guildenstern/[ctxheader, ctxbody],
        nre,
        uri,
        os,
@@ -61,28 +60,29 @@ proc handleImg*(relpath: string): auto =
         debug "ifl server: img processed"
     (resp, mime)
 
-proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
-    assert ctx.parseRequestLine
-    var relpath = ctx.getUri()
-    # relpath.removePrefix('/')
-    try:
-        let (resp, _) = handleImg(relpath)
-        if resp.isSomething:
-            ctx.reply(resp)
-        else:
-            debug "ifl server: bad url"
-            ctx.reply(Http404)
-    except:
-        let msg = getCurrentExceptionMsg()
-        ctx.reply(Http501)
-        qdebug "Router failed, {msg}"
-        discard
+# import guildenstern/ctxheader
+# proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
+#     assert ctx.parseRequestLine
+#     var relpath = ctx.getUri()
+#     # relpath.removePrefix('/')
+#     try:
+#         let (resp, _) = handleImg(relpath)
+#         if resp.isSomething:
+#             ctx.reply(resp)
+#         else:
+#             debug "ifl server: bad url"
+#             ctx.reply(Http404)
+#     except:
+#         let msg = getCurrentExceptionMsg()
+#         ctx.reply(Http501)
+#         qdebug "Router failed, {msg}"
+#         discard
 
 
-when isMainModule:
-    var srv = new GuildenServer
-    registerThreadInitializer(initThreadBase)
-    registerThreadInitializer(initWrapImageFlow)
-    srv.initHeaderCtx(handleGet, 5051, false)
-    echo "GuildenStern HTTP server serving at 5050"
-    srv.serve(loglevel = INFO)
+# when isMainModule:
+#     var srv = new GuildenServer
+#     registerThreadInitializer(initThreadBase)
+#     registerThreadInitializer(initWrapImageFlow)
+#     srv.initHeaderCtx(handleGet, 5051, false)
+#     echo "GuildenStern HTTP server serving at 5050"
+#     srv.serve(loglevel = INFO)

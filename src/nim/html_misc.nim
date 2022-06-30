@@ -49,7 +49,7 @@ proc fromSearchResult*(pslug: string): Article =
         slug = s[2]
 
     debug "html: fromSearchResult - {pslug}"
-    if topic != "":
+    if topic != "" and topic in topicsCache:
         result = getArticle(topic, page, slug)
 
 proc buildRelated*(a: Article): VNode =

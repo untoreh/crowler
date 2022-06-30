@@ -10,7 +10,7 @@ import
     sequtils,
     hashes,
     std/[sharedtables],
-    chronos,
+    asyncdispatch,
     karax/vdom
 
 import

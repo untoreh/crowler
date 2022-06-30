@@ -52,6 +52,10 @@ phrasemachine
 textacy
 rake_nltk
 
+# social
+praw
+python-twitter
+
 # config
 git+https://github.com/untoreh/colors.py
 tomli

@@ -214,6 +214,10 @@ def site_loop(site: Site, target_delay=3600 * 8):
                 run_parse2_job(site, topic)
         if site.new_topics_enabled:
             new_topic(site)
+        if site.has_reddit:
+            site.reddit_submit()
+        if site.has_twitter:
+            site.tweet()
         time.sleep(target_delay - (time.time() - loop_start))
         random.shuffle(
             topics

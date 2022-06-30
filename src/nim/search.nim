@@ -138,7 +138,7 @@ proc resumeSonic() =
         push(relpath)
     writeFile(SONIC_BACKLOG, "")
 
-import chronos
+import asyncdispatch
 proc query*(topic: string, keywords: string, lang: string = SLang.code, limit = defaultLimit): seq[string] =
     ## translate the query to source language, because we only index
     ## content in source language

@@ -10,8 +10,8 @@ const
     rxArt = fmt"(/.*?{rxend})"
     rxPath = fmt"{rxAmp}?{rxLang}?{rxTopic}?{rxPage}?{rxArt}?"
 
-const defaultHeaders = @["Cache-Control:no-store"]
-var baseHeaders* {.threadvar.}: seq[string]
+const defaultHeaders = @[("Cache-Control", "no-store")]
+var baseHeaders* {.threadvar.}: seq[(string, string)]
 
 type UriTuple = (string, string, string, string, string)
 type UriCaptures* = tuple[amp, lang, topic, page, art: string]
@@ -75,7 +75,7 @@ type Header* = enum
     hlang = "Accept-Language"
     hetag = "ETag"
 
-proc add*(h: Header, v: string) = baseHeaders.add $h & ":" & v
+proc add*(h: Header, v: string) = baseHeaders.add ($h, v)
 
 proc addHeaders*(headers: seq[(Header, string)]) =
     for (h, s) in headers:

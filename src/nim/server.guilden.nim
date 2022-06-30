@@ -3,11 +3,14 @@ import strformat,
        strutils,
        tables,
        nimpy,
-       std/os,
+       std/[os, threadpool],
+       os,
        times,
        locks,
        karax/vdom,
        strtabs,
+       httpcore,
+       guildenstern/[ctxheader, ctxbody],
        nre,
        options,
        fusion/matching,
@@ -15,10 +18,9 @@ import strformat,
        lrucache,
        zippy,
        hashes,
-       asyncdispatch,
-       threadpool,
-       httpbeast,
-       json
+       json,
+       scorper,
+       chronos
 
 {.experimental: "caseStmtMacros".}
 
@@ -54,7 +56,6 @@ var
     reqKey {.threadvar.}: int64
     threadInitialized {.threadvar.}: bool
 
-
 proc initThreadBase*() {.gcsafe, raises: [].} =
     initPy()
     initTypes()
@@ -83,23 +84,22 @@ proc initThread*() {.gcsafe, raises: [].} =
     threadInitialized = true
 
 template setEncoding() {.dirty.} =
+    var headers: array[1, string]
+    ctx.parseHeaders(["accept-encoding"], headers)
     debug "detected accepted encoding {headers}"
-    let accept = ctx.headers.get["Accept-Encoding"]
-    if ("*" == accept) or ("gzip" == accept):
+    if ("*" in headers[0]) or ("gzip" in headers[0]):
         hencoding.add("gzip")
-        respbody = respbody.compress(dataFormat = dfGzip)
-    elif "deflate" == accept:
+        resp = resp.compress(dataFormat = dfGzip)
+    elif "deflate" in headers[0]:
         hencoding.add("deflate")
-        respbody = respbody.compress(dataFormat = dfDeflate)
+        resp = resp.compress(dataFormat = dfDeflate)
 
-proc doReply[T](ctx: Request, body: T, scode = Http200, headers: openarray[(string, string)] = @[
-        ]) {.raises: [].} =
+proc doReply[T](ctx: HttpCtx, body: T, scode = Http200, headers: openarray[string] = @[]) {.raises: [].} =
     baseHeaders.add headers
-    var httpheaders: HttpHeaders
-    var respbody = if likely(body != ""): body
+    var resp = if likely(body != ""): body
                else:
                    sdebug "reply: body is empty!"
-                   ""
+                   nobody
     if reqMime == "":
         reqMime = mimePath(reqFile)
     hcontent.add reqMime
@@ -110,59 +110,38 @@ proc doReply[T](ctx: Request, body: T, scode = Http200, headers: openarray[(stri
         hetag.add '"' & $reqKey & '"'
     except:
         swarn "reply: troubles serving page {reqFile}"
-    sdebug "reply: sending: {len(respbody)}"
-    try:
-        httpHeaders = baseHeaders.newHttpHeaders
-        ctx.send(body = respbody, headers = $httpHeaders, code = scode)
-    except: discard
-    sdebug "reply: sent: {len(respbody)}"
+    sdebug "reply: sending: {len(resp)}"
+    ctx.reply(scode, resp, baseHeaders)
+    sdebug "reply: sent: {len(resp)}"
 
-# NOTE: `scorper` crashes when sending empty (`""`) responses, so send code
 template handle301*(loc: string = $WEBSITE_URL) {.dirty.} =
-    const body = "301"
-    # ctx.doReply(body, scode = Http301, headers = {"Location": loc})
-    ctx.doReply(body, scode = Http301)
+    ctx.doReply(nobody, scode = Http301, headers = ["Location:"&loc])
 
-template handle404*(loc = $WEBSITE_URL) =
-    const body = "404"
-    # ctx.doReply(body, scode = Http404, headers = {"Location": loc})
-    ctx.doReply(body, scode = Http404)
+template handle404*(body: var string) =
+    ctx.doReply(body, scode = Http404, headers = ["Location:"&loc])
 
-template handleHomePage(relpath: string, capts: UriCaptures, ctx: Request) {.dirty.} =
+template handleHomePage(relpath: string, capts: auto, ctx: HttpCtx) {.dirty.} =
     const homePath = hash(SITE_PATH / "index.html")
     page = pageCache[].lcheckOrPut(reqKey):
         # in case of translations, we to generate the base page first
         # which we cache too (`setPage only caches the page that should be served)
         let (tocache, toserv) = buildHomePage(capts.lang, capts.amp)
-        pageCache[homePath] = tocache.asHtml(minify_css = (capts.amp == ""))
-        toserv.asHtml(minify_css = (capts.amp == ""))
+        pageCache[homePath] = tocache.asHtml(minify_css=(capts.amp == ""))
+        toserv.asHtml(minify_css=(capts.amp == ""))
     ctx.doReply(page)
 
-import std/asyncfile
-proc readFileAsync(path: string, page: ptr string) {.async.} =
-    var file = openAsync(path, fmRead)
-    defer: file.close()
-    page[] = await file.readAll()
-
 template handleAsset() {.dirty.} =
-
     when releaseMode:
         try:
             page = pageCache[].get(reqKey)
         except KeyError:
-            try:
-                page = readFile(reqFile)
-                if page != "":
-                    pageCache[reqKey] = page
-            except:
-                handle404()
+            page = readFile(reqFile)
+            if page != "":
+                pageCache[reqKey] = page
     else:
         debug "ASSETS CACHING DISABLED"
-        try:
-            reqMime = mimePath(reqFile)
-            waitfor readFileAsync(reqFile, page.addr)
-        except:
-            handle404()
+        reqMime = mimePath(reqFile)
+        page = readFile(reqFile)
     ctx.doReply(page)
 
 template dispatchImg(relpath: var string, ctx: auto) {.dirty.} =
@@ -179,7 +158,7 @@ template dispatchImg(relpath: var string, ctx: auto) {.dirty.} =
     reqMime = mime
     ctx.doReply(page)
 
-template handleTopic(capts: auto, ctx: Request) {.dirty.} =
+template handleTopic(capts: auto, ctx: HttpCtx) {.dirty.} =
     debug "topic: looking for {capts.topic}"
     if capts.topic in topicsCache:
         page = pageCache[].lcheckOrPut(reqKey):
@@ -190,7 +169,7 @@ template handleTopic(capts: auto, ctx: Request) {.dirty.} =
             topicPage(topic, pagenum, false)
             let pageReqKey = (capts.topic / capts.page).fp.hash
             pageCache[pageReqKey] = pagetree.asHtml
-            processPage(capts.lang, capts.amp, pagetree).asHtml(minify_css = (capts.amp == ""))
+            processPage(capts.lang, capts.amp, pagetree).asHtml(minify_css=(capts.amp == ""))
         updateHits(capts)
         ctx.doReply(page)
     elif capts.topic in customPages:
@@ -200,7 +179,7 @@ template handleTopic(capts: auto, ctx: Request) {.dirty.} =
     else:
         handle301($(WEBSITE_URL / capts.amp / capts.lang))
 
-template handleArticle(capts: auto, ctx: Request) =
+template handleArticle(capts: auto, ctx: HttpCtx) =
     ##
     debug "article: fetching article"
     let tg = topicsCache.get(capts.topic, emptyTopic)
@@ -217,10 +196,12 @@ template handleArticle(capts: auto, ctx: Request) =
     else:
         handle301($(WEBSITE_URL / capts.amp / capts.lang))
 
-template handleSearch(relpath: string, ctx: Request) =
+template handleSearch(relpath: string, ctx: HttpCtx) =
     # extract the referer to get the correct language
+    var headers: array[1, string]
+    ctx.parseHeaders(["referer"], headers)
     let
-        refuri = parseUri(ctx.headers.get["referer"])
+        refuri = parseUri(headers[0])
         refcapts = refuri.path.uriTuple
     if capts.lang == "" and refcapts.lang != "":
         handle301($(WEBSITE_URL / refcapts.lang / join(capts, n = 1)))
@@ -236,7 +217,7 @@ template handleSearch(relpath: string, ctx: Request) =
         reqMime = mimePath("index.html")
         ctx.doReply(page)
 
-template handleSuggest(relpath: string, ctx: Request) =
+template handleSuggest(relpath: string, ctx: HttpCtx) =
     # there is no specialized capture for the query
     let
         purl = parseUri(capts.art)
@@ -266,16 +247,16 @@ template handleRobots() =
         buildRobots()
     ctx.doReply(page)
 
-proc handleGet(ctx: Request): bool {.gcsafe, raises: [CatchableError].} =
-    initThread()
-    # doassert ctx.parseRequestLine
+proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
+    doassert ctx.parseRequestLine
     reset(reqMime)
     reset(reqFile)
     reset(reqKey)
     resetHeaders()
     var
-        relpath = if ctx.path.isSome(): ctx.path.get() else: ""
+        relpath = ctx.getUri()
         page: string
+        headers: seq[string]
     relpath.removeSuffix('/')
     reqFile = relpath.fp
     reqKey = hash(reqFile)
@@ -339,44 +320,40 @@ proc handleGet(ctx: Request): bool {.gcsafe, raises: [CatchableError].} =
             ctx.doReply("", scode = Http501)
             discard
         discard
-    true
-
-proc callback(ctx: Request) {.async.} =
-    let f = threadpool.spawn handleGet(ctx)
-    while not f.isReady:
-        await sleepAsync(10)
-    discard ^f
-
 
 template initSpawn(code) =
-    threadpool.spawn (() => (server.initThread(); code))()
+    threadpool.spawn (() => (initThread(); code))()
 
-proc start*(doclear = false, port = 0, loglevel = "info") =
+proc start*(doclear = false, port = 0, loglevel = INFO) =
+    var server = new GuildenServer
     let serverPort = if port == 0:
                          os.getEnv("SITE_PORT", "5050").parseInt
                      else: port
     # main Thread
     initThread()
-
+    # cache and stats are global
     initCache()
     initStats()
 
     # Publishes new articles for one topic every x seconds
     initSpawn pubTask()
 
+    # (python) Task for syncing proxy list
+    initSpawn proxyTask()
+
     # cleanup task for deleting low traffic articles
     initSpawn cleanupTask()
 
 
     # Configure and start server
-    let address = "0.0.0.0:" & $serverPort
+    registerThreadInitializer(initThread)
+    server.initHeaderCtx(handleGet, serverPort, false)
     echo fmt"HTTP server listening on port {serverPort}"
     synctopics()
-    var settings = initSettings(port=Port(serverPort), bindAddr="0.0.0.0")
-    run(callback, settings = settings)
+    server.serve(loglevel = loglevel)
 
 when isMainModule:
-    # initThread()
+    initThread()
     # let topic = "vps"
     # let page = buildHomePage("en", "")
     # page.writeHtml(SITE_PATH / "index.html")
@@ -384,5 +361,5 @@ when isMainModule:
     # initSonic()
     # let argt = getLastArticles(topic)
     # echo buildRelated(argt[0])
-    # pageCache[].clear()
+    pageCache[].clear()
     start()

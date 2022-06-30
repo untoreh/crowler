@@ -30,7 +30,8 @@ export nimpy
 proc loadTopicsIndex*(): PyObject =
     try:
         withPyLock:
-            return site.load_topics()[0]
+            result = site.load_topics()[0]
+            doassert not result.isnil
     except:
         let m = getCurrentExceptionMsg()
         if "shape is None" in m:
@@ -68,7 +69,7 @@ let pyTopics = create(PyObject)
 pyTopics[] = loadTopicsIndex()
 
 proc nextTopic*(): string =
-    if pyTopics.isnil:
+    if pyTopics[].isnil:
         pyTopics[] = loadTopicsIndex()
     if pyisnone(pyTopics[]):
         pyTopics[] = loadTopicsIndex()
@@ -152,10 +153,17 @@ proc getState*(topic: string): (int, int) =
     assert topdir == lastPageNum(topic)
     return (topdir, numdone)
 
+var topicsCount {.threadvar.}: int # Used to check if topics are in sync, but it is not perfect (in case topics deletions happen)
+topicsCount = -1
 proc syncTopics*(force=false) {.gcsafe} =
     # NOTE: the [0] is required because quirky zarray `getitem`
     withPyLock:
         assert not site.isnil
+        let tc = site.get_topic_count().to(int)
+        if topicsCount == tc:
+            return
+        else:
+            topicsCount = tc
     try:
         var
             pytopics = loadTopics(force)

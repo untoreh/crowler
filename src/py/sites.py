@@ -1,18 +1,20 @@
-from typing import Dict, List, MutableSequence, Optional, Tuple
-from pathlib import Path
 import os
-
-import tomli
 import time
-import zarr as za
-import numpy as np
+from collections import deque
+from pathlib import Path
 from random import choice
+from typing import Dict, List, MutableSequence, Optional, Tuple
 
-import config as cfg
-import utils as ut
-from utils import ZarrKey, save_zarr, load_zarr, strtobool
+import numpy as np
+import tomli
+import zarr as za
+from praw.models.reddit.subreddit import Subreddit
+from twitter.api import Api as TwitterApi
 
 import blacklist
+import config as cfg
+import utils as ut
+from utils import ZarrKey, load_zarr, save_zarr
 
 SITES = {}
 
@@ -42,23 +44,127 @@ class Site:
     topics_dict: Dict[str, str] = {}
     new_topics_enabled: bool = False
     topics_sync_freq = 3600
+    has_reddit = False
+    has_twitter = False
 
     def __init__(self, sitename=""):
         self._name = sitename
         self._config = read_sites_config(sitename)
         self.site_dir = cfg.DATA_DIR / "sites" / sitename
         self.req_cache_dir = self.site_dir / "cache"
+
         self.blacklist_path = self.site_dir / "blacklist.txt"
         self.blacklist = blacklist.load_blacklist(self)
+
         self.topics_dir = self.site_dir / "topics"
         self.topics_idx = self.topics_dir / "index"
         self._topics = self._config.get("topics", [])
         self.new_topics_enabled = self._config.get("new_topics", False)
+
+        self.domain = self._config.get("domain", "")
+        assert (
+            self.domain != ""
+        ), f"domain not found in site configuration for {self._name}"
+
         self.last_topic_file = self.topics_dir / "last_topic.json"
         if self.topics_dir.exists():
             self.last_topic_file.touch()
         self._init_data()
         SITES[sitename] = self
+
+        if sitename != "dev":
+            self._init_reddit()
+            self._init_twitter()
+
+    def _init_reddit(self):
+        import base64
+
+        import log
+        import reddit
+
+        reddit_sub = self._config.get("reddit_subreddit")
+        reddit_id = self._config.get("reddit_client_id")
+        reddit_secret = self._config.get("reddit_client_secret")
+        reddit_user = self._config.get("reddit_user")
+        reddit_psw = self._config.get("reddit_pass", "")
+        try:
+            reddit_psw = base64.b64decode(reddit_psw).decode("utf-8")
+        except:
+            log.logger.error("Password should be stored b64 encoded")
+            return
+        assert reddit_sub, "subreddit not defined"
+        self._subreddit = reddit.get_subreddit(
+            reddit_sub,
+            self._name,
+            id=reddit_id,
+            secret=reddit_secret,
+            u=reddit_user,
+            p=reddit_psw,
+        )
+        self.has_reddit = True
+
+    def choose_article(self):
+        self.load_topics()
+        topic = self.get_random_topic()
+        a = self.recent_article(topic)
+        assert a is not None, "no article found"
+        return (topic, a)
+
+    recent_reddit_submissions = deque(maxlen=10)
+
+    def reddit_submit(self):
+        topic, a = self.choose_article()
+        assert isinstance(self._subreddit, Subreddit), "subreddit instance error"
+        title = a["title"]
+        url = self.article_url(a, topic)
+        s = self._subreddit.submit(title=title, url=url)
+        self.recent_reddit_submissions.append(url)
+        return s
+
+    def _init_twitter(self):
+        import twt
+
+        consumer_key = self._config.get("twitter_consumer_key")
+        consumer_secret = self._config.get("twitter_consumer_secret")
+        access_key = self._config.get("twitter_access_token_key")
+        access_secret = self._config.get("twitter_access_token_secret")
+        self._twitter_api = twt.twitter_api(
+            consumer_key, consumer_secret, access_key, access_secret
+        )
+        self.has_twitter = True
+
+    def tweet(self):
+        topic, a = self.choose_article()
+        assert isinstance(self._twitter_api, TwitterApi), "twitter api instance error"
+        url = self.article_url(a, topic)
+        status = "{}: {}".format(a["title"], url)
+        if len(url) > 280:
+            return
+        if len(status) > 280:
+            tags = " ".join(*[f"#{t}" for t in a["tag"]])
+            status = "{}: {}".format(tags, url)
+            if len(status) > 280:
+                status = url
+        return self._twitter_api.PostUpdate(status=status)
+
+    def recent_article(self, topic: str):
+        arts = self.get_last_done(topic)
+        assert isinstance(arts, za.Array), "ZArray instance error"
+        max_tries = len(arts)
+        tries = 0
+        while tries < max_tries:
+            a = choice(arts)
+            if a["slug"] not in self.recent_reddit_submissions:
+                break
+            tries += 1
+        if a["slug"] in self.recent_reddit_submissions:
+            return
+        return a
+
+    def article_url(self, a: dict, topic=None):
+        return "".join(
+            ("https://", self.domain, "/", a["topic"] or topic, "/", a["slug"])
+        )
 
     def topic_dir(self, topic: str):
         return self.topics_dir / topic
@@ -80,13 +186,17 @@ class Site:
             else self.load_articles(topic, k=ZarrKey.done, subk=pagenum)
         )
 
+    def get_last_done(self, topic: str):
+        pagenum = self.get_top_page(topic)
+        return self.load_articles(topic, k=ZarrKey.done, subk=pagenum)
+
     def save_done(self, topic: str, n_processed: int, done: MutableSequence, pagenum):
-        assert topic != ""
+        assert topic != "", "can't save done articles for an empty topic"
         saved_articles = self.load_articles(topic)
         if saved_articles.shape is not None:
             n_saved = saved_articles.shape[0]
             newsize = n_saved - n_processed
-            assert newsize >= 0
+            assert newsize >= 0, "just saved topics should be greater than 0"
             saved_articles.resize(newsize)
         save_zarr(done, k=ZarrKey.done, subk=pagenum, root=self.topic_dir(topic))
 
@@ -94,7 +204,7 @@ class Site:
         page_articles_arr = load_zarr(
             k=ZarrKey.done, subk=str(pagenum), root=self.topic_dir(topic)
         )
-        assert page_articles_arr is not None
+        assert page_articles_arr is not None, "pubtime zarr loading error"
         page_articles = page_articles_arr[:]
         for (n, art) in enumerate(page_articles):
             if art is not None:
@@ -110,7 +220,7 @@ class Site:
         )
 
     def update_page_size(self, topic: str, idx: int, val, final=False):
-        assert idx >= 0
+        assert idx >= 0, "page idx has to be greater than 0"
         pages = load_zarr(k=ZarrKey.pages, root=self.topic_dir(topic))
         if pages.shape is None:
             print(f"Page {idx}:{topic}@{self.name} not found")
@@ -120,7 +230,7 @@ class Site:
         pages[idx] = (val, final)
 
     def get_page_size(self, topic: str, idx: int):
-        assert idx >= 0
+        assert idx >= 0, "page idx has to be greater than 0"
         pages = load_zarr(k=ZarrKey.pages, root=self.topic_dir(topic))
         if pages.shape is None:
             print(f"Page {idx}:{topic} not found")
@@ -140,7 +250,7 @@ class Site:
             za.open_group(file_path, mode="a")
             if Path(file_path).exists():
                 g = ut.PUBCACHE[cache_key] = za.open_group(file_path, mode="a")
-                assert isinstance(g, za.Group)
+                assert isinstance(g, za.Group), "zarr group instance error"
                 return g
             else:
                 raise ValueError(
@@ -151,19 +261,19 @@ class Site:
         return self.topic_group(topic)
 
     def reset_topic_data(self, topic: str):
-        assert topic != ""
+        assert topic != "", "the topic exist to be reset"
         print("utils: resetting topic data for topic: ", topic)
         grp = self.topic_group(topic)
-        assert isinstance(grp, za.Group)
+        assert isinstance(grp, za.Group), "rtd: zarr group instance error"
         if "done" in grp:
             done = grp["done"]
-            assert isinstance(done, za.Group)
+            assert isinstance(done, za.Group), "rtd2: zarr group instance error"
             done.clear()
         else:
             save_zarr([], k=ZarrKey.done, subk="0", root=self.topic_dir(topic))
         if "pages" in grp:
             pages = grp["pages"]
-            assert isinstance(pages, za.Array)
+            assert isinstance(pages, za.Array), "rtd3: zarr array instance error"
             pages.resize(0)
         else:
             save_zarr([], k=ZarrKey.pages, root=self.topic_dir(topic))
@@ -190,6 +300,9 @@ class Site:
                 self.topics_dict = {}
         return (self.topics_arr, self.topics_dict)
 
+    def get_topic_count(self):
+        return len(self.topics_dict)
+
     def is_topic(self, topic: str):
         self.load_topics()
         return topic in self.topics_dict
@@ -200,13 +313,13 @@ class Site:
         return len(done) == 0 or len(done[0]) == 0
 
     def add_topics_idx(self, tp: List[Tuple[str, str, int]]):
-        assert isinstance(tp, list)
+        assert isinstance(tp, list), "ati: list instance error"
         (topics, tpset) = self.load_topics()
         if topics.shape == (0, 0):
             topics.resize(0, 3)
         for t in tp:
             tpslug = t[0]
-            assert ut.slugify(tpslug) == tpslug
+            assert ut.slugify(tpslug) == tpslug, "ati: slugs should be equal"
             if tpslug in tpset:
                 continue
             d = np.asarray(t)
@@ -248,20 +361,13 @@ class Site:
         return top
 
     def get_top_page(self, topic: str):
-        assert topic
-        tg = self.topic_group(topic)
-        pages = tg[ZarrKey.pages.name]
-        return Site._count_top_page(pages)
-
-    def get_top_articles(self, topic: str):
-        t = self.topic_group(topic)
-        pages = t[ZarrKey.pages.name]
-        assert isinstance(pages, za.Array)
-        if len(pages) > 0:
-            n_articles = pages[-1][0]
-            return t[ZarrKey.articles.name][-n_articles:]
-        else:
-            return np.empty(0)
+        try:
+            assert topic
+            tg = self.topic_group(topic)
+            pages = tg[ZarrKey.pages.name]
+            return Site._count_top_page(pages)
+        except KeyError:
+            print("topic: ", topic, "doesn't have a pages array")
 
     def get_topic_desc(self, topic: str):
         return self.topics_dict[topic]
@@ -285,9 +391,9 @@ class Site:
         for a in tg[ZarrKey.articles.name]:
             yield a
 
-    def get_random_topic(self):
+    def get_random_topic(self, n=10):
         assert self.topics_arr is not None
-        return choice(self.topics_arr)[0]
+        return choice(self.topics_arr[-n:])[0]
 
     def remove_broken_articles(self, topic):
         valid = []
@@ -296,7 +402,7 @@ class Site:
                 valid.append(a)
         self.save_articles(valid, topic=topic, reset=True)
 
-    def topicsWatcher(self):
+    def topics_watcher(self):
         while True:
             self.load_topics(force=True)
             time.sleep(self.topics_sync_freq)

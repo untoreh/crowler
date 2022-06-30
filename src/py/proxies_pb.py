@@ -6,6 +6,7 @@ from collections import deque
 from typing import Union
 import scheduler as sched
 from multiprocessing import Process, Queue
+import time
 
 # warnings.simplefilter("ignore")
 
@@ -37,6 +38,61 @@ def next_proxy():
 
 PROXY_ITER = iter(next_proxy())
 PROXY_CHOICE = (lambda: cfg.STATIC_PROXY_EP, lambda: next(PROXY_ITER), lambda: next(PROXY_ITER))
+
+
+
+import config as cfg
+import random
+from itertools import cycle
+import json
+
+typemap = {
+    "CONNECT:80": "http",
+    "CONNECT:25": "http",
+    "HTTP": "http",
+    "SOCKS4": "socks4",
+    "SOCKS5": "socks5"
+}
+
+def sync_from_file():
+    try:
+        with open(cfg.PROXIES_DIR / "pbproxies.json", "r") as f:
+            proxies = f.read()
+        try:
+            proxies = json.loads(proxies)
+        except JSONDecodeError:
+            assert proxies.endswith(",\n")
+            proxies = proxies.rstrip(",\n")
+            proxies += "]" # proxybroker keeps the json file unclosed open
+            proxies = json.loads(proxies)
+        PROXIES_SET.clear()
+        for p in proxies:
+            host = p["host"]
+            port = p["port"]
+            types = p["types"]
+            for t in types:
+                tp = t["type"]
+                tpm = typemap[tp]
+                PROXIES_SET.add(f"{tpm}://{host}:{port}")
+        PROXIES.extendleft(PROXIES_SET)
+    except:
+        log.logger.debug("Could't sync proxies, was the file being written?")
+
+def proxy_sync_forever(interval=60):
+    while True:
+        sync_from_file()
+        time.sleep(interval)
+
+def get_proxy():
+    try:
+        i = random.randrange(3)
+        return PROXY_CHOICE[i]()
+    except Exception as e:
+        # this should never fail
+        print(e)
+        exit()
+
+sched.apply(proxy_sync_forever)
 
 async def fetch_proxies(limit: int, proxies, out: Queue):
     try:
@@ -103,63 +159,6 @@ def find_proxies_proc(limit: int = LIMIT):
     )
     p.run()
     return (out, p)
-
-
-import config as cfg
-import random
-from itertools import cycle
-import json
-
-typemap = {
-    "CONNECT:80": "http",
-    "CONNECT:25": "http",
-    "HTTP": "http",
-    "SOCKS4": "socks4",
-    "SOCKS5": "socks5"
-}
-# 2 times free proxies, 1 time private proxies
-# def update_proxies():
-#     global PROXIES_CYCLE, PROXY_CHOICE
-#     assert PROXIES
-#     assert isinstance(PROXIES, list)
-#     PROXIES_CYCLE = cycle(PROXIES)
-# update_proxies()
-
-def sync_from_file():
-    try:
-        with open(cfg.PROXIES_DIR / "pbproxies.json", "r") as f:
-            proxies = f.read()
-        try:
-            proxies = json.loads(proxies)
-        except JSONDecodeError:
-            assert proxies.endswith(",\n")
-            proxies = proxies.rstrip(",\n")
-            proxies += "]" # proxybroker keeps the json file unclosed open
-            proxies = json.loads(proxies)
-        PROXIES_SET.clear()
-        for p in proxies:
-            host = p["host"]
-            port = p["port"]
-            types = p["types"]
-            for t in types:
-                tp = t["type"]
-                tpm = typemap[tp]
-                PROXIES_SET.add(f"{tpm}://{host}:{port}")
-        PROXIES.extendleft(PROXIES_SET)
-        # # set cycle again since proxies mutated
-        # update_proxies()
-    except:
-        log.logger.debug("Could't sync proxies, was the file being written?")
-
-def get_proxy():
-    try:
-        i = random.randrange(3)
-        return PROXY_CHOICE[i]()
-    except Exception as e:
-        # this should never fail
-        print(e)
-        exit()
-
 
 # if __name__ == "__main__":
 #     limit = 10

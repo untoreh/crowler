@@ -22,7 +22,7 @@ proc pubTask*() {.gcsafe.} =
     let t = getTime()
     var backoff = 1000
     # start the topic sync thread from python
-    discard pysched.apply(site.topicsWatcher)
+    discard pysched.apply(site.topics_watcher)
 
     while len(topicsCache) == 0:
         debug "pubtask: waiting for topics to be created..."
@@ -52,16 +52,6 @@ proc pubTask*() {.gcsafe.} =
                 deletePage("/" & topic)
         sleep(cfg.CRON_TOPIC * 1000)
         n -= 1
-
-let broker = relPyImport("proxies_pb")
-const proxySyncInterval = 60 * 1000
-proc proxyTask*() {.gcsafe.} =
-    # syncTopics()
-    let syfp = broker.getAttr("sync_from_file")
-    while true:
-        withPyLock:
-            discard syfp()
-        sleep(proxySyncInterval)
 
 proc deleteLowTrafficArts*(topic: string) {.gcsafe.} =
     let now = getTime()
@@ -102,8 +92,8 @@ proc deleteLowTrafficArts*(topic: string) {.gcsafe.} =
 
 const cleanupInterval = 60 * 3600 * 2
 proc cleanupTask*() =
-    syncTopics()
     while true:
+        syncTopics()
         for topic in topicsCache.keys():
             deleteLowTrafficArts(topic)
         sleep(cleanupInterval)

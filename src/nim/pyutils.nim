@@ -64,13 +64,19 @@ proc relpyImport*(relpath: string, prefix = prefixPy): PyObject =
 
 # we have to load the config before utils, otherwise the module is "partially initialized"
 {.push guard: pyLock.}
-let pycfg* = relpyImport("config")
-discard relpyImport("log")
-let ut* = relpyImport("utils")
 import cfg
-discard relpyImport("blacklist")
-let site* = relpyImport("sites").Site(WEBSITE_NAME)
-let pySched* = relpyImport("scheduler")
+let pycfg* = relpyImport("config")
+block:
+    when declared(PROJECT_PATH):
+        let pypath = PROJECT_PATH / "lib" / "py"
+        if dirExists(pypath):
+            let sys = pyImport("sys")
+            discard sys.path.append(pypath)
+discard pyImport("log")
+let ut* = pyImport("utils")
+discard pyImport("blacklist")
+let site* = pyImport("sites").Site(WEBSITE_NAME)
+let pySched* = pyImport("scheduler")
 discard pySched.initPool()
 {.pop guard:pyLock.}
 

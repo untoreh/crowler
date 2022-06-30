@@ -5,6 +5,8 @@ import deep_translator
 from lingua import Language, LanguageDetectorBuilder
 from nltk.tokenize import sent_tokenize
 from requests.exceptions import ConnectTimeout, ProxyError, ConnectionError
+import time
+import scheduler as sched
 
 import config as cfg
 import proxies_pb as pb
@@ -121,6 +123,7 @@ class Translator:
         self._sl = SLang.code
         for (_, code) in TLangs:
             self._translate[(self._sl, code)] = self._tr(source=self._sl, target=code)
+        sched.initPool()
         pb.sync_from_file()
 
     def parse_data(self, data: str):
@@ -131,6 +134,11 @@ class Translator:
             queries.append(data)
         assert all(len(q) < self._max_query_len for q in queries)
         return queries
+
+    def proxy_sync_task(self, seconds=60):
+        while True:
+            pb.sync_from_file()
+            time.sleep(seconds)
 
     def translate(self, data: str, target: str, source=SLang.code, max_tries=5):
         lp = (source, target)

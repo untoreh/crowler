@@ -126,7 +126,8 @@ proc initTranslator*(srv: service = default_service, provider: string = "", sour
 let slatorObj = initTranslator()
 let slator* = slatorObj.unsafeAddr
 
-import chronos, times
+import times
+from asyncdispatch import async, Future, newFuture, await, sleepAsync, complete
 template translatorFunc(src: string, lang: langPair) {.dirty.} =
     # NOTE: using `slator` inside the closure is fine since it always outlives the closure
     try:

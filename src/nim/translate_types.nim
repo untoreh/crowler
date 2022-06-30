@@ -13,7 +13,7 @@ export sets
 
 static:
     echo "loading translate types..."
-import chronos
+import asyncdispatch
 type
     service* = enum
         base_translator = "translator"

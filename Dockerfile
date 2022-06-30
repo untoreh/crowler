@@ -53,17 +53,17 @@ CMD /site/scripts/scraper.sh
 FROM scraper AS site
 ENV NIM_DEBUG debug
 ENV NIM release
-EXPOSE 5050
-HEALTHCHECK --timeout=5s CMD [ "/usr/bin/curl", "http://localhost:$SITE_PORT" ]
 CMD ./cli
 
 FROM site AS wsl
 ENV CONFIG_NAME wsl
 ENV SITE_PORT 5050
+HEALTHCHECK --timeout=5s CMD [ "/usr/bin/curl", "http://localhost:5050" ]
 RUN cd /site; nimble build # ; strip -s cli
 
 FROM site as wsl
 ENV CONFIG_NAME wsl
 ENV SITE_PORT 5051
 ENV NEW_TOPICS_ENABLED True
+HEALTHCHECK --timeout=5s CMD [ "/usr/bin/curl", "http://localhost:5051" ]
 RUN cd /site; nimble build # ; strip -s cli

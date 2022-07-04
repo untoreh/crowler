@@ -15,7 +15,7 @@ import
     translate_srv,
     translate
 
-proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN): auto =
+proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN): Future[(QueueDom, VNode)] {.async.} =
     translateEnv(dom)
     for node in otree.preorder():
         case node.kind:
@@ -46,18 +46,17 @@ proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN): auto =
                         ((el.hasAttr("title")) and el.isTranslatable("title")):
                     translate(q.addr, el, srv)
     debug "dom: finishing translations"
-    discard translate(q.addr, srv, finish = true)
-    (q, otree)
+    discard await translate(q.addr, srv, finish = true)
+    return (q, otree)
 
 proc translateLang*(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath = "",
-        ar = emptyArt): VNode {.gcsafe.} =
+        ar = emptyArt): Future[VNode] {.gcsafe, async.} =
     let
         (filedir, relpath) = splitUrlPath(rx, file)
         t_path = if targetPath == "": filedir / lang.trg / (if relpath == "": "index.html" else: relpath)
                  else: targetPath
     var fc = initFileContext(tree, filedir, relpath, lang, t_path)
-    translateDom(fc)[1]
+    (await translateDom(fc))[1]
 
 proc translateLang*(fc: ptr FileContext, ar = emptyArt): Future[VNode] {.gcsafe, async.} =
-    result = translateDom(fc)[1]
-
+    result = (await translateDom(fc))[1]

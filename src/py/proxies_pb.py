@@ -92,6 +92,7 @@ def get_proxy():
         print(e)
         exit()
 
+sched.initPool()
 sched.apply(proxy_sync_forever)
 
 async def fetch_proxies(limit: int, proxies, out: Queue):

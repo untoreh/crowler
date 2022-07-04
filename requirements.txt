@@ -55,6 +55,7 @@ rake_nltk
 # social
 praw
 python-twitter
+facepy
 
 # config
 git+https://github.com/untoreh/colors.py

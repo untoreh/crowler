@@ -5,7 +5,8 @@ import
     unicode,
     xmltree,
     algorithm,
-    asyncdispatch
+    asyncdispatch,
+    htmlparser
 
 import html_misc,
        translate,
@@ -91,8 +92,10 @@ proc articleExcerpt(a: Article): string =
         return a.content
     else:
         let runesize = runeLenAt(a.content, maxlen)
-        return a.content[0..maxlen+runesize] & "..."
+        # If article contains html tags, the excerpt might have broken html
+        return $parseHtml(a.content[0..maxlen+runesize]) & "..."
 
+import htmlparser
 proc articleEntry(a: Article): VNode =
     let relpath = getArticlePath(a)
     buildHtml(article(class = "entry")):
@@ -106,10 +109,15 @@ proc articleEntry(a: Article): VNode =
                 italic:
                     text format(a.pubDate, "dd/MMM")
         tdiv(class = "entry-tags"):
-            for t in a.tags:
+            if a.tags.len == 0:
                 span(class = "entry-tag-name"):
                     icon("tag")
-                    text t
+                    text "none"
+            else:
+                for t in a.tags:
+                    span(class = "entry-tag-name"):
+                        icon("tag")
+                        text t
         buildImgUrl(a.imageUrl, origin = a.url)
         tdiv(class = "entry-content"):
             verbatim(articleExcerpt(a))
@@ -178,7 +186,7 @@ proc articleTree*(capts: auto): Future[VNode] {.async.} =
         debug "article: processing"
         return await processPage(capts.lang, capts.amp, post, relpath = capts.art)
     else:
-        debug "article: could not fetch python article"
+        debug "article: could not fetch python article, {py}"
         pyLock.release()
 
 proc articleHtml*(capts: auto): Future[string] {.gcsafe, async.} =

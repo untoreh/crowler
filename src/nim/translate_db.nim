@@ -55,7 +55,7 @@ DB_PATH = createShared(string)
 # let transObj = new(LRUTrans)
 # var trans*: LRUTrans = transOBj
 var trans*: LRUTrans
-var tLock*: Lock
+var tLock*: Lock # FIXME: this lock should be inside the `LRUTrans` object
 initLock(tLock)
 # Slations holds python objects, it must be unmanaged memory
 var slations* {.threadvar.}: ptr Table[int64, string]
@@ -187,6 +187,7 @@ proc setFromDB*(pair: langPair, el: auto): (bool, int) =
         txt = getText(el)
         k = hash((pair, txt)).int64
 
+    assert not slations.isnil, "setfromdb: slations should not be nil"
     # try temp cache before db
     if k in slations[]:
         setText(el, slations[][k])

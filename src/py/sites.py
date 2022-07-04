@@ -4,17 +4,22 @@ from collections import deque
 from pathlib import Path
 from random import choice
 from typing import Dict, List, MutableSequence, Optional, Tuple
+from datetime import datetime
 
 import numpy as np
 import tomli
 import zarr as za
+# social
+from praw import Reddit
 from praw.models.reddit.subreddit import Subreddit
 from twitter.api import Api as TwitterApi
+from facepy import GraphAPI as FBApi
 
 import blacklist
 import config as cfg
 import utils as ut
 from utils import ZarrKey, load_zarr, save_zarr
+import log
 
 SITES = {}
 
@@ -46,6 +51,9 @@ class Site:
     topics_sync_freq = 3600
     has_reddit = False
     has_twitter = False
+    twitter_url = ""
+    has_facebook = False
+    fb_page_url = ""
 
     def __init__(self, sitename=""):
         if not cfg.SITES_CONFIG_FILE.exists():
@@ -63,6 +71,8 @@ class Site:
         self._topics = self._config.get("topics", [])
         self.new_topics_enabled = self._config.get("new_topics", False)
 
+        self.created = self._config.get("created", "1970-01-01")
+        self.created_dt = datetime.fromisoformat(self.created)
         self.domain = self._config.get("domain", "")
         assert (
             self.domain != ""
@@ -77,14 +87,37 @@ class Site:
         if sitename != "dev":
             self._init_reddit()
             self._init_twitter()
+            self._init_facebook()
+
+    def _init_facebook(self):
+        self._fb_page_id = self._config.get("facebook_page_id", "")
+        if not self._fb_page_id:
+            log.warn("Facebook page id not set.")
+        self._fb_page_token = self._config.get("facebook_page_token", "")
+        if self._fb_page_id:
+            assert self._fb_page_token, "To submit posts to facebook, a page access token is required."
+        self._fb_graph = FBApi(self._fb_page_token)
+        self._feed_path = self._fb_page_id + "/feed" if self._fb_page_id else ""
+        self.has_facebook = True
+        self.fb_page_url = "https://facebook.com/" + self._fb_page_id
+
+    def facebook_post(self):
+        self.load_topics()
+        topic, art = self.choose_article()
+        if not isinstance(art, dict):
+            log.warn(f"Could not choose an article while publishing to fb page, site: {self.name}.")
+            return
+        url = self.article_url(art, topic)
+        self._fb_graph.post(self._feed_path,
+                            link=url,
+                            caption=art["title"],)
 
     def _init_reddit(self):
         import base64
 
-        import log
-        import reddit
-
-        reddit_sub = self._config.get("reddit_subreddit")
+        reddit_sub = self._config.get("reddit_subreddit", "")
+        if not reddit_sub:
+            return
         reddit_id = self._config.get("reddit_client_id")
         reddit_secret = self._config.get("reddit_client_secret")
         reddit_user = self._config.get("reddit_user")
@@ -95,14 +128,13 @@ class Site:
             log.logger.error("Password should be stored b64 encoded")
             return
         assert reddit_sub, "subreddit not defined"
-        self._subreddit = reddit.get_subreddit(
-            reddit_sub,
-            self._name,
-            id=reddit_id,
-            secret=reddit_secret,
-            u=reddit_user,
-            p=reddit_psw,
-        )
+        self._subreddit = Reddit(
+            user_agent=self._name,
+            client_id=reddit_id,
+            client_secret=reddit_secret,
+            username=reddit_user,
+            password=reddit_psw,
+        ).subreddit(reddit_sub)
         self.has_reddit = True
 
     def choose_article(self):
@@ -130,10 +162,11 @@ class Site:
         consumer_secret = self._config.get("twitter_consumer_secret")
         access_key = self._config.get("twitter_access_token_key")
         access_secret = self._config.get("twitter_access_token_secret")
-        self._twitter_api = twt.twitter_api(
+        self._twitter_api = TwitterApi(
             consumer_key, consumer_secret, access_key, access_secret
         )
         self.has_twitter = True
+        self.twitter_url = "https://twitter.com/" + self._config.get("twitter_handle", "")
 
     def tweet(self):
         topic, a = self.choose_article()
@@ -369,7 +402,8 @@ class Site:
             pages = tg[ZarrKey.pages.name]
             return Site._count_top_page(pages)
         except KeyError:
-            print("topic: ", topic, "doesn't have a pages array")
+            log.warn("topic: ", topic, "doesn't have a pages array")
+            return 0
 
     def get_topic_desc(self, topic: str):
         return self.topics_dict[topic]

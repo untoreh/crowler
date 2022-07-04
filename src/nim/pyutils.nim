@@ -104,7 +104,12 @@ proc pyisbool*(py: PyObject): bool {.exportpy.} =
     return pybi.isinstance(py, PyBoolClass).to(bool)
 
 proc pyisnone*(py: PyObject): bool {.exportpy.} =
-    return pybi.isinstance(py, PyNoneClass).to(bool)
+    assert not pybi.isnil, "pyn: pybi should not be nil"
+    assert not pybi.isinstance.isnil, "pyn: pybi.isinstance should not be nil"
+    assert not PyNoneClass.isnil, "pyn: PyNoneClass should not be nil"
+    let check = pybi.isinstance(py, PyNoneClass)
+    assert not check.isnil, "pyn: check should not be nil"
+    return py.isnil or check.to(bool)
 
 proc pyisdatetime*(py: PyObject): bool {.exportpy.} =
     return pybi.isinstance(py, PyDateTimeClass).to(bool)

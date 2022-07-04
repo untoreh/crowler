@@ -2,7 +2,7 @@ import nimpy, options, nre, strutils, strformat, os, std/enumerate, std/mimetype
 import cfg, quirks, utils
 
 const
-    rxend = "(?=/|$)"
+    rxend = "(?=/|(?=[?].*)|$)"
     rxAmp = fmt"(/amp{rxend})"
     rxLang = "(/[a-z]{2}(?:-[A-Z]{2})?" & fmt"{rxend})" # split to avoid formatting regex `{}` usage
     rxTopic = fmt"(/.*?{rxend})"
@@ -40,7 +40,7 @@ proc join*(tup: UriCaptures, sep = "/", n = 0): string =
     s.join(sep)
 
 proc suffixPath*(relpath: string): string =
-    if relpath == "":
+    if relpath == "" or relpath == "/":
         "index.html"
     elif relpath.splitFile.ext == "":
         relpath & ".html"

@@ -1,4 +1,1 @@
-- social media accounts
-- site directory / link
-- ads
 - backup for deployed websites

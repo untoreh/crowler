@@ -17,6 +17,12 @@ import
     search,
     shorturls
 
+let
+    facebookUrlStr = site.fb_page_url.to(string)
+    facebookUrl* = facebookUrlStr.unsafeAddr
+    twitterUrlStr = site.twitter_url.to(string)
+    twitterUrl* = twitterUrlStr.unsafeAddr
+
 proc pathLink*(path: string, code = "", rel = true, amp = false): string {.gcsafe.} =
     let (dir, name, _) = path.splitFile
     $(

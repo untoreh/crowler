@@ -177,7 +177,9 @@ proc doTrans*() {.async.} =
         await j
     saveToDB(force=true)
 
-proc translate*[Q, T](q: ptr var Q, el: T, srv: service) =
+proc translate*[Q, T](q: ptr Q, el: T, srv: service) =
+    if q.isnil:
+        return
     let (success, length) = setFromDB(q[].pair, el)
     if not success:
         if length > q[].bufsize:
@@ -190,8 +192,10 @@ proc translate*[Q, T](q: ptr var Q, el: T, srv: service) =
             q[].bucket.add(el)
             q[].sz += length
 
-proc translate*[Q, T](q: ptr var Q, el: T, srv: service, finish: bool): Future[bool] {.async.} =
+proc translate*[Q, T](q: ptr Q, el: T, srv: service, finish: bool): Future[bool] {.async.} =
     if finish:
+        if q.isnil:
+            return true
         let (success, _) = setFromDB(q[].pair, el)
         if not success:
             var batches: seq[seq[string]]
@@ -199,7 +203,7 @@ proc translate*[Q, T](q: ptr var Q, el: T, srv: service, finish: bool): Future[b
             await doTrans()
     return true
 
-proc translate*[Q](q: ptr var Q, srv: service, finish: bool): Future[bool] {.async.} =
+proc translate*[Q](q: ptr Q, srv: service, finish: bool): Future[bool] {.async.} =
     if finish and q[].sz > 0:
         q[].push()
         await doTrans()

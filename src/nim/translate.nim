@@ -80,7 +80,7 @@ macro defIfDom*(kind: static[FcKind]): untyped =
             quote do:
                 discard
 
-template translateEnv*(kind: static[FcKind] = xml): untyped {.dirty.} =
+template translateEnv*(kind: static[FcKind] = xml) {.dirty.} =
     debug "html: initializing vars "
     let
         file_path = fc.file_path
@@ -134,7 +134,7 @@ template translateNode*(node: VNode, q: QueueXml) =
     else:
         let finish = true
     translateNode(otree, q, xtformsTags, finish)
-    node.text = $otree
+    node.value = $otree
 
 proc translateHtml(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true): auto =
     translateEnv()

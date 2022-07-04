@@ -63,7 +63,7 @@ let comp = create(CompressorObj)
 comp.zstd_c = new_compress_context()
 comp.zstd_d = new_decompress_context()
 
-proc compress[T](v: T): seq[byte] = compress(comp.zstd_c, v, level=2)
+proc compress[T](v: T): seq[byte] = compress(comp.zstd_c, v, level = 2)
 proc decompress[T](v: sink seq[byte]): T = cast[T](decompress(comp.zstd_d, v))
 proc decompress[T](v: sink string): T = cast[T](decompress(comp.zstd_d, v))
 
@@ -270,22 +270,29 @@ proc pubTopic*(topic: string): bool {.gcsafe.} =
     info "pub: published {len(doneArts)} new posts."
     return true
 
+
 let lastPubTime = create(Time)
 var pubLock: Lock
 initLock(pubLock)
 lastPubTime[] = getTime()
-proc pub*() {.gcsafe.} =
+let siteCreated = create(Time)
+try:
+    assert pybi.hasattr(site, "created").to(bool)
+    siteCreated[] = parse(site.created.to(string), "yyyy-MM-dd").toTime
+except:
+    siteCreated[] = fromUnix(0)
+proc pubTimeInterval(): int =
+    ## This formula gradually reduces the interval between publications
+    max(cfg.CRON_TOPIC_FREQ_MIN, cfg.CRON_TOPIC_FREQ_MAX - ((getTime() - siteCreated[]).inMinutes.int.div (3600 * 24) * 26))
+
+proc maybePublish*(topic: string): bool {.gcsafe.} =
     let t = getTime()
     if pubLock.tryacquire:
         defer: pubLock.release
-        syncTopics()
-        # Only publish one topic every `CRON_TOPIC`
-        if inSeconds(t - lastPubTime[]) > cfg.CRON_TOPIC:
+        # Don't publish each topic more than `CRON_TOPIC_FREQ`
+        if inHours(t - topicPubdate()) > pubTimeInterval():
             lastPubTime[] = t
-            let topic = nextTopic()
-            # Don't publish each topic more than `CRON_TOPIC_FREQ`
-            if inHours(t - topicPubdate()) > cfg.CRON_TOPIC_FREQ:
-                discard pubTopic(topic)
+            return pubTopic(topic)
 
 proc resetTopic(topic: string) =
     withPyLock:

@@ -22,7 +22,8 @@ proc pubTask*() {.gcsafe.} =
     let t = getTime()
     var backoff = 1000
     # start the topic sync thread from python
-    discard pysched.apply(site.topics_watcher)
+    withPyLock:
+        discard pysched.apply(site.topics_watcher)
 
     while len(topicsCache) == 0:
         debug "pubtask: waiting for topics to be created..."
@@ -34,7 +35,7 @@ proc pubTask*() {.gcsafe.} =
         prev_size = len(topicsCache)
         n = prev_size
     while true:
-        if n == 0:
+        if n <= 0:
             syncTopics()
             n = len(topicsCache)
             # if new topics have been added clear homepage/sitemap
@@ -45,8 +46,8 @@ proc pubTask*() {.gcsafe.} =
         let topic = nextTopic()
         # Don't publish each topic more than `CRON_TOPIC_FREQ`
         debug "pubtask: {topic} was published {inHours(t - topicPubdate())} hours ago."
-        if inHours(t - topicPubdate()) > cfg.CRON_TOPIC_FREQ:
-            if pubTopic(topic):
+        if inHours(t - topicPubdate()) > cfg.CRON_TOPIC_FREQ_MIN:
+            if maybePublish(topic):
                 # clear homepage and topic page cache
                 deletePage("")
                 deletePage("/" & topic)

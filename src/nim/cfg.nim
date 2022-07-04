@@ -18,14 +18,16 @@ elif configName == "wsl":
     export wsl
 
 const
-    WEBSITE_SOCIAL* = [WEBSITE_TWITTER, WEBSITE_FACEBOOK, WEBSITE_PINTEREST, WEBSITE_WEIBO, WEBSITE_REDDIT]
+    BASE_URL = Uri()
     SITE_PATH* = PROJECT_PATH / "site"
-    SITE_ASSETS_DIR* = DirSep & "assets"
+    SITE_ASSETS_DIR* = BASE_URL / "assets"
     DATA_PATH* = PROJECT_PATH / "data"
+    DATA_ASSETS_PATH* = DATA_PATH / "assets"
+    DATA_ADS_PATH* = DATA_PATH / "ads"
     ASSETS_PATH* = PROJECT_PATH / "src" / "assets"
-    CSS_REL_URL* = SITE_ASSETS_DIR & "/" & WEBSITE_NAME & "/bundle.css"
-    JS_REL_URL* = SITE_ASSETS_DIR & "/" & WEBSITE_NAME & "/bundle.js"
-    LOGO_DIR* = WEBSITE_URL / SITE_ASSETS_DIR / "logo" / WEBSITE_NAME
+    CSS_REL_URL* = $(SITE_ASSETS_DIR / WEBSITE_NAME / "bundle.css")
+    JS_REL_URL* = $(SITE_ASSETS_DIR / WEBSITE_NAME / "bundle.js")
+    LOGO_DIR* = WEBSITE_URL / $SITE_ASSETS_DIR / "logo" / WEBSITE_NAME
     LOGO_URL* = $(LOGO_DIR / "logo.svg")
     LOGO_SMALL_URL* = $(LOGO_DIR / "logo-small.svg")
     LOGO_ICON_URL* = $(LOGO_DIR / "logo-icon.svg")
@@ -42,7 +44,7 @@ const
     TRANSLATION_ENABLED* = true
     TRANSLATION_TIMEOUT* = 0.25
     TRANSLATION_FLAGS_PATH* = ASSETS_PATH / "flags-sprite.css"
-    TRANSLATION_FLAGS_REL* = "/" / SITE_ASSETS_DIR / "flags-sprite.css"
+    TRANSLATION_FLAGS_REL* = SITE_ASSETS_DIR / "flags-sprite.css"
     ZSTD_COMPRESSION_LEVEL* = 2
     TRANSLATION_TO_FILE* = true
     AMP* = true
@@ -72,9 +74,12 @@ const
 # Seconds between a `pub` job run
 when not declared(CRON_TOPIC):
     const CRON_TOPIC* = 10
-# Hours between a specific topic `pub` job run
-when not declared(CRON_TOPIC_FREQ):
-    const CRON_TOPIC_FREQ* = 8
+# Maximum minutes between a specific topic `pub` job run
+when not declared(CRON_TOPIC_FREQ_MAX):
+    const CRON_TOPIC_FREQ_MAX* = 3600 * 8
+# Minimum minutes between a specific topic `pub` job run
+when not declared(CRON_TOPIC_FREQ_MIN):
+    const CRON_TOPIC_FREQ_MIN* = 3600
 # Period in seconds, after which an article can be removed
 when not declared(CLEANUP_AGE):
     const CLEANUP_AGE* = 3600 * 24 * 30 * 4

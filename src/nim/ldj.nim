@@ -31,7 +31,7 @@ type Organization = ref tuple
 threadVars(
     (EMPTY_DATE, DateTime),
     (ldj_country, ldj_region, string),
-    (jsonCache, Table[Hash, string]),
+    (jsonCache, Table[Hash, JsonNode]),
     (J, JsonNode),
     (S, seq[string]),
     (ST, seq[(string, string)]),
@@ -54,7 +54,7 @@ macro jm*(code: typed): untyped =
             try:
                 jsonCache[h]
             except KeyError:
-                jsonCache[h] = $`fname`.apply(etup)
+                jsonCache[h] = `fname`.apply(etup)
                 jsonCache[h]
 
 proc isempty(s: string): bool {.inject.} = s.isEmptyOrWhiteSpace
@@ -99,7 +99,7 @@ proc jwebsite(url, author, year: auto, image = "", cpr: tuple[holder, year: stri
         result["copyrightHolder"] = %cpr.holder
         result["copyrightYear"] = %cpr.year
 
-template website*(code: varargs[untyped]): string = jm jwebsite(`code`)
+template website*(code: varargs[untyped]): JsonNode = jm jwebsite(`code`)
 
 var searchUri {.threadvar.}: ref Uri
 proc search(url: string, parts: Uri, maxlength = 100): JsonNode =
@@ -145,7 +145,7 @@ proc jauthor(entity = "Person"; name, email = "", description = "", image = "",
     setArgs(data, %*{"image": image, "description": description, "sameAs": sameAs})
     data
 
-template author*(code: varargs[untyped]): string = jm jauthor(code)
+template author*(code: varargs[untyped]): JsonNode = jm jauthor(code)
 
 template publisher(code: untyped): untyped =
     ## Currently same as `author`.
@@ -242,10 +242,10 @@ proc jwebpage(id, title, url, mtime, selector, description: auto, keywords: seq[
 template webpage*(id: string, code: varargs[untyped]): string =
     let k = hash(id)
     try:
-        jsonCache[k]
+        $jsonCache[k]
     except:
-        jsonCache[k] = $jwebpage(id, `code`)
-        jsonCache[k]
+        jsonCache[k] = jwebpage(id, `code`)
+        $jsonCache[k]
 
 proc translation*(src_url, trg_url, lang, title, mtime, selector, description: auto, keywords: seq[string],
                      image = "", headline = "", props = default(JsonNode),
@@ -278,7 +278,7 @@ proc jbreadcrumbs(crumbs: seq[(string, string)]): JsonNode =
                         }
     %nodes
 
-template breadcrumbs*(code: untyped): string = jm jbreadcrumbs(`code`)
+template breadcrumbs*(code: untyped): JsonNode = jm jbreadcrumbs(`code`)
 
 proc crumbsNode*(a: Article): auto =
     @[("Home", $WEBSITE_URL),
@@ -397,9 +397,9 @@ proc jorgschema(name, url: string; contact = "", tel = "", email = ""; sameas: s
             "email": email, }
         }
 
-template orgschema*(code: varargs[untyped]): string = jm jorgschema(code)
+template orgschema*(code: varargs[untyped]): JsonNode = jm jorgschema(code)
 
-proc orgschema*(org: Organization): string =
+proc orgschema*(org: Organization): JsonNode =
     jm jorgschema(org.name, org.url, org.contact, org.tel, org.email, org.sameas, org.logo)
 
 
@@ -662,7 +662,7 @@ proc video(name, url: auto, desc = "", duration = "", embed = "",
             }
 
 proc initLDJ*() =
-    jsonCache = initTable[int, string]()
+    jsonCache = initTable[int, JsonNode]()
     EMPTY_DATE = dateTime(0, Month(1), 1)
     J = JsonNode()
     S = @[]

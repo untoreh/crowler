@@ -139,7 +139,6 @@ proc resumeSonic() =
         push(relpath)
     writeFile(SONIC_BACKLOG, "")
 
-import asyncdispatch
 proc query*(topic: string, keywords: string, lang: string = SLang.code, limit = defaultLimit): Future[seq[string]] {.async.} =
     ## translate the query to source language, because we only index
     ## content in source language
@@ -157,7 +156,7 @@ proc query*(topic: string, keywords: string, lang: string = SLang.code, limit = 
         return sncq.query(WEBSITE_DOMAIN, "default", kws, lang = SLang.code.toISO3, limit = limit)
     except:
         debug "query: failed {getCurrentExceptionMsg()} "
-        discard
+        return newSeq[string]()
 
 proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[string]] {.async.} =
     # Partial inputs language can't be handled if we
@@ -192,6 +191,7 @@ proc pushAllSonic*(clear=true) =
                     let
                         capts = uriTuple(relpath)
                         content = ar.pyget("content").sanitize
+                    echo "pushing ", relpath
                     push(capts, content)
     discard sncc.trigger("consolidate")
 
@@ -199,6 +199,7 @@ when isMainModule:
     initSonic()
     pushAllSonic()
 
+    echo waitFor query("mini", "crossword")
     # push(relpath)
     # discard sncc.trigger("consolidate")
     # echo suggest("web", "web host")

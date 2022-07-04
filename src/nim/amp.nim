@@ -50,18 +50,13 @@ proc getFile(path: string): string =
         result = filesCache[path]
     except:
         let filePath = DATA_PATH / "cache" / $hash(path) & splitFile(path).ext
-        if fileExists(filePath):
-            debug "amp: reading style file from path {filePath}"
-            filesCache[path] = readFile(filePath)
+        parseUri(path, fileUri)
+        if fileUri.scheme.isEmptyOrWhitespace:
+            url = path.asLocalUrl
         else:
-            parseUri(path, fileUri)
-            if fileUri.scheme.isEmptyOrWhitespace:
-                url = path.asLocalUrl
-            else:
-                shallowCopy url, path
-            debug "getfile: getting file content from {url}"
-            filesCache[path] = client.getContent(url)
-            writeFile(filePath, filesCache[path])
+            shallowCopy url, path
+        debug "getfile: getting file content from {url}"
+        filesCache[path] = client.getContent(url)
         result = filesCache[path]
 
 

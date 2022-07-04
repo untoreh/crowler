@@ -334,13 +334,26 @@ proc lenAttr*(n: VNode): int =
     privateAccess(VNode)
     n.attrs.len /% 2
 
-iterator flatorder*(tree: var XmlNode): XmlNode {.closure.} =
+iterator flatorder*(tree: var XmlNode): XmlNode {.closure, gcsafe.} =
     for el in mitems(tree):
         if len(el) > 0:
             let po = flatorder
             for e in po(el):
                 yield e
         yield el
+
+iterator filter*(tree: var XmlNode, tag = "", kind = xnElement): XmlNode {.gcsafe.} =
+    if kind == xnElement:
+        for node in tree.flatorder():
+            if node.kind == xnElement and (tag == "" or node.tag == tag):
+                yield node
+    else:
+        for node in tree.flatorder():
+            if node.kind == kind:
+                yield node
+
+
+
 
 iterator vflatorder*(tree: VNode): VNode {.closure.} =
     for el in items(tree):

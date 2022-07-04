@@ -161,12 +161,12 @@ template translatorFunc(src: string, lang: langPair) {.dirty.} =
 var pyf {.threadvar.}: PyObject
 proc baseTranslatorFunc(src: string, lang: langPair): Future[string] {.gcsafe, async.} =
     pyf = slator.py.getattr("translate")
-    template doJob(): PyObject = pySched.apply(pyf, src, lang.trg)
+    proc doJob(): PyObject {.closure.} = pySched.apply(pyf, src, lang.trg)
     translatorFunc(src, lang)
 
 proc deepTranslatorFunc(src: string, lang: langPair): Future[string] {.gcsafe, async.} =
     pyf = slator.tr[lang].getattr("translate").trywrapPyFunc
-    template doJob(): PyObject = pySched.apply(pyf, src)
+    proc doJob(): PyObject {.closure.} = pySched.apply(pyf, src)
     translatorFunc(src, lang)
 
 # proc deepTranslatorFunc(src: string, lang: langPair): string {.gcsafe.} =

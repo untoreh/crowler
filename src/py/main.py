@@ -218,6 +218,8 @@ def site_loop(site: Site, target_delay=3600 * 8):
             site.reddit_submit()
         if site.has_twitter:
             site.tweet()
+        if site.has_facebook:
+            site.facebook_post()
         time.sleep(target_delay - (time.time() - loop_start))
         random.shuffle(
             topics

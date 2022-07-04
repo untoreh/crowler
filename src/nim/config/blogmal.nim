@@ -9,9 +9,5 @@ const
     WEBSITE_TITLE* = "The wsl"
     WEBSITE_DESCRIPTION* = "The curated readling list, categorized news and articles."
     WEBSITE_CONTACT* = "contact@wsl"
-    WEBSITE_TWITTER* = "https://twitter.com/wsl"
-    WEBSITE_FACEBOOK* = "wslfb"
-    WEBSITE_PINTEREST* = "wslinterest"
-    WEBSITE_WEIBO* = "wslweibo"
-    WEBSITE_REDDIT* = "wslreddit"
-    CRON_TOPIC_FREQ* = 4
+    CRON_TOPIC_FREQ_MAX* = 3600 * 6
+    CRON_TOPIC_FREQ_MIN* = 1800

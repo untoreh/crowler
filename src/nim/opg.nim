@@ -109,7 +109,7 @@ proc opgPage*(a: Article): VNode =
         url = getArticleUrl(a)
         siteName = static(WEBSITE_TITLE)
     twitterMeta("card", "summary")
-    twitterMeta("creator", WEBSITE_TWITTER)
+    twitterMeta("creator", twitterUrl[])
     fillOpgTags(a.title, tp, url, a.imageUrl, a.desc, siteName, locale)
 
 proc opgPage*(title: string, description: string, path: string): VNode {.gcsafe.} =
@@ -119,5 +119,5 @@ proc opgPage*(title: string, description: string, path: string): VNode {.gcsafe.
         tp = static("website")
         url = $(WEBSITE_URL / path)
     twitterMeta("card", "summary")
-    twitterMeta("creator", WEBSITE_TWITTER)
+    twitterMeta("creator", twitterUrl[])
     fillOpgTags(title, tp, url, "", description, "", locale)

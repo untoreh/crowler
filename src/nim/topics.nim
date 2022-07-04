@@ -21,8 +21,10 @@ let
 
 proc lastPageNum*(topic: string): int =
     withPyLock:
-        assert not site.get_top_page(topic).isnil
-        return site.get_top_page(topic).to(int)
+        assert not site.isnil
+        let tpg = site.get_top_page(topic)
+        assert not tpg.isnil
+        return tpg.to(int)
 
 import quirks # PySequence requires quirks
 import strutils
@@ -54,7 +56,12 @@ proc topicUrl*(topic: string, lang: string): string = $(WEBSITE_URL / lang / top
 
 proc isEmptyTopic*(topic: string): bool =
     withPyLock:
-        result = site.getattr("is_empty")(topic).to(bool)
+        assert not site.isnil, "site should not be nil"
+        let empty_f = site.getattr("is_empty")
+        assert not empty_f.isnil, "empty_f should not be nil"
+        let empty_topic = empty_f(topic)
+        assert not empty_topic.isnil, "topic check should not be nil"
+        result = empty_topic.to(bool)
 
 proc pageSize*(topic: string, pagenum: int): int =
     withPyLock:
@@ -69,11 +76,11 @@ let pyTopics = create(PyObject)
 pyTopics[] = loadTopicsIndex()
 
 proc nextTopic*(): string =
-    if pyTopics[].isnil:
+    if pyTopics.isnil or pyTopics[].isnil:
         pyTopics[] = loadTopicsIndex()
-    if pyisnone(pyTopics[]):
+    if withPyLock(pyisnone(pyTopics[])):
         pyTopics[] = loadTopicsIndex()
-    if pyisnone(pyTopics[]):
+    if pyTopics.isnil or withPyLock(pyisnone(pyTopics[])):
         raise newException(Exception, "topics: could not load topics.")
     withPyLock:
         if len(pyTopics[]) <= topicIdx:
@@ -141,9 +148,9 @@ proc fetch*(t: Topics, k: string): TopicState =
 
 proc getState*(topic: string): (int, int) =
     ## Get the number of the top page, and the number of `done` pages.
-    doassert topic != ""
+    doassert topic != "", "gs: topic should not be empty"
     let grp = topicsCache.fetch(topic).group
-    doassert not grp.isnil
+    doassert not grp.isnil, "gs: group is nil"
     var topdir, numdone: int
     withPyLock:
         doassert not grp[$topicData.pages].isnil

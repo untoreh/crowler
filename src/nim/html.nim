@@ -12,7 +12,8 @@ import
     nre,
     json,
     hashes,
-    asyncdispatch
+    asyncdispatch,
+    nimpy
 
 import cfg,
        types,
@@ -81,6 +82,12 @@ template ldjWebsite(): VNode {.dirty.} =
                 image = LOGO_URL).asVNode
 
 template ldjWebpage(): VNode {.dirty.} =
+    let ldjPageProps = newJObject()
+    ldjPageProps["author"] = ldj.author(name = ar.author)
+    ldjPageProps["availableLanguage"] = %ldjLanguages()
+    ldjPageProps["publisher"] = ldj.orgschema(
+                        name = ar.url.parseuri().hostname,
+                        url = ar.url )
     ldj.webpage(id = canon,
                 title = ar.title,
                 url = canon,
@@ -90,13 +97,7 @@ template ldjWebpage(): VNode {.dirty.} =
                 keywords = ar.tags,
                 image = ar.imageUrl,
                 created = ($ar.pubDate),
-                props = (%*{
-                    "availableLanguage": ldjLanguages(),
-                     "author": (ldj.author(name = ar.author)),
-                    "publisher": ldj.orgschema(
-                        name = ar.url.parseuri().hostname,
-                        url = ar.url, )
-        })
+                props = ldjPageProps
     ).asVNode
 
 proc buildHead*(path: string; description = ""; topic = ""; ar = emptyArt): VNode {.gcsafe.} =
@@ -134,6 +135,7 @@ proc buildHead*(path: string; description = ""; topic = ""; ar = emptyArt): VNod
         verbatim("<script>const _ = null</script>")
         when declared(ADSENSE_SRC):
             verbatim(ADSENSE_SRC)
+        for ad in insertAd(ADS_HEAD): ad
 
 proc buildLang(path: string; title = ""): VNode {.gcsafe.} =
     buildHtml(tdiv(class = "menu-lang-btn", title = "Change website's language")):
@@ -282,6 +284,7 @@ template buildMenu*(crumbs: string; topic_uri: Uri; a: Article): untyped =
 
 proc buildFooter*(topic: string = ""): VNode =
     buildHtml(tdiv(class = "site-footer container max border medium no-padding")):
+        for ad in insertAd(ADS_FOOTER): ad
         footer(class = "padding absolute blue white-text primary left bottom"):
             tdiv(class = "footer-links"):
                 a(href = ((if topic != "": "/" & topic else: "") & "/sitemap.xml"),
@@ -299,6 +302,14 @@ proc buildFooter*(topic: string = ""): VNode =
                 text " - "
                 a(href = "/terms-of-service"):
                     text("Terms of Service")
+                if facebookUrl[] != "":
+                    text " - "
+                    a(href = facebookUrl[]):
+                        text("Facebook")
+                if twitterUrl[] != "":
+                    text " - "
+                    a(href = twitterUrl[]):
+                        text("Twitter")
             tdiv(class = "footer-copyright"):
                 text "Except where otherwise noted, this website is licensed under a "
                 a(rel = "license", href = "http://creativecommons.org/licenses/by/3.0/deed.en_US"):
@@ -342,12 +353,14 @@ proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): Future[VNode]
     return buildHtml(body(class = "", topic = (a.topic), style = preline_style)):
         buildMenu(crumbs, topic_uri, a)
         buildMenuSmall(crumbs, topic_uri, a)
+        for ad in insertAd(ADS_HEADER): ad
         main(class = "mdc-top-app-bar--fixed-adjust"):
             postTitle(a)
             postContent(a.content)
             postFooter(a.pubdate)
             hr()
             related
+            for ad in insertAd(ADS_SIDEBAR): ad
         buildFooter(a.topic)
 
 proc pageTitle*(title: string; slug: string): VNode =
@@ -382,12 +395,14 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): VNode =
 
 const pageContent* = postContent
 
-proc asHtml*(data: auto, minify_css=true): string =
+proc asHtml*(data: auto, minify: static[bool] = true, minify_css: bool = true): string =
     let html = "<!DOCTYPE html>"&"\n" & $data
     sdebug "html: raw size {len(html)}"
-    let mhtml = html.minifyHtml(minify_css=minify_css)
-    sdebug "html: minified size {len(mhtml)}"
-    return mhtml
+    result = when minify:
+                 html.minifyHtml(minify_css=minify_css)
+             else:
+                 html
+    sdebug "html: minified size {len(result)}"
 
 proc writeHtml*(data: auto; path: string) {.inline.} =
     debug "writing html file to {path}"

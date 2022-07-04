@@ -19,6 +19,10 @@ docker/
 **data/proxies/*.txt
 **data/proxies/pbproxies.json
 **data/sites/*
+**data/ads/
+!data/ads/.gitkeep
+**data/assets/
+!data/assets/.gitkeep
 
 # Added by cargo
 

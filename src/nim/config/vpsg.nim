@@ -8,9 +8,5 @@ const
     WEBSITE_TITLE* = "wsl"
     WEBSITE_DESCRIPTION* = "Everything about server hosting."
     WEBSITE_CONTACT* = "contact@wsl"
-    WEBSITE_TWITTER* = "https://twitter.com/wsl"
-    WEBSITE_FACEBOOK* = "wslfb"
-    WEBSITE_PINTEREST* = "wslpinterest"
-    WEBSITE_WEIBO* = "wslweibo"
-    WEBSITE_REDDIT* = "wslreddit"
-    CRON_TOPIC_FREQ* = 2
+    CRON_TOPIC_FREQ_MAX* = 3600 * 3
+    CRON_TOPIC_FREQ_MIN* = 3600

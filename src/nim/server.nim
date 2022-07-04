@@ -37,6 +37,7 @@ import
     translate_db,
     rss,
     amp,
+    ads,
     opg,
     ldj,
     imageflow_server,
@@ -49,10 +50,12 @@ import
 const customPages* = ["dmca", "terms-of-service", "privacy-policy"]
 const nobody = ""
 var
+    reqUrl{.threadvar.}: Uri
     reqMime {.threadvar.}: string
     reqFile {.threadvar.}: string
     reqKey {.threadvar.}: int64
     threadInitialized {.threadvar.}: bool
+    norm_capts {.threadvar.}: UriCaptures
 
 
 proc initThreadBase*() {.gcsafe, raises: [].} =
@@ -150,6 +153,11 @@ proc readFileAsync(path: string, page: ptr string) {.async.} =
     defer: file.close()
     page[] = await file.readAll()
 
+proc readFileAsync(path: string): Future[string] {.async.} =
+    var file = openAsync(path, fmRead)
+    defer: file.close()
+    return await file.readAll()
+
 template handleAsset() {.dirty.} =
 
     when releaseMode:
@@ -201,11 +209,20 @@ template handleTopic(capts: auto, ctx: Request) {.dirty.} =
         updateHits(capts)
         ctx.doReply(page)
     elif capts.topic in customPages:
+        debug "topic: looking for custom page"
         page = pageCache[].lcheckOrPut(reqKey):
             await pageFromTemplate(capts.topic, capts.lang, capts.amp)
         ctx.doReply(page)
     else:
-        handle301($(WEBSITE_URL / capts.amp / capts.lang))
+        var filename = capts.topic
+        filename.removePrefix("/")
+        debug "topic: looking for assets {filename}"
+        if filename in assetsFiles[]:
+            page = pageCache[].lcheckOrPut(filename):
+                await readFileAsync(DATA_ASSETS_PATH / filename)
+            ctx.doReply(page)
+        else:
+            handle301($(WEBSITE_URL / capts.amp / capts.lang))
 
 template handleArticle(capts: auto, ctx: Request) =
     ##
@@ -227,14 +244,14 @@ template handleArticle(capts: auto, ctx: Request) =
 template handleSearch(relpath: string, ctx: Request) =
     # extract the referer to get the correct language
     let
-        refuri = parseUri(ctx.headers.get["referer"])
+        refuri = parseUri(if ctx.headers.get().haskey("referer"): $ctx.headers.get["referer"] else: "")
         refcapts = refuri.path.uriTuple
     if capts.lang == "" and refcapts.lang != "":
         handle301($(WEBSITE_URL / refcapts.lang / join(capts, n = 1)))
     else:
         page = searchCache.lcheckOrPut(reqKey):
             # there is no specialized capture for the query
-            var searchq = parseUri(capts.art).query.getParam("q")
+            var searchq = reqUrl.query.getParam("q")
             let lang = something(capts.lang, refcapts.lang)
             # this is for js-less form redirection
             if searchq == "" and (not capts.art.startsWith("?")):
@@ -246,9 +263,8 @@ template handleSearch(relpath: string, ctx: Request) =
 template handleSuggest(relpath: string, ctx: Request) =
     # there is no specialized capture for the query
     let
-        purl = parseUri(capts.art)
-        prefix = purl.query.getParam("p")
-        searchq = something(purl.query.getParam("q"), capts.art)
+        prefix = reqUrl.query.getParam("p")
+        searchq = something(reqUrl.query.getParam("q"), capts.art)
     page = await buildSuggestList(capts.topic, searchq, prefix)
     ctx.doReply(page)
 
@@ -273,25 +289,39 @@ template handleRobots() =
         buildRobots()
     ctx.doReply(page)
 
+template handleCacheClear() =
+    if reqUrl.query.getParam("cache") == "0":
+        norm_capts = uriTuple(reqUrl.path)
+        {.cast(gcsafe).}:
+            if norm_capts.art != "":
+                debug "cache: deleting article {norm_capts}"
+                deleteArt(norm_capts)
+            else:
+                debug "cache: deleting page {reqUrl.path}"
+                deletePage(reqUrl.path)
+
 proc handleGet(ctx: Request): Future[bool] {.gcsafe, async.} =
     initThread()
     # doassert ctx.parseRequestLine
     reset(reqMime)
     reset(reqFile)
     reset(reqKey)
+    reset(reqUrl)
     resetHeaders()
     var
         relpath = if ctx.path.isSome(): ctx.path.get() else: ""
         page: string
     relpath.removeSuffix('/')
-    reqFile = relpath.fp
+    parseUri(relpath, reqUrl)
+    reqFile = reqUrl.path.fp
     reqKey = hash(reqFile)
+    handleCacheClear()
     try:
         let capts = uriTuple(relpath)
         case capts:
             of (topic: ""):
-                debug "router: serving homepage rel: {relpath}, fp: {reqFile}"
-                handleHomePage(relpath, capts, ctx)
+                debug "router: serving homepage rel: {reqUrl.path}, fp: {reqFile}, {reqKey}"
+                handleHomePage(reqUrl.path, capts, ctx)
             of (topic: "assets"):
                 # debug "router: serving assets {relpath}"
                 handleAsset()
@@ -326,7 +356,7 @@ proc handleGet(ctx: Request): Future[bool] {.gcsafe, async.} =
                 debug "router: serving sitemap for topic {capts.topic}"
                 handleTopicSitemap()
             of (art: ""):
-                debug "router: serving topic {relpath}"
+                debug "router: serving topic {relpath}, {reqKey}"
                 # topic page
                 handleTopic(capts, ctx)
             else:
@@ -356,8 +386,11 @@ proc callback(ctx: Request) {.async.} =
     # discard ^f
 
 
-template initSpawn(code) =
-    threadpool.spawn (() => (server.initThread(); code))()
+template initSpawn(code: untyped, doinit=true) =
+    if doinit:
+        threadpool.spawn (() => (server.initThread(); code))()
+    else:
+        threadpool.spawn code
 
 proc start*(doclear = false, port = 0, loglevel = "info") =
     let serverPort = if port == 0:
@@ -368,6 +401,7 @@ proc start*(doclear = false, port = 0, loglevel = "info") =
 
     initCache()
     initStats()
+    readAdsConfig()
 
     # Publishes new articles for one topic every x seconds
     initSpawn pubTask()
@@ -375,10 +409,12 @@ proc start*(doclear = false, port = 0, loglevel = "info") =
     # cleanup task for deleting low traffic articles
     initSpawn cleanupTask()
 
+    initSpawn runAdsWatcher(), false
+    initSpawn runAssetsWatcher(), false
 
     # Configure and start server
     # let address = "0.0.0.0:" & $serverPort
-    echo fmt"HTTP server listening on port {serverPort}"
+    # echo fmt"HTTP server listening on port {serverPort}"
     synctopics()
     var settings = initSettings(port=Port(serverPort), bindAddr="0.0.0.0")
     run(callback, settings = settings)
@@ -392,5 +428,5 @@ when isMainModule:
     # initSonic()
     # let argt = getLastArticles(topic)
     # echo buildRelated(argt[0])
-    # pageCache[].clear()
+    pageCache[].clear()
     start()

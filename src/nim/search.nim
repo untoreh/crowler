@@ -9,7 +9,7 @@ import sonic,
        parseutils,
        uri,
        hashes,
-       asyncdispatch
+       chronos
 from unicode import runeSubStr, validateUtf8
 
 from sonic {.all.} import SonicServerError

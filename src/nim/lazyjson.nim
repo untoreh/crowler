@@ -14,8 +14,8 @@ import utils
 export options, nre, strutils, json_serialization
 
 type
-    bt = byte | char | uint8
-    Buffer = seq[bt] | openarray[bt] | string | ptr[bt] | UncheckedArray[bt]
+    Octet = byte | char | uint8
+    Buffer = seq[Octet] | openarray[Octet] | string | ptr[Octet] | UncheckedArray[Octet]
 
 proc findJNode(node: JsonNode, keys: var seq[JsonNode]): JsonNode =
     if keys.len == 0:

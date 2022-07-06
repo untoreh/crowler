@@ -676,3 +676,12 @@ proc rewriteUrl*(el, rewrite_path: auto, hostname = WEBSITE_DOMAIN) =
         uriVar.path = joinpath(rewrite_path, uriVar.path)
     el.setAttr("href", $uriVar)
     # debug "old: {prev} new: {$uriVar}, {rewrite_path}"
+
+import chronos
+import faststreams/inputs
+proc readFileAsync*(file: string): Future[string] {.async.} =
+    var data: seq[byte]
+    let handler = memFileInput(file)
+    data.setLen(handler.s.len.get())
+    discard Async(handler).readInto(data)
+    return data.toString

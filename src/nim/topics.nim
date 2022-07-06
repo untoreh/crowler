@@ -152,12 +152,16 @@ proc getState*(topic: string): (int, int) =
     let grp = topicsCache.fetch(topic).group
     doassert not grp.isnil, "gs: group is nil"
     var topdir, numdone: int
+    const pgK = $topicData.pages
+    const doneK = $topicData.done
     withPyLock:
-        doassert not grp[$topicData.pages].isnil
-        doassert not grp[$topicData.pages].shape.isnil
-        topdir = max(grp[$topicData.pages].shape[0].to(int)-1, 0)
-        numdone = max(len(grp[$topicData.done]) - 1, 0)
-    assert topdir == lastPageNum(topic)
+        doassert not grp[pgK].isnil
+        if not pyisnone(grp[pgK].shape):
+            topdir = max(grp[pgK].shape[0].to(int)-1, 0)
+            numdone = max(len(grp[doneK]) - 1, 0)
+        else:
+            topdir = -1
+    assert topdir != -1 and topdir == lastPageNum(topic)
     return (topdir, numdone)
 
 var topicsCount {.threadvar.}: int # Used to check if topics are in sync, but it is not perfect (in case topics deletions happen)

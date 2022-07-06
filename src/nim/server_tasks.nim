@@ -46,11 +46,10 @@ proc pubTask*() {.gcsafe.} =
         let topic = nextTopic()
         # Don't publish each topic more than `CRON_TOPIC_FREQ`
         debug "pubtask: {topic} was published {inHours(t - topicPubdate())} hours ago."
-        if inHours(t - topicPubdate()) > cfg.CRON_TOPIC_FREQ_MIN:
-            if maybePublish(topic):
-                # clear homepage and topic page cache
-                deletePage("")
-                deletePage("/" & topic)
+        if maybePublish(topic):
+            # clear homepage and topic page cache
+            deletePage("")
+            deletePage("/" & topic)
         sleep(cfg.CRON_TOPIC * 1000)
         n -= 1
 

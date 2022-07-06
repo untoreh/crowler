@@ -46,6 +46,7 @@ var
 var
     resPtr {.threadvar.}: ptr ptr uint8
     resLen {.threadvar.}: ptr csize_t
+    imgLock {.threadvar.}: Lock
 
 proc check(c: IFLContext): bool =
     let msg = case imageflow_context_error_as_exit_code(c.p):
@@ -123,6 +124,7 @@ proc initImageFlow*() =
     outputBufferLen = create(csize_t)
     resPtr = create(ptr uint8)
     resLen = create(csize_t)
+    initLock(imgLock)
 
     client = newHttpClient(timeout = 10_1000)
     initCmd()
@@ -177,7 +179,7 @@ proc getMime(): string =
         "data.job_result.encodes[0].preferred_mime_type")).strip(
             chars = {'"'})
 
-proc processImg*(input: string, mtd = execMethod): (string, string) =
+proc doProcessImg(input: string, mtd = execMethod): (string, string) =
     setCmd(input)
     let c = $cmd
     # debug "{hash(c)} - {c}"
@@ -207,6 +209,10 @@ proc processImg*(input: string, mtd = execMethod): (string, string) =
         outputBufferLen)
     doassert ctx.check
     result = (outputBuffer[].toString(outputBufferLen[].int), mime)
+
+proc processImg*(input: string, mtd = execMethod): (string, string) =
+    withLock(imgLock):
+        return doProcessImg(input, mtd)
 
 when isMainModule:
     initImageFlow()

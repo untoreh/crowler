@@ -19,7 +19,7 @@ import nimpy,
        locks,
        macros,
        std/sharedtables,
-       asyncdispatch
+       chronos
 
 # from karax/vdom import nil
 import karax/vdom

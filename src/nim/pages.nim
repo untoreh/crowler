@@ -5,7 +5,7 @@ import
     unicode,
     xmltree,
     algorithm,
-    asyncdispatch,
+    chronos,
     htmlparser
 
 import html_misc,
@@ -175,9 +175,7 @@ proc pageFromTemplate*(tpl, lang, amp: string): Future[string] {.async.} =
 proc articleTree*(capts: auto): Future[VNode] {.async.} =
     # every article is under a page number
     let py = getArticlePy(capts.topic, capts.page, capts.art)
-    pyLock.acquire()
-    if not pyisnone(py):
-        pyLock.release()
+    if not withPyLock(pyisnone(py)):
         debug "article: building post"
         var a: Article
         withPyLock:
@@ -187,7 +185,6 @@ proc articleTree*(capts: auto): Future[VNode] {.async.} =
         return await processPage(capts.lang, capts.amp, post, relpath = capts.art)
     else:
         debug "article: could not fetch python article, {py}"
-        pyLock.release()
 
 proc articleHtml*(capts: auto): Future[string] {.gcsafe, async.} =
     let t = await articleTree(capts)

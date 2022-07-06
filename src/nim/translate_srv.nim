@@ -127,7 +127,8 @@ let slatorObj = initTranslator()
 let slator* = slatorObj.unsafeAddr
 
 import times
-from asyncdispatch import async, Future, newFuture, await, sleepAsync, complete
+import chronos
+# from chronos import async, Future, newFuture, await, sleepAsync, complete
 template translatorFunc(src: string, lang: langPair) {.dirty.} =
     # NOTE: using `slator` inside the closure is fine since it always outlives the closure
     try:

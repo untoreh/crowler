@@ -3,7 +3,7 @@ import
     karax/vdom,
     strutils,
     xmltree,
-    asyncdispatch
+    chronos
 
 import
     cfg,

@@ -5,7 +5,7 @@ import os,
        nimpy,
        karax/[vdom, karaxdsl],
        sets,
-       asyncdispatch,
+       chronos,
        sequtils # zip
 
 import

@@ -1,4 +1,4 @@
-import nimpy, options, nre, strutils, strformat, os, std/enumerate, std/mimetypes, uri
+import nimpy, options, nre, strutils, strformat, os, std/enumerate, std/mimetypes, uri, scorper
 import cfg, quirks, utils
 
 const
@@ -11,7 +11,6 @@ const
     rxPath = fmt"{rxAmp}?{rxLang}?{rxTopic}?{rxPage}?{rxArt}?"
 
 const defaultHeaders = @["Cache-Control: no-store"]
-var baseHeaders* {.threadvar.}: seq[string]
 
 type UriTuple = (string, string, string, string, string)
 type UriCaptures* = tuple[amp, lang, topic, page, art: string]
@@ -63,7 +62,6 @@ proc mimePath*(url: string): string {.gcsafe.} =
 
 
 proc initMimes*() =
-    baseHeaders = defaultHeaders
     mimes = newMimetypes()
 
 proc format*(headers: seq[string]): string =
@@ -71,7 +69,10 @@ proc format*(headers: seq[string]): string =
         result.add h & "\c\L"
     result.add headers[^1]
 
-proc resetHeaders*() = baseHeaders = defaultHeaders
+proc format*(headers: httptypes.HttpHeaders): string =
+    for (k, v) in headers.pairs():
+        result.add k & ":" & v & CRLF
+    result.stripLineEnd
 
 type Header* = enum
     hcontent = "Content-Type"
@@ -80,11 +81,11 @@ type Header* = enum
     hlang = "Accept-Language"
     hetag = "ETag"
 
-proc add*(h: Header, v: string) = baseHeaders.add $h & ": " & v
+# proc add*(h: Header, v: string) = baseHeaders.add $h & ": " & v
 
-proc addHeaders*(headers: seq[(Header, string)]) =
-    for (h, s) in headers:
-        h.add(s)
+# proc addHeaders*(headers: seq[(Header, string)]) =
+#     for (h, s) in headers:
+#         h.add(s)
 
 when isMainModule:
     initMimes()

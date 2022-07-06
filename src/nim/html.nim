@@ -12,7 +12,7 @@ import
     nre,
     json,
     hashes,
-    asyncdispatch,
+    chronos,
     nimpy
 
 import cfg,
@@ -41,13 +41,12 @@ const ROOT = initUri() / "/"
 const wsPreline = [(white_space, "pre-line")]
 const wsBreak = [(white_space, "break-spaces")]
 
-threadVars((preline_style, break_style, VStyle), (rtime, string))
+threadVars((preline_style, break_style, VStyle))
 
 proc initHtml*() =
     try:
         preline_style = style(wsPreline)
         break_style = style(wsBreak)
-        rtime = $now()
         initZstd()
     except:
         qdebug "Could not initialize html vars {getCurrentExceptionMsg()}, {getStacktrace()}"
@@ -91,7 +90,7 @@ template ldjWebpage(): VNode {.dirty.} =
     ldj.webpage(id = canon,
                 title = ar.title,
                 url = canon,
-                mtime = rtime,
+                mtime = $now(),
                 selector = ".post-content",
                 description = ar.desc,
                 keywords = ar.tags,

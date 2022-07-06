@@ -18,9 +18,7 @@ import
 
 const rxPathImg = "/([0-9]{1,3})x([0-9]{1,3})/\\?(.+)(?=/|$)"
 
-let
-    imgCache = initLockLruCache[string, string](10 * 1024)
-    flwCache = initLockLruCache[string, string](30 * 1024)
+let imgCache = initLockLruCache[string, string](1024)
 
 proc initWrapImageFlow*() {.gcsafe, raises: [].} =
     try: initImageFlow()

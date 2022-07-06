@@ -277,8 +277,9 @@ initLock(pubLock)
 lastPubTime[] = getTime()
 let siteCreated = create(Time)
 try:
-    assert pybi.hasattr(site, "created").to(bool)
-    siteCreated[] = parse(site.created.to(string), "yyyy-MM-dd").toTime
+    withPyLock:
+        assert pybi.hasattr(site, "created").to(bool)
+        siteCreated[] = parse(site.created.to(string), "yyyy-MM-dd").toTime
 except:
     siteCreated[] = fromUnix(0)
 proc pubTimeInterval(): int =

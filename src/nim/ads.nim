@@ -1,5 +1,5 @@
 import karax/[vdom, karaxdsl], strformat, locks, sugar
-import asyncdispatch, htmlparser, xmltree
+import chronos, htmlparser, xmltree
 import os
 import cfg
 import utils

@@ -15,11 +15,10 @@ import strformat,
        lrucache,
        zippy,
        hashes,
-       chronos,
-       scorper,
+       asyncdispatch,
        threadpool,
-       json,
-       faststreams/inputs
+       httpbeast,
+       json
 
 {.experimental: "caseStmtMacros".}
 
@@ -97,7 +96,7 @@ proc initThread*() {.gcsafe, raises: [].} =
 
 template setEncoding() {.dirty.} =
     debug "detected accepted encoding {headers}"
-    let accept = $reqCtx.rq.headers["Accept-Encoding"]
+    let accept = $reqCtx.rq.headers.get["Accept-Encoding"]
     if ("*" in accept) or ("gzip" in accept):
         reqCtx.respHeaders[$hencoding] = "gzip"
         reqCtx.respBody = reqCtx.respBody.compress(dataFormat = dfGzip)
@@ -105,8 +104,7 @@ template setEncoding() {.dirty.} =
         reqCtx.respHeaders[$hencoding] = "deflate"
         reqCtx.respBody = reqCtx.respBody.compress(dataFormat = dfDeflate)
 
-proc doReply[T](reqCtx: ref ReqContext, body: T, scode = Http200,
-        headers: HttpHeaders = newHttpHeaders()) {.raises: [], async.} =
+proc doReply[T](reqCtx: ref ReqContext, body: T, scode = Http200, headers: HttpHeaders = newHttpHeaders()) {.raises: [].} =
     reqCtx.respHeaders = headers
     reqCtx.respBody = if likely(body != ""): body
                else:
@@ -129,26 +127,24 @@ proc doReply[T](reqCtx: ref ReqContext, body: T, scode = Http200,
         try:
             reqCtx.respCode = scode
             # assert len(respbody) > 0, "reply: Can't send empty body!"
-            await reqCtx.rq.resp(content = reqCtx.respBody, headers = reqCtx.respHeaders,
-                    code = reqCtx.respCode)
+            reqCtx.rq.send(body = reqCtx.respBody, headers = reqCtx.respHeaders.format, code = reqCtx.respCode)
             break
         except Exception as e:
             sdebug "reply: {getCurrentExceptionMsg()}, {getStackTrace()}"
     sdebug "reply: sent: {len(reqCtx.respBody)}"
 
-proc doReply(reqCtx: ref ReqContext) {.async.} =
-    await reqCtx.rq.resp(content = reqCtx.respBody, headers = reqCtx.respHeaders,
-            code = reqCtx.respCode)
+proc doReply(reqCtx: ref ReqContext) =
+    reqCtx.rq.send(body = reqCtx.respBody, headers = reqCtx.respHeaders.format, code = reqCtx.respCode)
 
 # NOTE: `scorper` crashes when sending empty (`""`) responses, so send code
 template handle301*(loc: string = $WEBSITE_URL) {.dirty.} =
-    await reqCtx.doReply($Http301, scode = Http301, headers = @[("Location", loc)].newHttpHeaders)
+    reqCtx.doReply($Http301, scode = Http301, headers = @[("Location", loc)].newHttpHeaders)
 
 template handle404*(loc = $WEBSITE_URL) =
-    await reqCtx.doReply($Http404, scode = Http404)
+    reqCtx.doReply($Http404, scode = Http404)
 
 template handle501*(loc = $WEBSITE_URL) =
-    await reqCtx.doReply($Http501, scode = Http501)
+    reqCtx.doReply($Http501, scode = Http501)
 
 template handleHomePage(relpath: string, capts: UriCaptures, ctx: Request) {.dirty.} =
     const homePath = hash(SITE_PATH / "index.html")
@@ -158,18 +154,28 @@ template handleHomePage(relpath: string, capts: UriCaptures, ctx: Request) {.dir
         let (tocache, toserv) = await buildHomePage(capts.lang, capts.amp)
         pageCache[homePath] = tocache.asHtml(minify_css = (capts.amp == ""))
         toserv.asHtml(minify_css = (capts.amp == ""))
-    await reqCtx.doReply(page)
+    reqCtx.doReply(page)
+
+import std/asyncfile
+proc readFileAsync(path: string, page: ptr string) {.async.} =
+    var file = openAsync(path, fmRead)
+    defer: file.close()
+    page[] = await file.readAll()
+
+proc readFileAsync(path: string): Future[string] {.async.} =
+    var file = openAsync(path, fmRead)
+    defer: file.close()
+    return await file.readAll()
 
 template handleAsset() {.dirty.} =
 
-    var data: seq[byte]
     when releaseMode:
         reqCtx.mime = mimePath(reqCtx.file)
         try:
             page = pageCache[].get(reqCtx.key)
         except KeyError:
             try:
-                page = await readFileAsync(reqCtx.file)
+                await readFileAsync(reqCtx.file, page.addr)
                 if page != "":
                     pageCache[reqCtx.key] = page
             except IOError:
@@ -178,10 +184,10 @@ template handleAsset() {.dirty.} =
         debug "ASSETS CACHING DISABLED"
         try:
             reqCtx.mime = mimePath(reqCtx.file)
-            page = await readFileAsync(reqCtx.file)
+            await readFileAsync(reqCtx.file, page.addr)
         except IOError:
             handle404()
-    await reqCtx.doReply(page)
+    reqCtx.doReply(page)
 
 template dispatchImg(relpath: var string, ctx: auto) {.dirty.} =
     var mime: string
@@ -200,7 +206,7 @@ template dispatchImg(relpath: var string, ctx: auto) {.dirty.} =
             pageCache[][reqCtx.key] = mime & ";" & page
             debug "img: save to cache {reqCtx.key} : {relpath}"
     reqCtx.mime = mime
-    await reqCtx.doReply(page)
+    reqCtx.doReply(page)
 
 template handleTopic(capts: auto, ctx: Request) {.dirty.} =
     debug "topic: looking for {capts.topic}"
@@ -215,12 +221,12 @@ template handleTopic(capts: auto, ctx: Request) {.dirty.} =
             pageCache[pageReqKey] = pagetree.asHtml
             (await processPage(capts.lang, capts.amp, pagetree)).asHtml(minify_css = (capts.amp == ""))
         updateHits(capts)
-        await reqCtx.doReply(page)
+        reqCtx.doReply(page)
     elif capts.topic in customPages:
         debug "topic: looking for custom page"
         page = pageCache[].lcheckOrPut(reqCtx.key):
             await pageFromTemplate(capts.topic, capts.lang, capts.amp)
-        await reqCtx.doReply(page)
+        reqCtx.doReply(page)
     else:
         var filename = capts.topic
         filename.removePrefix("/")
@@ -228,7 +234,7 @@ template handleTopic(capts: auto, ctx: Request) {.dirty.} =
         if filename in assetsFiles[]:
             page = pageCache[].lcheckOrPut(filename):
                 await readFileAsync(DATA_ASSETS_PATH / filename)
-            await reqCtx.doReply(page)
+            reqCtx.doReply(page)
         else:
             handle301($(WEBSITE_URL / capts.amp / capts.lang))
 
@@ -242,7 +248,7 @@ template handleArticle(capts: auto, ctx: Request) =
             await articleHtml(capts)
         if page != "":
             updateHits(capts)
-            await reqCtx.doReply(page)
+            reqCtx.doReply(page)
         else:
             debug "article: redirecting to topic because page is empty"
             handle301($(WEBSITE_URL / capts.amp / capts.lang / capts.topic))
@@ -252,7 +258,8 @@ template handleArticle(capts: auto, ctx: Request) =
 template handleSearch(relpath: string, ctx: Request) =
     # extract the referer to get the correct language
     let
-        refuri = parseUri($ctx.headers.getOrDefault("referer", @[""].HttpHeaderValues))
+        refuri = parseUri(if ctx.headers.get().haskey("referer"): $ctx.headers.get[
+                "referer"] else: "")
         refcapts = refuri.path.uriTuple
     if capts.lang == "" and refcapts.lang != "":
         handle301($(WEBSITE_URL / refcapts.lang / join(capts, n = 1)))
@@ -266,7 +273,7 @@ template handleSearch(relpath: string, ctx: Request) =
                 searchq = capts.art.strip()
             (await buildSearchPage(if capts.topic != "s": capts.topic else: "", searchq, lang)).asHtml
         reqCtx.mime = mimePath("index.html")
-        await reqCtx.doReply(page)
+        reqCtx.doReply(page)
 
 template handleSuggest(relpath: string, ctx: Request) =
     # there is no specialized capture for the query
@@ -274,28 +281,28 @@ template handleSuggest(relpath: string, ctx: Request) =
         prefix = reqCtx.url.query.getParam("p")
         searchq = something(reqCtx.url.query.getParam("q"), capts.art)
     page = await buildSuggestList(capts.topic, searchq, prefix)
-    await reqCtx.doReply(page)
+    reqCtx.doReply(page)
 
 template handleFeed() =
     page = fetchFeedString(capts.topic)
-    await reqCtx.doReply(page)
+    reqCtx.doReply(page)
 
 template handleSiteFeed() =
     page = fetchFeedString()
-    await reqCtx.doReply(page)
+    reqCtx.doReply(page)
 
 template handleTopicSitemap() =
     page = fetchSiteMap(capts.topic)
-    await reqCtx.doReply(page)
+    reqCtx.doReply(page)
 
 template handleSitemap() =
     page = fetchSiteMap("")
-    await reqCtx.doReply(page)
+    reqCtx.doReply(page)
 
 template handleRobots() =
     page = pageCache[].lcheckOrPut(reqCtx.key):
         buildRobots()
-    await reqCtx.doReply(page)
+    reqCtx.doReply(page)
 
 template handleCacheClear() =
     if reqCtx.url.query.getParam("cache") == "0":
@@ -324,7 +331,7 @@ proc handleGet(ctx: Request): Future[bool] {.gcsafe, async.} =
     initThread()
     # doassert ctx.parseRequestLine
     var
-        relpath = ctx.path
+        relpath = if ctx.path.isSome(): ctx.path.get() else: ""
         page: string
     relpath.removeSuffix('/')
     var cached = true
@@ -332,6 +339,7 @@ proc handleGet(ctx: Request): Future[bool] {.gcsafe, async.} =
         let reqCtx = new(ReqContext)
         parseUri(relpath, reqCtx.url)
         reqCtx.file = reqCtx.url.path.fp
+        echo reqCtx.file
         reqCtx.key = hash(reqCtx.file)
         reqCtx.rq = ctx
         cached = false
@@ -340,7 +348,7 @@ proc handleGet(ctx: Request): Future[bool] {.gcsafe, async.} =
     if cached:
         reqCtx.rq = ctx
         try:
-            await reqCtx.doReply()
+            reqCtx.doReply()
         except:
             reqCtxCache.del(relpath)
             abort()
@@ -436,10 +444,11 @@ proc start*(doclear = false, port = 0, loglevel = "info") =
     initSpawn runAssetsWatcher(), false
 
     # Configure and start server
-    let address = "0.0.0.0:" & $serverPort
+    # let address = "0.0.0.0:" & $serverPort
     # echo fmt"HTTP server listening on port {serverPort}"
     synctopics()
-    waitFor serve(address, callback)
+    var settings = initSettings(port = Port(serverPort), bindAddr = "0.0.0.0")
+    run(callback, settings = settings)
 
 when isMainModule:
     # initThread()

@@ -4,7 +4,8 @@ import
     uri,
     std/xmlparser,
     lists,
-    strformat
+    strformat,
+    chronos
 
 import
     cfg,
@@ -133,51 +134,51 @@ template updateFeed*(a: Article) =
     if a.title != "":
         feed.update(a.topic, @[a])
 
-proc fetchFeedString*(topic: string): string =
-    pageCache[].lgetOrPut(topic.feedKey):
+proc fetchFeedString*(topic: string): Future[string] {.async.} =
+    return pageCache[].lgetOrPut(topic.feedKey):
         let
-            topPage = topic.lastPageNum
+            topPage = await topic.lastPageNum
             prevPage = max(0, topPage - 1)
         var
-            arts = getDoneArticles(topic, prevPage)
-            tfeed = getTopicFeed(topic, topic, topicDesc(topic), arts)
+            arts = await getDoneArticles(topic, prevPage)
+            tfeed = getTopicFeed(topic, topic, (await topicDesc(topic)), arts)
         if topPage > prevPage:
-            arts = getLastArticles(topic)
+            arts = await getLastArticles(topic)
             tfeed.update(topic, arts, dowrite = false)
         topicFeeds[topic] = tfeed
         tfeed.toXmlString
 
-proc fetchFeed*(topic: string): Feed =
+proc fetchFeed*(topic: string): Future[Feed] {.async.} =
     try:
-        topicFeeds[topic]
+        result = topicFeeds[topic]
     except KeyError:
-        let feedStr = fetchFeedString(topic)
+        let feedStr = await fetchFeedString(topic)
         try:
-            topicFeeds[topic]
+            result = topicFeeds[topic]
         except KeyError:
-            topicFeeds.put(topic, parseXml(feedStr))
+            result = topicFeeds.put(topic, parseXml(feedStr))
 
-proc fetchFeedString*(): string =
-    pageCache[].lgetOrPut(static(WEBSITE_TITLE.feedKey)):
+proc fetchFeedString*(): Future[string] {.async.} =
+    return pageCache[].lgetOrPut(static(WEBSITE_TITLE.feedKey)):
         var arts: seq[Article]
-        let pytopics = loadTopics(cfg.MENU_TOPICS)
+        let pytopics = await loadTopics(cfg.MENU_TOPICS)
         var topicName: string
         for topic in pytopics:
             withPyLock:
                 topicName = topic[0].to(string) ## topic holds topic name and description
-            let ta = getLastArticles(topicName)
+            let ta = await getLastArticles(topicName)
             if ta.len > 0:
                 arts.add ta[^1]
         let sfeed = getTopicFeed("", WEBSITE_TITLE, WEBSITE_DESCRIPTION, arts)
         topicFeeds[WEBSITE_TITLE] = sfeed
         sfeed.toXmlString
 
-proc fetchFeed*(): Feed =
+proc fetchFeed*(): Future[Feed] {.async.} =
     try:
-        topicFeeds[WEBSITE_TITLE]
+        result = topicFeeds[WEBSITE_TITLE]
     except:
-        let feedStr = fetchFeedString()
-        try:
+        let feedStr = await fetchFeedString()
+        result = try:
             topicFeeds[WEBSITE_TITLE]
         except KeyError:
             topicFeeds.put(WEBSITE_TITLE, parseXml(feedStr))
@@ -190,4 +191,3 @@ when isMainModule:
     let topic = "dedi"
     # pageCache[].del(topic)
     # pageCache[].del(WEBSITE_TITLE)
-    echo fetchFeed(topic)

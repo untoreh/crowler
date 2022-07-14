@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 #
+import time
 from typing import NamedTuple
 import deep_translator
 from lingua import Language, LanguageDetectorBuilder
 from nltk.tokenize import sent_tokenize
 from requests.exceptions import ConnectTimeout, ProxyError, ConnectionError
-import time
 import scheduler as sched
 
 import config as cfg
@@ -125,6 +125,8 @@ class Translator:
             self._translate[(self._sl, code)] = self._tr(source=self._sl, target=code)
         sched.initPool()
         pb.sync_from_file()
+        cfg.setproxies(None)
+        cfg.set_socket_timeout(5)
 
     def parse_data(self, data: str):
         queries = []
@@ -146,8 +148,6 @@ class Translator:
             self._translate[lp] = self._tr(source=source, target=target)
         tr = self._translate[lp]
         prx_dict = {}
-        cfg.setproxies(None)
-        cfg.set_socket_timeout(5)
         trans = []
         tries = 0
         current = 0

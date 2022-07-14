@@ -1,16 +1,17 @@
 import strutils,
        nimpy,
        nimpy/py_lib {.all.},
-       locks,
        os,
        strformat,
-       times
+       times,
+       chronos,
+       locks
 
-export locks
+export nimpy
+export pyLib, locks
 
-let pyGlo* = pyGlobals()
-
-when false:
+when defined(findPyLib):
+    import osproc
     proc setPyLib() =
         var (pylibpath, success) = execCmdEx("python3 -c 'import find_libpython; print(find_libpython.find_libpython())'")
         if success != 0:
@@ -22,29 +23,43 @@ when false:
         pyInitLibPath pylibpath
     setPyLib()
 
-var pyLock*: Lock
-initLock(pyLock)
+pygil.globalAcquire()
+let pyGlo* = pyGlobals()
+pygil.release()
 
-import strutils
 template withPyLock*(code): auto =
-    {.locks: [pyLock].}:
+    {.locks: [pyGilLock].}:
         try:
-            # echo getThreadId(), " ", strutils.split(getStacktrace())[^2]
-            pyLock.acquire()
+            # echo getThreadId(), " -- ", getCurrentProcessId(), " -- ", procName()
+            await pygil.acquire()
             code
+        except:
+            raise getCurrentException()
         finally:
-            # echo getThreadId(), " ", "unlocked"
-            pyLock.release()
+            # echo getThreadId(), " -- ", getCurrentProcessId(),  " -- unlocked"
+            pygil.release()
+
+template syncPyLock*(code): auto =
+    {.locks: [pyGilLock].}:
+        try:
+            pygil.globalAcquire()
+            code
+        except:
+            raise getCurrentException()
+        finally:
+            pygil.release()
 
 # in release mode cwd is not src/nim
+pygil.globalAcquire()
 let
     prefixPy = if dirExists "py": "py"
                elif dirExists "lib/py": "lib/py"
                elif dirExists "../py": "../py"
                else: raise newException(Defect, "could not find python library path. in {getAppFileName.parentDir}")
     machinery = pyImport("importlib.machinery")
-    pyimlib = pyImport("importlib")
+    pyimutil = pyImport("importlib.util")
     pysys = pyImport("sys")
+pygil.release()
 
 proc relpyImport*(relpath: string, prefix = prefixPy): PyObject =
     ## All relative python imports inside the relatively imported module (from .. import $mod)
@@ -54,31 +69,25 @@ proc relpyImport*(relpath: string, prefix = prefixPy): PyObject =
     try:
         let
             name = abspath.splitFile[1]
-            spec = pyimlib.util.spec_from_file_location(name, abspath)
-            pymodule = pyimlib.util.module_from_spec(spec)
+            spec = pyimutil.spec_from_file_location(name, abspath)
+            pymodule = pyimutil.module_from_spec(spec)
         pysys.modules[name] = pymodule
         discard spec.loader.exec_module(pymodule)
-        return pyImport(name)
+        return pyImport(name.cstring)
     except:
         raise newException(ValueError, fmt"Cannot import python module, pwd is {getCurrentDir()}, trying to load {abspath} {'\n'} {getCurrentExceptionMsg()}")
 
 # we have to load the config before utils, otherwise the module is "partially initialized"
-{.push guard: pyLock.}
+{.push guard: pyGilLock.}
+pygil.globalAcquire()
 import cfg
-let pycfg* = relpyImport("config")
 block:
     when declared(PROJECT_PATH):
         let pypath = PROJECT_PATH / "lib" / "py"
         if dirExists(pypath):
             let sys = pyImport("sys")
             discard sys.path.append(pypath)
-discard pyImport("log")
-let ut* = pyImport("utils")
-discard pyImport("blacklist")
-let site* = pyImport("sites").Site(WEBSITE_NAME)
-let pySched* = pyImport("scheduler")
-discard pySched.initPool()
-{.pop guard:pyLock.}
+
 
 # https://github.com/yglukhov/nimpy/issues/164
 let
@@ -91,8 +100,11 @@ let
     PyIntClass = pybi.getattr("int")
     PyDictClass = pybi.getattr("dict")
     PyZArray = pyza.getAttr("Array")
+pygil.release()
+{.pop guard:pyGilLock.}
 var PyNone* {.threadvar.}: PyObject
 
+proc pyhasAttr*(o: PyObject, a: string): bool = pybi.hasattr(o, a).to(bool)
 
 proc pyclass(py: PyObject): PyObject {.inline.} =
     pybi.type(py)
@@ -105,7 +117,7 @@ proc pyisbool*(py: PyObject): bool {.exportpy.} =
 
 proc pyisnone*(py: PyObject): bool {.exportpy.} =
     assert not pybi.isnil, "pyn: pybi should not be nil"
-    assert not pybi.isinstance.isnil, "pyn: pybi.isinstance should not be nil"
+    assert pyhasAttr(pybi, "isinstance"), "pyn: pybi.isinstance should not be nil"
     assert not PyNoneClass.isnil, "pyn: PyNoneClass should not be nil"
     let check = pybi.isinstance(py, PyNoneClass)
     assert not check.isnil, "pyn: check should not be nil"
@@ -147,17 +159,31 @@ proc pydate*(py: PyObject, default = getTime()): Time =
     else:
         return default
 
+pygil.globalAcquire()
+let pycfg* = pyImport("config")
+doassert not pyisnone(pycfg)
+discard pyImport("log")
+let ut* = pyImport("utils")
+doassert not pyisnone(ut)
+discard pyImport("blacklist")
+let site* = pyImport("sites").Site(WEBSITE_NAME)
+doassert not pyisnone(site)
+let pySched* = pyImport("scheduler")
+doassert not pyisnone(pySched)
+discard pySched.initPool()
+pygil.release()
 
-
-proc initPy*() {.raises: [].} =
-    withPyLock:
+proc initPy*() =
+    syncPyLock:
         try:
-            PyNone = pybi.None
+            PyNone = pybi.getattr("None")
         except:
             echo "Can't initialize PyNone"
             quit()
 
+pygil.globalAcquire()
 let pySlice = pybi.slice
+pygil.release()
 
 proc contains*[K](v: PyObject, k: K): bool =
     v.callMethod("__contains__", k).to(bool)
@@ -233,10 +259,12 @@ proc pyget*[T](py: PyObject, k: string, def: T = ""): T =
         else:
             return v.to(T)
     except:
+        pyErrClear()
         if pyisnone(py):
             return def
         else:
             return py.to(T)
+
 
 # Exported
 # proc cleanText*(text: string): string {.exportpy.} =

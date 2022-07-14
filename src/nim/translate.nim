@@ -14,8 +14,6 @@ import nimpy,
        uri,
        std/wrapnils,
        lrucache,
-       weave,
-       weave/[runtime, contexts],
        locks,
        macros,
        std/sharedtables,
@@ -117,7 +115,7 @@ template translateNode*(otree: XmlNode, q: QueueXml, tformsTags: auto, fin = fal
                 elif ((el.hasAttr("alt")) and el.isTranslatable("alt")) or
                      ((el.hasAttr("title")) and el.isTranslatable("title")):
                     translate(q.addr, el, srv)
-    discard waitFor translate(q.addr, srv, finish = fin)
+    discard await translate(q.addr, srv, finish = fin)
 
 template translateNode*(node: VNode, q: QueueXml) =
     assert node.kind == VNodeKind.verbatim
@@ -136,25 +134,26 @@ template translateNode*(node: VNode, q: QueueXml) =
     translateNode(otree, q, xtformsTags, finish)
     node.value = $otree
 
-proc translateHtml(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true): auto =
-    translateEnv()
+when defined(weaveRuntime):
+    proc translateHtml(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true): auto =
+        translateEnv()
 
-    # Set the target lang attribute at the top level
-    var a: XmlAttributes
-    # NOTE: this will crash if the file doesn't have an html tag (as it should)
-    a = otree.child("html").attrs
-    if a.isnil:
-        a = newStringTable()
-        otree.child("html").attrs = a
-    a["lang"] = fc.pair.trg
-    if fc.pair.trg in RTL_LANGS:
-        a["dir"] = "rtl"
+        # Set the target lang attribute at the top level
+        var a: XmlAttributes
+        # NOTE: this will crash if the file doesn't have an html tag (as it should)
+        a = otree.child("html").attrs
+        if a.isnil:
+            a = newStringTable()
+            otree.child("html").attrs = a
+        a["lang"] = fc.pair.trg
+        if fc.pair.trg in RTL_LANGS:
+            a["dir"] = "rtl"
 
-    debug "html: recursing tree..."
-    translateNode(otree, q, tformsTags)
-    debug "html: finished translations"
-    (q, otree)
-    # raise newException(ValueError, "That's all, folks.")
+        debug "html: recursing tree..."
+        translateNode(otree, q, tformsTags)
+        debug "html: finished translations"
+        (q, otree)
+        # raise newException(ValueError, "That's all, folks.")
 
 proc splitUrlPath*(rx: Regex, file: auto): auto =
     # debug "translate: splitting for file {file} with pattern {rx.pattern}"
@@ -166,130 +165,133 @@ proc fetchHtml(file: string): XmlNode =
         htmlcache[file] = loadHtml(file)
     return htmlcache[file]
 
-proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true): auto =
-    translateEnv(dom)
-    for node in otree.preorder():
-        case node.kind:
-            of vdom.VNodeKind.html:
-                node.setAttr("lang", pair.trg)
-                if pair.trg in RTL_LANGS:
-                    node.setAttr("dir", "rtl")
-                break
-            else: continue
-    for el in otree.preorder():
-        case el.kind:
-            of vdom.VNodeKind.text:
-                if el.text.isEmptyOrWhitespace:
-                    continue
-                if isTranslatable(el):
-                    translate(q.addr, el, srv)
+when defined(weaveRuntime):
+    proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true): auto =
+        translateEnv(dom)
+        for node in otree.preorder():
+            case node.kind:
+                of vdom.VNodeKind.html:
+                    node.setAttr("lang", pair.trg)
+                    if pair.trg in RTL_LANGS:
+                        node.setAttr("dir", "rtl")
+                    break
+                else: continue
+        for el in otree.preorder():
+            case el.kind:
+                of vdom.VNodeKind.text:
+                    if el.text.isEmptyOrWhitespace:
+                        continue
+                    if isTranslatable(el):
+                        translate(q.addr, el, srv)
+                else:
+                    let t = el.kind
+                    if t in tformsTags:
+                        getTForms(dom)[t](el, file_path, url_path, pair)
+                    if t == VNodeKind.a:
+                        if el.hasAttr("href"):
+                            rewriteUrl(el, rewrite_path, hostname)
+                    elif t == VNodeKind.verbatim:
+                        debug "dom: translating verbatim"
+                        translateNode(el, xq)
+                    elif ((el.hasAttr("alt")) and el.isTranslatable("alt")) or
+                            ((el.hasAttr("title")) and el.isTranslatable("title")):
+                        translate(q.addr, el, srv)
+        debug "dom: finishing translations"
+        discard waitFor translate(q.addr, srv, finish = finish)
+        (q, otree)
+
+    template tryTranslateFunc(kind: FcKind, args: untyped, post: untyped) {.dirty.} =
+        var q: Queue
+        case kind:
+            of xml:
+                var ot: XmlNode
+                (q, ot) = translateHtml(args)
+                post
             else:
-                let t = el.kind
-                if t in tformsTags:
-                    getTForms(dom)[t](el, file_path, url_path, pair)
-                if t == VNodeKind.a:
-                    if el.hasAttr("href"):
-                        rewriteUrl(el, rewrite_path, hostname)
-                elif t == VNodeKind.verbatim:
-                    debug "dom: translating verbatim"
-                    translateNode(el, xq)
-                elif ((el.hasAttr("alt")) and el.isTranslatable("alt")) or
-                        ((el.hasAttr("title")) and el.isTranslatable("title")):
-                    translate(q.addr, el, srv)
-    debug "dom: finishing translations"
-    discard waitFor translate(q.addr, srv, finish = finish)
-    (q, otree)
+                var ot: vdom.VNode
+                trOut.clear()
+                (q, ot) = translateDom(args)
+                # FIXME
+                trOut[fc.pair.trg] = ot
+                post
+        debug "trytrans: returning from translations"
 
-template tryTranslateFunc(kind: FcKind, args: untyped, post: untyped) {.dirty.} =
-    var q: Queue
-    case kind:
-        of xml:
-            var ot: XmlNode
-            (q, ot) = translateHtml(args)
-            post
-        else:
-            var ot: vdom.VNode
-            trOut.clear()
-            (q, ot) = translateDom(args)
-            # FIXME
-            trOut[fc.pair.trg] = ot
-            post
-    debug "trytrans: returning from translations"
+    proc tryTranslate(fc: ptr FileContext, kind: FcKind): bool =
+        var tries = 0
+        while tries < cfg.MAX_TRANSLATION_TRIES:
+            try:
+                debug "trytrans: scheduling translation"
+                tryTranslateFunc(kind, fc):
+                    toggle(TRANSLATION_TO_FILE):
+                        debug "writing to path {fc.t_path}"
+                        writeFile(fc.t_path, fmt"<!doctype html>{'\n'}{ot}")
+                return true
+            except Exception as e:
+                tries += 1
+                debug "trytrans: Caught an exception, ({tries}, {e.msg})"
+                if tries >= cfg.MAX_TRANSLATION_TRIES:
+                    warn "Couldn't translate file {fc[].file_path}, exceeded trials"
+                    return false
+        return false
 
-proc tryTranslate(fc: ptr FileContext, kind: FcKind): bool =
-    var tries = 0
-    while tries < cfg.MAX_TRANSLATION_TRIES:
-        try:
-            debug "trytrans: scheduling translation"
-            tryTranslateFunc(kind, fc):
-                toggle(TRANSLATION_TO_FILE):
-                    debug "writing to path {fc.t_path}"
-                    writeFile(fc.t_path, fmt"<!doctype html>{'\n'}{ot}")
-            return true
-        except Exception as e:
-            tries += 1
-            debug "trytrans: Caught an exception, ({tries}, {e.msg})"
-            if tries >= cfg.MAX_TRANSLATION_TRIES:
-                warn "Couldn't translate file {fc[].file_path}, exceeded trials"
-                return false
-    return false
-
-proc translateFile(file, rx, langpairs: auto, target_path = "") =
-    let
-        html = fetchHtml(file)
-        (filepath, urlpath) = splitUrlPath(rx, file)
-    debug "translating file {file}"
-    var jobs: seq[Flowvar[bool]]
-    # Hold references of variables created inside the loop until all jobs have finished
-    var ctxs: seq[ptr FileContext]
-
-    for pair in langpairs:
+when defined(weaveRuntime):
+    proc translateFile(file, rx, langpairs: auto, target_path = "") =
         let
-            t_path = if target_path == "":
-                        file_path / pair.trg / url_path
-                    else:
-                        target_path / pair.trg / url_path
-            d_path = parentDir(t_path)
-        if not dirExists(d_path):
-            createDir(d_path)
-        var fc = initFileContext(html, file_path, url_path, pair, t_path)
-        ctxs.add(fc)
-        let j = spawn tryTranslate(fc, xml)
+            html = fetchHtml(file)
+            (filepath, urlpath) = splitUrlPath(rx, file)
+        debug "translating file {file}"
+        var jobs: seq[Flowvar[bool]]
+        # Hold references of variables created inside the loop until all jobs have finished
+        var ctxs: seq[ptr FileContext]
 
-    syncRoot(Weave)
-    saveToDB(force = true)
+        for pair in langpairs:
+            let
+                t_path = if target_path == "":
+                            file_path / pair.trg / url_path
+                        else:
+                            target_path / pair.trg / url_path
+                d_path = parentDir(t_path)
+            if not dirExists(d_path):
+                createDir(d_path)
+            var fc = initFileContext(html, file_path, url_path, pair, t_path)
+            ctxs.add(fc)
+            let j = spawn tryTranslate(fc, xml)
 
-
-proc translateTree*(tree: vdom.VNode, file, rx, langpairs: auto, targetPath = "",
-        ar = emptyArt) {.gcsafe.} =
-    ## Translate a `VNode` tree to multiple languages
-
-    let (filepath, urlpath) = splitUrlPath(rx, file)
-    var jobs: seq[Flowvar[bool]]
-    # Hold references of variables created inside the loop until all jobs have finished
-    var ctxs: seq[ptr FileContext]
-
-    let getTargetPath = if targetPath == "": (pair: langPair) => file_path / pair.trg / url_path
-                        else: (pair: langPair) => target_path / pair.trg / url_path
-
-    for pair in langpairs:
-        let t_path = getTargetPath(pair)
-        let d_path = parentDir(t_path)
-        if not dirExists(d_path):
-            createDir(d_path)
-        var fc = initFileContext(tree, file_path, url_path, pair, t_path)
-        ctxs.add(fc)
-        let j = spawn tryTranslate(fc, dom)
-
-    syncRoot(Weave)
-    saveToDB(force = true)
+        syncRoot(Weave)
+        saveToDB(force = true)
 
 
-proc fileWise(path, exclusions, rx_file, langpairs: auto, target_path = "") =
-    for file in filterFiles(path, excl_dirs = exclusions, top_dirs = included_dirs):
-        debug "file: translating {file}"
-        translateFile(file, rx_file, langpairs, target_path = target_path)
-        info "file: translation successful for path: {file}"
+when defined(weaveRuntime):
+    proc translateTree*(tree: vdom.VNode, file, rx, langpairs: auto, targetPath = "",
+            ar = emptyArt) {.gcsafe.} =
+        ## Translate a `VNode` tree to multiple languages
+
+        let (filepath, urlpath) = splitUrlPath(rx, file)
+        var jobs: seq[Flowvar[bool]]
+        # Hold references of variables created inside the loop until all jobs have finished
+        var ctxs: seq[ptr FileContext]
+
+        let getTargetPath = if targetPath == "": (pair: langPair) => file_path / pair.trg / url_path
+                            else: (pair: langPair) => target_path / pair.trg / url_path
+
+        for pair in langpairs:
+            let t_path = getTargetPath(pair)
+            let d_path = parentDir(t_path)
+            if not dirExists(d_path):
+                createDir(d_path)
+            var fc = initFileContext(tree, file_path, url_path, pair, t_path)
+            ctxs.add(fc)
+            let j = spawn tryTranslate(fc, dom)
+
+        syncRoot(Weave)
+        saveToDB(force = true)
+
+
+    proc fileWise(path, exclusions, rx_file, langpairs: auto, target_path = "") =
+        for file in filterFiles(path, excl_dirs = exclusions, top_dirs = included_dirs):
+            debug "file: translating {file}"
+            translateFile(file, rx_file, langpairs, target_path = target_path)
+            info "file: translation successful for path: {file}"
 
 proc initThread*() =
     initPunctRgx()
@@ -304,30 +306,20 @@ proc initThread*() =
 proc exitThread() =
     saveToDB(force = true)
 
-
-template withWeave*(doexit = false, args: untyped) =
-    # os.putenv("WEAVE_NUM_THREADS", "2")
-    if isWeaveOff():
-        init(Weave, initThread)
-        initThread()
-    args
-    if doexit:
-        exit(Weave, exitThread)
-        exitThread()
-
 template setupTranslation*(service_kind = deep_translator, fpath = "") {.dirty.} =
     let
         dir = normalizedPath(if fpath == "": fpath else: path)
         langpairs = collect(for lang in TLangs: (src: SLang.code, trg: lang.code)).static
         rx_file = getDirRx(dir)
 
-proc translateDir(path: string, service_kind = deep_translator, tries = 1, target_path = "") =
-    assert path.dirExists
-    withWeave(doexit = true):
-        setupTranslation(service_kind)
-        debug "rgx: Regexp is '(.*{dir}/)(.*$)'."
-        link_src_to_dir(dir)
-        fileWise(path, excluded_dirs, rx_file, langpairs, target_path = target_path)
+when defined(weaveRuntime):
+    proc translateDir(path: string, service_kind = deep_translator, tries = 1, target_path = "") =
+        assert path.dirExists
+        withWeave(doexit = true):
+            setupTranslation(service_kind)
+            debug "rgx: Regexp is '(.*{dir}/)(.*$)'."
+            link_src_to_dir(dir)
+            fileWise(path, excluded_dirs, rx_file, langpairs, target_path = target_path)
 
 # when isMainModule:
 #     import timeit
@@ -346,7 +338,6 @@ proc translateDir(path: string, service_kind = deep_translator, tries = 1, targe
 #     #
 #     # withWeave(true):
 #         # translateFile(file, rx_file, langpairs, target_path = "/tmp/out")
-#     import threadpool
 #     # translateLang()
 
 #     # withWeave:

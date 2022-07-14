@@ -1,13 +1,14 @@
 # APT dependencies: libcurl4-openssl-dev
 # parsing
+wheel
 pyyaml
-bs4
+beautifulsoup4
 git+https://github.com/html5lib/html5lib-python@master  # for python3.10 use latest
 html-parser
-lxml
+# lxml
 feedparser
 feedfinder2
-lassie
+# lassie
 spacy
 alt-profanity-check
 clean-text
@@ -39,7 +40,7 @@ unidecode
 langcodes
 
 # sources/articles
-trafilatura
+trafilatura # for python 3.10 install `python-tzlocal` from distro packages
 goose3
 pytrends
 git+https://github.com/searx/searx
@@ -64,4 +65,4 @@ tomli
 # textacy
 
 # debug
-guppy3
+# guppy3

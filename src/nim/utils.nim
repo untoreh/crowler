@@ -13,13 +13,10 @@ import os,
        sequtils,
        locks,
        uri,
-       weave,
-       weave/[runtime, contexts],
        karax / vdom,
        std/importutils,
        normalize
 
-export weave
 
 import translate_types
 
@@ -30,6 +27,8 @@ const baseUri* = initUri()
 
 var loggingLock: Lock
 initLock(loggingLock)
+
+template procName(): string = strutils.split(getStacktrace())[^2]
 
 template lgetOrPut*[T, K](c: T, k: K, v: untyped): untyped =
     ## Lazy `mgetOrPut`
@@ -48,8 +47,6 @@ template lcheckOrPut*[T, K](c: T, k: K, v: untyped): untyped =
         c[k] = v
         c[k]
 
-proc isWeaveOff*(): bool {.inline.} = globalCtx.numWorkers == 0 or workerContext.signaledTerminate
-
 template logstring(code: untyped): untyped =
     when not compileOption("threads"):
         fmt code
@@ -64,6 +61,16 @@ macro debug*(code: untyped): untyped =
     else:
         quote do:
             discard
+
+macro logall*(code: untyped): untyped =
+    if not defined(release) and logLevelMacro != lvlNone:
+        quote do:
+            withLock(loggingLock):
+                logger[].log lvlAll, logstring(`code`)
+    else:
+        quote do:
+            discard
+
 
 template sdebug*(code) =
     try: debug code
@@ -187,9 +194,9 @@ iterator filterFiles*(root: string;
 proc findnil*(tree: VNode) =
     for el in items(tree):
         if el.isnil:
-            echo "NIL"
+            stdout.write "NIL\n"
         else:
-            echo el.kind
+            stdout.write $el.kind & "\n"
             if len(el) > 0:
                 findnil(el)
 

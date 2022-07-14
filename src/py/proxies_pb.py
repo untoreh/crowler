@@ -6,6 +6,7 @@ from collections import deque
 from typing import Union
 import scheduler as sched
 from multiprocessing import Process, Queue
+from retry import retry
 import time
 
 # warnings.simplefilter("ignore")
@@ -54,7 +55,8 @@ typemap = {
     "SOCKS5": "socks5"
 }
 
-def sync_from_file():
+@retry(tries=3, delay=1, backoff=3.0)
+def sync_from_file(wait_time=10):
     try:
         with open(cfg.PROXIES_DIR / "pbproxies.json", "r") as f:
             proxies = f.read()

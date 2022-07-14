@@ -4,6 +4,8 @@ import os,
        strutils
 
 const releaseMode* = os.getenv("NIM", "") == "release"
+let localMode* {.compileTime.} = os.getenv("NIM_LOCAL", "") != ""
+
 const PROJECT_PATH* = when releaseMode: ""
                  else: os.getenv("PROJECT_DIR", "")
 
@@ -38,4 +40,5 @@ export logging
 const
     USE_PROXIES* = true
     PROXY_EP* = "socks5://localhost:8877"
-    WEBSITE_DEBUG_PORT* = when releaseMode: "" else: os.getenv("WEBSITE_DEBUG_PORT", ":5050")
+    WEBSITE_DEBUG_PORT* = when releaseMode or localMode: "" else: os.getenv("WEBSITE_DEBUG_PORT", ":5050")
+    customPages* = ["dmca", "terms-of-service", "privacy-policy"]

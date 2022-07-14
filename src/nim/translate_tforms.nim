@@ -95,7 +95,6 @@ proc initTforms*() =
 #     var capts = uriTuple(path)
 #     let pair = (src: "en", trg: "it")
 #     # let py = getArticlePy(capts.topic, capts.page, capts.art)
-#     # let a = initArticle(py, parseInt(capts.page))
 #     let tree = articleTree(capts)
 #     capts.lang = "it"
 #     var x: (int, int)

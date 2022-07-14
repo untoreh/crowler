@@ -17,11 +17,19 @@ import
     search,
     shorturls
 
-let
-    facebookUrlStr = site.fb_page_url.to(string)
-    facebookUrl* = facebookUrlStr.unsafeAddr
-    twitterUrlStr = site.twitter_url.to(string)
-    twitterUrl* = twitterUrlStr.unsafeAddr
+var
+    facebookUrlStr: string
+    twitterUrlStr: string
+    facebookUrl*: ptr string
+    twitterUrl*: ptr string
+
+proc initSocial*() {.gcsafe.} =
+    syncPyLock:
+        {.cast(gcsafe).}:
+            facebookUrlStr = site.fb_page_url.to(string)
+            twitterUrlStr = site.twitter_url.to(string)
+            facebookUrl = facebookUrlStr.unsafeAddr
+            twitterUrl = twitterUrlStr.unsafeAddr
 
 proc pathLink*(path: string, code = "", rel = true, amp = false): string {.gcsafe.} =
     let (dir, name, _) = path.splitFile
@@ -47,7 +55,7 @@ proc buildImgUrl*(url: string; origin: string; cls = "image-link"): VNode =
         img(class = "material-icons", src = bsrc, srcset = srcsetstr, alt = "image",
                 loading = "lazy")
 
-proc fromSearchResult*(pslug: string): Article =
+proc fromSearchResult*(pslug: string): Future[Article] {.async.} =
     ## Construct an article from a stored search result
     let
         s = pslug.split("/")
@@ -57,7 +65,7 @@ proc fromSearchResult*(pslug: string): Article =
 
     debug "html: fromSearchResult - {pslug}"
     if topic != "" and topic in topicsCache:
-        result = getArticle(topic, page, slug)
+        result = await getArticle(topic, page, slug)
 
 proc buildRelated*(a: Article): Future[VNode] {.async.} =
     ## Get a list of related articles by querying search db with tags and title words
@@ -76,11 +84,11 @@ proc buildRelated*(a: Article): Future[VNode] {.async.} =
         if kw.len < 3:
             continue
         let sgs = await query(a.topic, kw.toLower, limit = N_RELATED)
-        debug "html: suggestions {sgs}, from kw: {kw}"
+        logall "html: suggestions {sgs}, from kw: {kw}"
         # if sgs.len == 1 and sgs[0] == "//":
         #     return
         for sg in sgs:
-            let relart = fromSearchResult(sg)
+            let relart = await fromSearchResult(sg)
             if (relart.isnil or (relart.slug in related or relart.slug == "")):
                 continue
             else:

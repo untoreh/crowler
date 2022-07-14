@@ -3,9 +3,12 @@ import
     strformat,
     json,
     tables,
-    std/httpclient,
+    std/uri,
     hashes,
-    locks
+    locks,
+    os,
+    chronos,
+    chronos/apps/http/httpclient
 
 import
     cfg,
@@ -40,7 +43,6 @@ const
     inputIoId = 1
 var
     ctx {.threadvar.}: IFLContext
-    client {.threadvar.}: HttpClient
     outputBuffer {.threadvar.}: ptr ptr uint8
     outputBufferLen {.threadvar.}: ptr csize_t
 var
@@ -126,7 +128,6 @@ proc initImageFlow*() =
     resLen = create(csize_t)
     initLock(imgLock)
 
-    client = newHttpClient(timeout = 10_1000)
     initCmd()
     resBuffer = newSeq[uint8](RES_BUFFER_SIZE)
     resBufferLen = RES_BUFFER_SIZE
@@ -167,12 +168,14 @@ proc addImg*(img: string): bool =
     return true
 
 
-proc getImg*(src: string, kind: Source): string =
-    case kind:
+proc getImg*(src: string, kind: Source): Future[string] {.async.} =
+    return case kind:
         of urlsrc:
-            client.getContent(src)
+            (await fetch(HttpSessionRef.new(), parseUri(src))).data.bytesToString
+        elif fileExists(src):
+            await readFileAsync(src)
         else:
-            readFile(src)
+            ""
 
 proc getMime(): string =
     ($resPtr[].toOA(resLen[].int).getJsonVal(
@@ -222,5 +225,3 @@ when isMainModule:
     doassert data.addImg
     let query = "width=100&height=100&mode=max"
     let (i, mime) = processImg(query)
-    echo i.len
-    echo mime

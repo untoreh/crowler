@@ -41,5 +41,6 @@ libminify=src/rust/target/release/libminify_html_c.a
 mkdir -p "$trg/$(dirname $libminify)"
 cp -a $libminify "${trg}/${libminify}"
 cp -a lib/vendor/imageflow.dist/libimageflow.so $trg/lib
-cp -a nim.cfg $trg/
+cp -a nim.cfg $trg/nim.debug.cfg
+cp -a nim.release.cfg $trg/nim.cfg
 cp -a site.nimble $trg/

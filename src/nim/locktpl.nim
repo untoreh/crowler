@@ -73,6 +73,10 @@ template lockedStore*(name: untyped): untyped {.dirty.} =
         withLock(tbl.lock):
             tbl.storage.del(k)
 
+    proc pop*[K, V](tbl: var `Lock name`, k: K, v: var V): bool =
+        withLock(tbl.lock):
+            result = tbl.storage.pop(k, v)
+
 when isMainModule:
     import tables, lrucache
     lockedStore(LruCache)

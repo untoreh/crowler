@@ -1,7 +1,9 @@
-import std/times, std/os, strutils, hashes
+import std/os, strutils, hashes, chronos, chronos/timer
+from std/times import gettime, Time, fromUnix, inSeconds, `-`
+from chronos/timer import seconds, Duration
 
 import server_types,
-    cfg, types, topics, pyutils, publish, quirks, stats, articles, cache, sitemap, translate_types, server_types
+    cfg, types, topics, pyutils, publish, quirks, stats, articles, cache, sitemap, translate_types, server_types, chronos
 
 proc deletePage*(relpath: string) {.gcsafe.} =
     let
@@ -15,45 +17,47 @@ proc deletePage*(relpath: string) {.gcsafe.} =
             pageCache[].del(hash(SITE_PATH / "amp" / lang / sfx))
             pageCache[].del(hash(SITE_PATH / lang / sfx))
 
-proc pubTask*() {.gcsafe.} =
-    syncTopics()
+proc pubTask*(): Future[void] {.gcsafe, async.} =
+    await syncTopics()
     # Give some time to services to warm up
-    sleep(10000)
+    await sleepAsync(10.seconds)
     let t = getTime()
-    var backoff = 1000
+    var backoff = 1
     # start the topic sync thread from python
     withPyLock:
         discard pysched.apply(site.topics_watcher)
 
     while len(topicsCache) == 0:
         debug "pubtask: waiting for topics to be created..."
-        sleep(backoff)
-        syncTopics()
-        backoff += 1000
+        await sleepAsync(backoff.seconds)
+        await syncTopics()
+        backoff += 1
     # Only publish one topic every `CRON_TOPIC`
     var
         prev_size = len(topicsCache)
         n = prev_size
     while true:
         if n <= 0:
-            syncTopics()
+            await syncTopics()
             n = len(topicsCache)
             # if new topics have been added clear homepage/sitemap
             if n != prev_size:
                 prev_size = n
                 clearSitemap("")
                 deletePage("")
-        let topic = nextTopic()
-        # Don't publish each topic more than `CRON_TOPIC_FREQ`
-        debug "pubtask: {topic} was published {inHours(t - topicPubdate())} hours ago."
-        if maybePublish(topic):
-            # clear homepage and topic page cache
-            deletePage("")
-            deletePage("/" & topic)
-        sleep(cfg.CRON_TOPIC * 1000)
+        let topic = (await nextTopic())
+        if topic != "":
+            # Don't publish each topic more than `CRON_TOPIC_FREQ`
+            debug "pubtask: {topic} was published {inHours(t - topicPubdate())} hours ago."
+            if maybePublish(topic):
+                # clear homepage and topic page cache
+                deletePage("")
+                deletePage("/" & topic)
+                discard
+        await sleepAsync(cfg.CRON_TOPIC.seconds)
         n -= 1
 
-proc deleteLowTrafficArts*(topic: string) {.gcsafe.} =
+proc deleteLowTrafficArts*(topic: string): Future[void] {.gcsafe, async.} =
     let now = getTime()
     var
         pagenum: int
@@ -62,7 +66,7 @@ proc deleteLowTrafficArts*(topic: string) {.gcsafe.} =
         pubTimeTs: int
     var capts = mUriCaptures()
     capts.topic = topic
-    for (art, _) in publishedArticles[string](topic, ""):
+    for (art, _) in (await publishedArticles[string](topic, "")):
         withPyLock:
             if pyisnone(art):
                 continue
@@ -85,18 +89,18 @@ proc deleteLowTrafficArts*(topic: string) {.gcsafe.} =
             # article has low hit count
             if hits < cfg.CLEANUP_HITS:
                 {.cast(gcsafe).}:
-                    deleteArt(capts)
+                    await deleteArt(capts)
     for n in pagesToReset:
         withPyLock:
             discard site.update_pubtime(topic, n)
 
-const cleanupInterval = 60 * 3600 * 2
-proc cleanupTask*() =
+const cleanupInterval = (60 * 3600 * 2).seconds
+proc cleanupTask*(): Future[void] {.async.} =
     while true:
-        syncTopics()
+        await syncTopics()
         for topic in topicsCache.keys():
-            deleteLowTrafficArts(topic)
-        sleep(cleanupInterval)
+            await deleteLowTrafficArts(topic)
+        await sleepAsync(cleanupInterval)
 
 when isMainModule:
     import cache

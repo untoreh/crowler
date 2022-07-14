@@ -1,4 +1,4 @@
-import nimpy, uri, strformat, times, sugar, os
+import nimpy, uri, strformat, times, sugar, os, chronos
 import
     cfg,
     types,
@@ -19,11 +19,11 @@ let
                       relPyImport("topics")
                   else: PyNone
 
-proc lastPageNum*(topic: string): int =
+proc lastPageNum*(topic: string): Future[int] {.async.} =
     withPyLock:
-        assert not site.isnil
+        # assert not site.isnil
         let tpg = site.get_top_page(topic)
-        assert not tpg.isnil
+        # assert not tpg.isnil
         return tpg.to(int)
 
 import quirks # PySequence requires quirks
@@ -31,7 +31,7 @@ import strutils
 export nimpy
 proc loadTopicsIndex*(): PyObject =
     try:
-        withPyLock:
+        syncPyLock:
             result = site.load_topics()[0]
             doassert not result.isnil
     except:
@@ -40,21 +40,21 @@ proc loadTopicsIndex*(): PyObject =
             qdebug "Couldn't load topics, is data dir present?"
 
 type TopicTuple* = (string, string, int)
-proc loadTopics*(force=false): PySequence[TopicTuple] =
+proc loadTopics*(force=false): Future[PySequence[TopicTuple]] {.async.} =
     withPyLock:
         return initPySequence[TopicTuple](site.load_topics(force)[0])
 
-proc loadTopics*(n: int): PySequence[TopicTuple] =
-    let tp  = loadTopics()
+proc loadTopics*(n: int): Future[PySequence[TopicTuple]] {.async.} =
+    let tp  = await loadTopics()
     withPyLock:
         return initPySequence[TopicTuple](tp.slice(0, n))
 
-proc topicDesc*(topic: string): string =
+proc topicDesc*(topic: string): Future[string] {.async.} =
     withPyLock:
         return site.get_topic_desc(topic).to(string)
 proc topicUrl*(topic: string, lang: string): string = $(WEBSITE_URL / lang / topic)
 
-proc isEmptyTopic*(topic: string): bool =
+proc isEmptyTopic*(topic: string): Future[bool] {.async.} =
     withPyLock:
         assert not site.isnil, "site should not be nil"
         let empty_f = site.getattr("is_empty")
@@ -63,7 +63,7 @@ proc isEmptyTopic*(topic: string): bool =
         assert not empty_topic.isnil, "topic check should not be nil"
         result = empty_topic.to(bool)
 
-proc pageSize*(topic: string, pagenum: int): int =
+proc pageSize*(topic: string, pagenum: int): Future[int] {.async.} =
     withPyLock:
         let py = site.get_page_size(topic, pagenum)
         if pyisnone(py):
@@ -75,46 +75,51 @@ var topicIdx = 0
 let pyTopics = create(PyObject)
 pyTopics[] = loadTopicsIndex()
 
-proc nextTopic*(): string =
+proc nextTopic*(): Future[string] {.async.} =
     if pyTopics.isnil or pyTopics[].isnil:
         pyTopics[] = loadTopicsIndex()
-    if withPyLock(pyisnone(pyTopics[])):
+    var pycheck: bool
+    withPyLock:
+        pycheck = pyisnone(pyTopics[])
+    if pycheck:
         pyTopics[] = loadTopicsIndex()
-    if pyTopics.isnil or withPyLock(pyisnone(pyTopics[])):
+    withPyLock:
+        pycheck = pyTopics.isnil or pyisnone(pyTopics[])
+    if pycheck:
         raise newException(Exception, "topics: could not load topics.")
     withPyLock:
         if len(pyTopics[]) <= topicIdx:
             debug "pubtask: resetting topics idx ({len(pyTopics[])})"
             topicIdx = 0
-        result = pyTopics[][topicIdx][0].to(string)
+        return pyTopics[][topicIdx][0].to(string)
     topicIdx += 1
 
-proc topicPubdate*(idx: int): Time =
+proc topicPubdate*(idx: int): Future[Time] {.async.} =
     withPyLock:
         return site.get_topic_pubDate(idx).to(int).fromUnix
-proc topicPubdate*(): Time = topicPubdate(max(0, topicIdx - 1))
-proc updateTopicPubdate*(idx: int) =
+proc topicPubdate*(): Future[Time] {.async.} = return await topicPubdate(max(0, topicIdx - 1))
+proc updateTopicPubdate*(idx: int) {.async.} =
     withPyLock:
         discard site.set_topic_pubDate(idx)
-proc updateTopicPubdate*() =  updateTopicPubdate(max(0, topicIdx - 1))
+proc updateTopicPubdate*() {.async.} =  await updateTopicPubdate(max(0, topicIdx - 1))
 
-proc getTopicGroup*(topic: string): PyObject =
+proc getTopicGroup*(topic: string): Future[PyObject] {.async.} =
     withPyLock:
         return site.topic_group(topic)
 
-proc topicDonePages*(topic: string): PyObject =
+proc topicDonePages*(topic: string): Future[PyObject] {.async.} =
     withPyLock:
         return site.topic_group(topic)[$topicData.done]
 
-proc topicPages*(topic: string): PyObject =
+proc topicPages*(topic: string): Future[PyObject] {.async.} =
     withPyLock:
         return site.topic_group(topic)[$topicData.pages]
 
-proc topicArticles*(topic: string): PyObject =
+proc topicArticles*(topic: string): Future[PyObject] {.async.} =
     withPyLock:
         return site.topic_group(topic)[$topicData.articles]
 
-iterator publishedArticles*[V](topic: string, attr: string = ""): (PyObject, V) =
+proc publishedArticles*[V](topic: string, attr: string = ""): Future[seq[(PyObject, V)]] {.async.} =
     var
         pydone: PyObject
         page: PyObject
@@ -126,7 +131,7 @@ iterator publishedArticles*[V](topic: string, attr: string = ""): (PyObject, V) 
         pydone = site.topic_group(topic)[$topicData.done]
         n_pages = len(pydone)
     let getArticleAttr = if attr != "": (art: PyObject) => pyget[V](art, attr, default(V))
-                         else: (art: PyObject) => ""
+                        else: (art: PyObject) => ""
     for d in 0..<n_pages:
         withPyLock:
             page = pydone[d]
@@ -139,17 +144,19 @@ iterator publishedArticles*[V](topic: string, attr: string = ""): (PyObject, V) 
                     v = getArticleAttr(art)
                 else:
                     v = default(V)
-            yield (art, v)
+            result.add (art, v)
 
+proc fetch*(t: Topics, k: string): Future[TopicState] {.async.} =
+    return t.lgetOrPut(k):
+        (topdir: await lastPageNum(k), group: await getTopicGroup(k))
 
-proc fetch*(t: Topics, k: string): TopicState =
-    t.lgetOrPut(k):
-        (topdir: lastPageNum(k), group: getTopicGroup(k))
-
-proc getState*(topic: string): (int, int) =
+proc getState*(topic: string): Future[(int, int)] {.async.} =
     ## Get the number of the top page, and the number of `done` pages.
     doassert topic != "", "gs: topic should not be empty"
-    let grp = topicsCache.fetch(topic).group
+    let cache = await topicsCache.fetch(topic)
+    var grp: PyObject
+    withPyLock:
+        grp = cache.group
     doassert not grp.isnil, "gs: group is nil"
     var topdir, numdone: int
     const pgK = $topicData.pages
@@ -161,12 +168,12 @@ proc getState*(topic: string): (int, int) =
             numdone = max(len(grp[doneK]) - 1, 0)
         else:
             topdir = -1
-    assert topdir != -1 and topdir == lastPageNum(topic)
+    assert topdir != -1 and topdir == (await lastPageNum(topic))
     return (topdir, numdone)
 
 var topicsCount {.threadvar.}: int # Used to check if topics are in sync, but it is not perfect (in case topics deletions happen)
 topicsCount = -1
-proc syncTopics*(force=false) {.gcsafe} =
+proc syncTopics*(force=false) {.gcsafe, async.} =
     # NOTE: the [0] is required because quirky zarray `getitem`
     withPyLock:
         assert not site.isnil
@@ -177,27 +184,29 @@ proc syncTopics*(force=false) {.gcsafe} =
             topicsCount = tc
     try:
         var
-            pytopics = loadTopics(force)
+            pytopics = await loadTopics(force)
             n_topics: int
         withPyLock:
             n_topics = pytopics.len
             if n_topics == 0 and (not pyisnone(pyTopicsMod)):
                 discard pyTopicsMod.new_topic()
-                pytopics = loadTopics()
+                pygil.release()
+                pytopics = await loadTopics()
+                await pygil.acquire()
                 n_topics = pytopics.len
                 assert n_topics > 0
 
         if n_topics > topicsCache.len:
-            {.locks: [pyLock]}:
-                pyLock.acquire()
+            {.locks: [pyGilLock]}:
+                await pygil.acquire()
                 for topic in pytopics.slice(topicsCache.len, pytopics.len):
                     let tp = topic[0].to(string)
-                    pyLock.release()
-                    debug "synctopics: adding topic {tp} to global"
+                    pygil.release()
+                    logall "synctopics: adding topic {tp} to global"
                     # topicsCache[tp] = (topdir: td, group: tg)
                     discard topicsCache.fetch(tp)
-                    pyLock.acquire()
-                pyLock.release()
+                    await pygil.acquire()
+                pygil.release()
     except Exception as e:
         debug "could not sync topics {getCurrentExceptionMsg()} {getStackTrace()}"
 

@@ -5,13 +5,14 @@ import tables,
        strformat,
        os,
        std/with,
-       std/httpclient,
        hashes,
        htmlparser,
        xmltree,
        nre,
        uri,
-       lrucache
+       lrucache,
+       chronos,
+       chronos/apps/http/httpclient
 
 import cfg,
        utils,
@@ -26,8 +27,7 @@ threadVars(
     (vbtmcache, LruCache[array[5, byte], XmlNode]),
     (rootDir, string),
     (ampDoc, ampHead, ampBody, styleEl1, styleEl2, styleEl2Wrapper, ampjs, charset, viewport,
-            styleElCustom, VNode),
-    (client, HttpClient)
+            styleElCustom, VNode)
 )
 
 threadVars(
@@ -44,11 +44,13 @@ proc asLocalUrl(path: string): string {.inline.} =
 
 var fileUri {.threadvar.}: Uri
 var url {.threadvar.}: string
-proc getFile(path: string): string =
+proc getFile(path: string): Future[string] {.async.} =
+    ## This does not actually read or save contents to storage, just holds an in memory cache
+    ## and fetches from remove urls
     debug "amp: getting style file from path {path}"
     try:
         result = filesCache[path]
-    except:
+    except KeyError:
         let filePath = DATA_PATH / "cache" / $hash(path) & splitFile(path).ext
         parseUri(path, fileUri)
         if fileUri.scheme.isEmptyOrWhitespace:
@@ -56,7 +58,7 @@ proc getFile(path: string): string =
         else:
             shallowCopy url, path
         debug "getfile: getting file content from {url}"
-        filesCache[path] = client.getContent(url)
+        filesCache[path] = (await fetch(HttpSessionRef.new(), parseUri(url))).data.bytesToString
         result = filesCache[path]
 
 
@@ -86,15 +88,15 @@ proc ampTemplate(): (VNode, VNode, VNode) =
         ampBody.add verbatim(ADSENSE_AMP_BODY)
     (tree, ampHead, ampBody)
 
-proc fetchStyle(el: VNode) =
+proc fetchStyle(el: VNode) {.async.} =
     let src = cast[string](el.getAttr("href"))
     if src.startsWith("/"):
         let path = rootDir / src.strip(leading = true, chars = {'/'})
-        styleScript.add getFile(path)
+        styleScript.add await getFile(path)
     else:
-        styleScript.add getFile(src)
+        styleScript.add await getFile(src)
 
-proc processHead(inHead: VNode, outHead: VNode) =
+proc processHead(inHead: VNode, outHead: VNode) {.async.} =
     var
         canonicalUnset = true
     debug "iterating over {inHead.kind}"
@@ -107,7 +109,7 @@ proc processHead(inHead: VNode, outHead: VNode) =
                     outHead.add el
                     canonicalUnset = false
                 elif el.isLink(stylesheet) and (not ("flags-sprite" in el.getattr("href"))):
-                    el.fetchStyle()
+                    await el.fetchStyle()
                 else:
                     outHead.add el
             of VNodeKind.script:
@@ -162,7 +164,7 @@ proc removeNodes(el: XmlNode) =
 template maybeProcess(): untyped {.dirty.} =
     el.delAttr("onclick")
     if el.len != 0:
-        el.processBody(outBody, outHead, true)
+        await el.processBody(outBody, outHead, true)
     elif el.kind == VNodeKind.verbatim:
         let xEl = el.parseNode
         case xEl.tag:
@@ -172,7 +174,7 @@ template maybeProcess(): untyped {.dirty.} =
                 removeNodes(xEl)
                 el.text = $xEl
 
-proc processBody(inEl, outBody, outHead: VNode, lv = false) =
+proc processBody(inEl, outBody, outHead: VNode, lv = false) {.async.} =
     var
         l = inEl.len
         n = 0
@@ -185,7 +187,7 @@ proc processBody(inEl, outBody, outHead: VNode, lv = false) =
                 continue
             of VNodeKind.link:
                 if el.isLink(stylesheet):
-                    el.fetchStyle()
+                    await el.fetchStyle()
                 else:
                     outBody.add el
                 inEl.delete(n)
@@ -214,7 +216,7 @@ proc pre(pattern: static string): Regex {.gcsafe.} =
     res = re(pattern)
     res
 
-proc ampPage*(tree: VNode): VNode {.gcsafe.} =
+proc ampPage*(tree: VNode): Future[VNode] {.gcsafe, async.} =
     let
         inBody = tree.find(VNodeKind.body).deepcopy
         inHead = tree.find(VNodeKind.head).deepcopy
@@ -226,8 +228,8 @@ proc ampPage*(tree: VNode): VNode {.gcsafe.} =
     styleScript.setLen 0
     styleStr = ""
 
-    processHead(inHead, outHead)
-    processBody(inBody, outBody, outHead)
+    await processHead(inHead, outHead)
+    await processBody(inBody, outBody, outHead)
 
     # add remaining styles to head
     styleStr.add styleScript
@@ -246,7 +248,7 @@ proc ampPage*(tree: VNode): VNode {.gcsafe.} =
     styleScript.setLen 0
     styleElCustom.delete(0)
     styleElCustom.add verbatim(styleStr)
-    ampDoc
+    return ampDoc
 
 proc ampDir(target: string) {.error: "not implemented".} =
     if not dirExists(target):
@@ -267,7 +269,6 @@ proc initAmp*() =
     charset = newVNode(meta)
     viewport = newVNode(meta)
     styleElCustom = newVNode(VNodeKind.style)
-    client = newHttpClient()
 
     filesCache = initTable[string, string]()
     styleScript = newSeq[string]()

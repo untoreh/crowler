@@ -1,7 +1,8 @@
 import strformat,
        xmltree,
        uri,
-       sugar
+       sugar,
+       chronos
 
 import cfg,
        types,
@@ -46,16 +47,16 @@ proc buildSiteSitemap*(topics: seq[string]): XmlNode =
         sitemapLoc.add newText(url)
         result.add topicSitemap
 
-proc buildSiteSitemap*(): XmlNode =
-    syncTopics()
+proc buildSiteSitemap*(): Future[XmlNode] {.async.} =
+    await syncTopics()
     let topics = collect(for (k, _) in topicsCache: k)
-    buildSiteSitemap(topics)
+    return buildSiteSitemap(topics)
 
-proc buildTopicSitemap(topic: string): XmlNode =
-    syncTopics()
+proc buildTopicSitemap(topic: string): Future[XmlNode] {.async.} =
+    await syncTopics()
     result = newElement("urlset")
     result.attrs = {"xmlns": xmlNamespace, "xmlns:xhtml": xhtmlNamespace}.toXmlAttributes
-    let done = topicDonePages(topic)
+    let done = await topicDonePages(topic)
     var n_entries = 0
     for pagenum in done:
         if n_entries > maxEntries:
@@ -81,10 +82,10 @@ proc buildTopicSitemap(topic: string): XmlNode =
 
 proc sitemapKey(topic: string): string = topic & "-sitemap.xml"
 
-proc fetchSiteMap*(topic: string): string =
-    pageCache[].lgetOrPut(topic.sitemapKey):
-        let sm = (if topic == "": buildSiteSitemap()
-            else: buildTopicSitemap(topic)).toXmlString
+proc fetchSiteMap*(topic: string): Future[string] {.async.} =
+    return pageCache[].lgetOrPut(topic.sitemapKey):
+        let sm = (if topic == "": await buildSiteSitemap()
+            else: await buildTopicSitemap(topic)).toXmlString
         doassert sizeof(sm) * sm.len < maxSize
         sm
 
@@ -96,4 +97,3 @@ proc clearSiteMap*(topic: string) =
 
 when isMainModule:
     initCache()
-    echo fetchSiteMap("")

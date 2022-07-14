@@ -1,1 +1,1 @@
-src/nim/server.nim
+src/nim/cli.nim

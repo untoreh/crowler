@@ -4,7 +4,6 @@ import warnings
 import pycurl
 from trafilatura import settings as traset, downloads as tradl
 from user_agent import generate_user_agent
-from distutils.util import strtobool
 import copy
 import json
 
@@ -58,6 +57,21 @@ def set_socket_timeout(timeout):
 
 
 set_socket_timeout(5)
+
+def strtobool (val):
+    """Convert a string representation of truth to true (1) or false (0).
+    True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values
+    are 'n', 'no', 'f', 'false', 'off', and '0'.  Raises ValueError if
+    'val' is anything else.
+    """
+    val = val.lower()
+    if val in ('y', 'yes', 't', 'true', 'on', '1'):
+        return 1
+    elif val in ('n', 'no', 'f', 'false', 'off', '0'):
+        return 0
+    else:
+        raise ValueError("invalid truth value %r" % (val,))
+
 
 REQ_TIMEOUT = 20
 # How many concurrent requests

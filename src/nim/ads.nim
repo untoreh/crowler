@@ -20,9 +20,6 @@ let
 var adsConfigLock: Lock
 initLock(adsConfigLock)
 
-proc readHtml(path: string): XmlNode =
-    readFile(path).parseHtml
-
 proc readAdsConfig*() =
     withLock(adsConfigLock):
         let adsHeadFile = DATA_ADS_PATH / "head.html"
@@ -45,7 +42,7 @@ const selfClosingTags = ["area", "base", "br", "col", "embed", "r", "img", "inpu
 proc withClosingHtmlTag(el: XmlNode): string =
     ## `htmlparser` package seems to avoid closing tags for elements with no content
     result = $el
-    if result.endsWith("/>") and not (el.tag in selfClosingTags):
+    if result.endsWith("/>") or result.endsWith(fmt"></{el.tag}>") and not (el.tag in selfClosingTags):
         result[^2] = ' '
         result.add "</" & el.tag & ">"
 
@@ -70,7 +67,7 @@ proc updateAds(event: seq[PathEvent]) =
             info "ads: config updated"
         break
 
-proc runAdsWatcher*() =
+proc runAdsWatcher*()  =
     var watcher = initWatcher()
     register(watcher, DATA_ADS_PATH, updateAds)
     while true:
@@ -93,7 +90,7 @@ proc updateAssets(event: seq[PathEvent]) {.gcsafe.} =
             break
         info "assets: files list updated {prevnum} -> {assetsFiles[].len}"
 
-proc runAssetsWatcher*() =
+proc runAssetsWatcher*()  =
     var watcher = initWatcher()
     if not dirExists(DATA_ASSETS_PATH):
         createDir(DATA_ASSETS_PATH)

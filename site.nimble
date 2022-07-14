@@ -13,12 +13,13 @@ bin           = @["cli"]
 requires "nim >= 1.6.0"
 requires "karax#master"
 requires "https://github.com/untoreh/nim-sonic-client#master"
+requires "taskpools"
 requires "https://github.com/untoreh/nimpy#master" # required for destructors fix
 requires "cligen >= 1.5.23"
 requires "lrucache"
 requires "weave#master"
 requires "normalize"
-requires "httpbeast"
+requires "scorper#devel"
 requires "nimterop#master"
 requires "https://github.com/untoreh/nimdbx" # Use version! not #branch
 requires "zstd"

@@ -6,7 +6,9 @@ import
        lruCache,
        httpclient,
        strformat,
-       hashes
+       hashes,
+       chronos,
+       chronos/asyncloop
 
 import
     cfg,
@@ -25,10 +27,10 @@ proc initWrapImageFlow*() {.gcsafe, raises: [].} =
     except:
         qdebug "Could not init imageflow"
 
-proc imgData(imgurl: string): string {.inline, gcsafe.} =
+proc imgData(imgurl: string): Future[string] {.inline, gcsafe, async.} =
     try:
         result = imgCache.lgetOrPut(imgurl):
-            getImg(imgurl, kind=urlsrc)
+            await getImg(imgurl, kind=urlsrc)
     except: discard
 
 proc parseImgUrl*(relpath: string): (string, string, string) =
@@ -41,22 +43,62 @@ proc parseImgUrl*(relpath: string): (string, string, string) =
         height = imgCapts[1].get
     return (url, width, height)
 
+var iflThread: Thread[void]
+var imgIn*: ptr AsyncQueue[(string, string, string)]
+var imgOut*: LockTable[string, (string, string)]
+var imgEvent*: ptr AsyncEvent
 
-proc handleImg*(relpath: string): auto =
+proc handleImg*(relpath: string): Future[(string, string)] {.async.} =
     let (url, width, height) = parseImgUrl(relpath)
+    var respMime: (string, string)
     var resp, decodedUrl, mime: string
     if url.isSomething:
         decodedUrl = url.asBString.toString(true)
         # block unused resize requests
         if not (fmt"{width}x{height}" in IMG_SIZES):
-            resp = decodedUrl.imgData
+            resp = await decodedUrl.imgData
         else:
-            doassert decodedUrl.imgData.addImg
-            let query = fmt"width={width}&height={height}&mode=max"
-            debug "ifl server: serving image hash: {hash(decodedUrl.imgData)}, size: {width}x{height}"
-            (resp, mime) = processImg(query)
+            assert not imgIn.isnil
+            await imgIn[].put((decodedUrl, width, height))
+            while true:
+                await wait(imgEvent[])
+                if decodedUrl in imgOut:
+                    doassert imgOut.pop(decodedUrl, respMime)
+                    return respMime
         debug "ifl server: img processed"
-    (resp, mime)
+    return (resp, mime)
+
+proc processImgData(decodedUrl: string, width: string, height: string) {.async.} =
+    # push img to imageflow context
+    doassert (await decodedUrl.imgData).addImg
+    let query = fmt"width={width}&height={height}&mode=max"
+    logall "ifl server: serving image hash: {hash(await decodedUrl.imgData)}, size: {width}x{height}"
+    # process and send back
+    imgOut[decodedUrl] = processImg(query)
+    imgEvent[].fire; imgEvent[].clear
+
+proc asyncImgHandler() {.async.} =
+    while true:
+        let (decodedUrl, width, height) = await imgIn[].get()
+        asyncSpawn processImgData(decodedUrl, width, height)
+
+proc imgHandler*() = waitFor asyncImgHandler()
+
+proc startImgFlow*() =
+    initImageFlow()
+    # start img handler thread
+    imgIn = create(AsyncQueue[(string, string, string)])
+    imgIn[] = newAsyncQueue[(string, string, string)](64)
+    imgOut = initLockTable[string, (string, string)]()
+    imgEvent = create(AsyncEvent)
+    imgEvent[] = newAsyncEvent()
+    createThread(iflThread, imgHandler)
+# import chronos
+# var iflThread: Thread[(string, string)]
+# createThread()
+# proc iflHandler*() =
+
+
 
 # import guildenstern/ctxheader
 # proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =

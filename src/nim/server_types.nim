@@ -1,4 +1,4 @@
-import nimpy, options, nre, strutils, strformat, os, std/enumerate, std/mimetypes, uri, scorper
+import nimpy, options, nre, strutils, strformat, os, std/enumerate, std/mimetypes, uri, scorper/http/httpcore
 import cfg, quirks, utils
 
 const
@@ -69,10 +69,12 @@ proc format*(headers: seq[string]): string =
         result.add h & "\c\L"
     result.add headers[^1]
 
-proc format*(headers: httptypes.HttpHeaders): string =
-    for (k, v) in headers.pairs():
-        result.add k & ":" & v & CRLF
-    result.stripLineEnd
+when declared(httpbeast):
+    import tables
+    proc format*(headers: HttpHeaders): string =
+        for (k, v) in headers.pairs():
+            result.add k & ":" & v.join() & httpNewLine
+        result.stripLineEnd
 
 type Header* = enum
     hcontent = "Content-Type"

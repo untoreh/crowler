@@ -131,12 +131,12 @@ proc buildShortPosts*(arts: seq[Article], homepage = false): string =
 
 template topicPage*(topic: string, pagenum: string, istop = false) {.dirty.} =
     ## Writes a single page (fetching its related articles, if its not a template) to storage
-    let arts = getDoneArticles(topic, pagenum = pagenum.parseInt)
+    let arts = await getDoneArticles(topic, pagenum = pagenum.parseInt)
     debug "topics: topic page for page {pagenum} ({len(arts)})"
     let content = buildShortPosts(arts)
     # if the page is not finalized, it is the homepage
-    let footer = pageFooter(topic, pagenum, home = istop)
-    let pagetree = buildPage(title = "", # this is NOT a `title` tag
+    let footer = await pageFooter(topic, pagenum, home = istop)
+    let pagetree = await buildPage(title = "", # this is NOT a `title` tag
         content = content,
         slug = pagenum,
         pagefooter = footer,
@@ -156,7 +156,7 @@ proc processPage*(lang, amp: string, tree: VNode, relpath = "index"): Future[VNo
         result = tree
     if amp != "":
         debug "page: amping"
-        result = result.ampPage
+        result = await result.ampPage
 
 proc pageFromTemplate*(tpl, lang, amp: string): Future[string] {.async.} =
     var txt = readfile(ASSETS_PATH / "templates" / tpl & ".html")
@@ -168,19 +168,20 @@ proc pageFromTemplate*(tpl, lang, amp: string): Future[string] {.async.} =
     txt = multiReplace(txt, vars)
     let
         slug = slugify(title)
-        page = buildPage(title = title, content = txt)
+        page = await buildPage(title = title, content = txt)
         processed = await processPage(lang, amp, page, relpath = tpl)
     return processed.asHtml(minify_css=(amp == ""))
 
 proc articleTree*(capts: auto): Future[VNode] {.async.} =
     # every article is under a page number
-    let py = getArticlePy(capts.topic, capts.page, capts.art)
-    if not withPyLock(pyisnone(py)):
-        debug "article: building post"
-        var a: Article
-        withPyLock:
+    let py = await getArticlePy(capts.topic, capts.page, capts.art)
+    var a: Article
+    withPyLock:
+        if not pyisnone(py):
+            debug "article: building post"
             a = initArticle(py, parseInt(capts.page))
-        let post = await buildPost(a)
+    let post = await buildPost(a)
+    if not post.isnil:
         debug "article: processing"
         return await processPage(capts.lang, capts.amp, post, relpath = capts.art)
     else:
@@ -189,12 +190,14 @@ proc articleTree*(capts: auto): Future[VNode] {.async.} =
 proc articleHtml*(capts: auto): Future[string] {.gcsafe, async.} =
     let t = await articleTree(capts)
     return if not t.isnil:
-        t.asHtml(minify_css=(capts.amp == ""))
-    else: ""
+               t.asHtml(minify_css=(capts.amp == ""))
+           else: ""
 
 proc buildHomePage*(lang, amp: string): Future[(VNode, VNode)] {.async.} =
-    syncTopics()
-    var a = default(Article)
+    await syncTopics()
+    var a: Article
+    withPyLock:
+        a = default(Article)
     var
         n_topics = len(topicsCache)
         content: string
@@ -208,12 +211,12 @@ proc buildHomePage*(lang, amp: string): Future[(VNode, VNode)] {.async.} =
             continue
         else:
             processed.incl topic
-        let arts = getLastArticles(topic)
+        let arts = await getLastArticles(topic)
         if len(arts) > 0:
             content.add $articleEntry(arts[^1])
         if len(processed) == n_topics:
             break
-    let pagetree = buildPage(title = "",
+    let pagetree = await buildPage(title = "",
                          content = content,
                          slug = "",
                          topic = "")
@@ -234,7 +237,7 @@ proc buildSearchPage*(topic: string, kws: string, lang: string): Future[string] 
             if pslugs[0] == "/":
                 del(pslugs, 0)
             for pslug in pslugs:
-                let ar = fromSearchResult(pslug)
+                let ar = await fromSearchResult(pslug)
                 if not ar.isEmpty:
                     content.add $articleEntry(ar)
             if content.len == 0:
@@ -246,9 +249,9 @@ proc buildSearchPage*(topic: string, kws: string, lang: string): Future[string] 
             text "Search query is empty."
         content.add $r
     let
-        footer = pageFooter(topic, "s", home = false)
+        footer = await pageFooter(topic, "s", home = false)
     let fromcat = if topic != "": fmt" (from category: {topic})" else: ""
-    let tree = buildPage(title = fmt"""Search results for: "{keywords}"{fromcat}""",
+    let tree = await buildPage(title = fmt"""Search results for: "{keywords}"{fromcat}""",
                          content = content,
                          slug = "/s/" & kws,
                          pagefooter = footer,

@@ -57,4 +57,4 @@ when isMainModule:
     import uri
     initZstd()
     let bs = "KLUv%2FSBLWQIAaHR0cHM6Ly9hMC5hd3NzdGF0aWMuY29tL2xpYnJhLWNzcy9pbWFnZXMvbG9nb3MvYXdzX2xvZ29fc21pbGVfMTIwMHg2MzAucG5n".decodeUrl.asBString
-    echo bs.toString()
+    # echo bs.toString()

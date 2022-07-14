@@ -1,4 +1,4 @@
-import nimpy, os, nimdbx, strutils, std/importutils
+import nimpy, os, nimdbx, strutils, std/importutils, chronos
 import
     utils,
     quirks,
@@ -17,7 +17,7 @@ proc getImpl(t: StatsDB, k: string, throw: static bool): int32 =
     withLock(tLock):
         var o: seq[byte]
         cast[LRUTrans](t).coll.inSnapshot do (cs: CollectionSnapshot):
-            debug "nimdbx: looking for key {k}"
+            logall "nimdbx: looking for key {k}"
             o.add cs[k.asData].asByteSeq
         if len(o) > 0:
             result = o.asInt32
@@ -29,7 +29,7 @@ proc getImpl(t: StatsDB, k: string, throw: static bool): int32 =
 
 proc `[]=`*(t: StatsDB, k: string, v: int32) {.gcsafe.} =
     withLock(tLock):
-        debug "nimdbx: saving key {k}"
+        logall "nimdbx: saving key {k}"
         cast[LRUTrans](t).coll.inTransaction do (ct: CollectionTransaction):
             {.cast(gcsafe).}:
                 ct[k] = v
@@ -82,8 +82,8 @@ proc updateHits*(capts: UriCaptures) =
 proc getHits*(topic: string, slug: string): int32 =
     statsDB[join([topic, slug])]
 
-proc showStats(topic: string) =
-    for (art, artslug) in publishedArticles[string](topic, "slug"):
+proc showStats(topic: string) {.async.} =
+    for (art, artslug) in (await publishedArticles[string](topic, "slug")):
         echo artslug
         echo topic.getHits(artslug)
 

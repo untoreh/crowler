@@ -8,7 +8,8 @@ import
     strformat,
     locks,
     karax/vdom,
-    macros
+    macros,
+    chronos
 export sets
 
 static:
@@ -89,9 +90,11 @@ const
     skip_vnodes* = static([VNodeKind.code, style, script, VNodeKind.address, audio, canvas, embed, time, video, svg])
     skip_class* = ["menu-lang-btn", "material-icons", "rss", "sitemap"].static
 
+pygil.globalAcquire()
 let
     pybi = pyBuiltinsModule()
     pytypes = pyImport("types")
+pygil.release()
 
 var punct_rgx* {.threadvar.}: Regex
 

@@ -126,12 +126,12 @@ proc `[]=`*(t: LRUTrans, k: int64, v: string) {.gcsafe.} =
     withLock(tLock):
         # FIXME: Compress out of scope of the closure otherwise zstd has problems...
         let v = compress(t.zstd_c, v, cfg.ZSTD_COMPRESSION_LEVEL)
-        debug "nimdbx: saving key {k}"
+        logall "nimdbx: saving key {k}"
         t.coll.inTransaction do (ct: CollectionTransaction):
             {.cast(gcsafe).}:
                 ct[k] = v
             ct.commit()
-        debug "nimdbx: commited key {k}"
+        logall "nimdbx: commited key {k}"
 
 proc `[]=`*[K: not int64](t: LRUTrans, k: K, v: string) = t[hash(k).int64] = v
 
@@ -162,19 +162,19 @@ proc path*(t: LRUTrans): string = t.db.path
 proc save*(t: LRUTrans, c: Table[int64, string]) {.gcsafe.} =
     withLock(tLock):
         # compress outside the closure..
-        debug "db: length of translations is {c.len}"
+        logall "db: length of translations is {c.len}"
         var comp: seq[(int64, seq[byte])]
         for (k, v) in c.pairs:
             # Trying to compress empty values errors out
             if unlikely v == "":
                 comp.add (k, static(newSeq[byte]()))
             else:
-                debug "db: compressing key {k} of value {v}"
+                logall "db: compressing key {k} of value {v}"
                 comp.add (k, compress(t.zstd_c, v, level = ZSTD_COMPRESSION_LEVEL))
-        debug "db: doing TX"
+        logall "db: doing TX"
         t.coll.inTransaction do (ct: CollectionTransaction):
             for (k, v) in comp:
-                debug "db: storing key {k}, with bytes {v.len}"
+                logall "db: storing key {k}, with bytes {v.len}"
                 {.cast(gcsafe).}:
                     ct[k] = v
             ct.commit()
@@ -202,13 +202,13 @@ proc setFromDB*(pair: langPair, el: auto): (bool, int) =
 
 proc saveToDB*(tr = trans, slations = slations,
         force = false) {.gcsafe.} =
-    debug "slations: {slations[].len} - force: {force}"
+    logall "slations: {slations[].len} - force: {force}"
     if slations[].len > 0 and (force or slations[].len > MAX_CACHE_ENTRIES):
-        debug "db: saving to db"
+        logall "db: saving to db"
         tr.save(slations[])
         debug "db: clearing slations ({slations[].len})"
         slations[].clear()
-    debug "db: finish save"
+    logall "db: finish save"
 
 template cursIter(c: Collection, what: untyped): untyped =
     let cs = c.beginSnapshot

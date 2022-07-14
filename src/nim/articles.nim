@@ -2,6 +2,7 @@ import uri,
        strutils,
        os,
        std/enumerate,
+       chronos,
        nimpy {.all.}
 
 import cfg,
@@ -30,8 +31,8 @@ proc getArticleUrl*(a: Article, lang: string): string {.inline.} = $(WEBSITE_URL
         getArticlePath(a))
 
 
-proc getArticles*(topic: string, n = 3, pagenum: int = -1): seq[Article] =
-    let arts = topicArticles(topic)
+proc getArticles*(topic: string, n = 3, pagenum: int = -1): Future[seq[Article]] {.async.} =
+    let arts = await topicArticles(topic)
     withPyLock:
         doassert pyiszarray(arts)
         var data: PyObject
@@ -49,7 +50,7 @@ proc getArticles*(topic: string, n = 3, pagenum: int = -1): seq[Article] =
                 continue
             result.add(initArticle(data, pagenum))
 
-proc getDoneArticles*(topic: string, pagenum: int): seq[Article] =
+proc getDoneArticles*(topic: string, pagenum: int): Future[seq[Article]] {.async.} =
     withPyLock:
         let
             grp = site.topic_group(topic)
@@ -63,15 +64,15 @@ proc getDoneArticles*(topic: string, pagenum: int): seq[Article] =
                 if not pyisnone(data): # blacklisted articles are set to None
                     result.add(initArticle(data, pagenum))
 
-proc getLastArticles*(topic: string): seq[Article] =
-    return getDoneArticles(topic, lastPageNum(topic))
+proc getLastArticles*(topic: string): Future[seq[Article]] {.async.} =
+    return await getDoneArticles(topic, await lastPageNum(topic))
 
-proc getArticlePy*(topic: string, page: string | int, slug: string): PyObject =
+proc getArticlePy*(topic: string, page: string | int, slug: string): Future[PyObject] {.async.} =
 
     let pg = string(page)
 
-    if topic.getState[0] != -1:
-        let donearts = topicDonePages(topic)
+    if (await topic.getState)[0] != -1:
+        let donearts = await topicDonePages(topic)
         doassert not donearts.isnil
         withPyLock:
             if page in donearts:
@@ -83,14 +84,14 @@ proc getArticlePy*(topic: string, page: string | int, slug: string): PyObject =
     else:
         return PyNone
 
-proc getArticleContent*(topic, page, slug: string): string =
-    let art = getArticlePy(topic, page, slug)
+proc getArticleContent*(topic, page, slug: string): Future[string] {.async.} =
+    let art = await getArticlePy(topic, page, slug)
     withPyLock:
         return art.pyget("content")
 
-proc getArticle*(topic, page, slug: auto): Article =
+proc getArticle*(topic, page, slug: auto): Future[Article] {.async.} =
     var py {.threadvar.}:  PyObject
-    py = getArticlePy(topic, page, slug)
+    py = await getArticlePy(topic, page, slug)
     if py.isnil:
         return emptyArt
     withPyLock:
@@ -107,27 +108,29 @@ proc getAuthor*(a: Article): string {.inline.} =
         else: a.url.parseuri().hostname
     else: a.author
 
-proc deleteArt*(capts: UriCaptures) =
+proc deleteArt*(capts: UriCaptures, cacheOnly=false) {.async.} =
     let
         artPath = getArticlePath(capts)
         fpath = SITE_PATH / artPath
     doassert capts.topic != ""
     doassert capts.art != ""
     doassert capts.page != ""
-    pageCache[].del(fpath)
-    pageCache[].del(SITE_PATH / "amp" / artPath)
-    # remove statistics about article
-    statsDB.del(capts)
-    for lang in TLangsCodes:
-        pageCache[].del(SITE_PATH / "amp" / lang / artPath)
-        pageCache[].del(SITE_PATH / lang / artPath)
-    let tg = topicsCache.fetch(capts.topic).group
-    let pageArts = tg[$topicData.done][capts.page]
-    let pyslug = capts.art.nimValueToPy().newPyObject
-    var toRemove: seq[int]
-    for (n, a) in enumerate(pageArts):
-        if (not pyisnone(a)) and a["slug"] == pyslug:
-            toRemove.add n
-            break
-    for n in toRemove:
-        pageArts[n] = PyNone
+    {.cast(gcsafe).}:
+        pageCache[].del(fpath)
+        pageCache[].del(SITE_PATH / "amp" / artPath)
+        # remove statistics about article
+        statsDB.del(capts)
+        for lang in TLangsCodes:
+            pageCache[].del(SITE_PATH / "amp" / lang / artPath)
+            pageCache[].del(SITE_PATH / lang / artPath)
+    if not cacheOnly:
+        let tg = (await topicsCache.fetch(capts.topic)).group
+        let pageArts = tg[$topicData.done][capts.page]
+        let pyslug = capts.art.nimValueToPy().newPyObject
+        var toRemove: seq[int]
+        for (n, a) in enumerate(pageArts):
+            if (not pyisnone(a)) and a["slug"] == pyslug:
+                toRemove.add n
+                break
+        for n in toRemove:
+            pageArts[n] = PyNone

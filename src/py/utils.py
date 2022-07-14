@@ -9,7 +9,6 @@ from re import finditer
 from enum import Enum
 from time import sleep
 from typing import Optional, Dict
-from distutils.util import strtobool
 
 from cachetools import LRUCache
 import numcodecs
@@ -18,6 +17,7 @@ from numcodecs import Blosc
 from trafilatura import fetch_url as _fetch_url
 
 import config as cfg
+from config import strtobool
 
 from zict import Func, LRU
 
@@ -131,7 +131,7 @@ def dedup(l):
     return list(dict.fromkeys(l))
 
 
-def splitStr(string, sep="\s+"):
+def splitStr(string, sep="\\s+"):
     # warning: does not yet work if sep is a lookahead like `(?=b)`
     if sep == "":
         return (c for c in string)

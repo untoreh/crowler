@@ -33,8 +33,9 @@ var
     sncc {.threadvar.}: Sonic
     sncq {.threadvar.}: Sonic
 
-let Language = withPyLock:
-    pyImport("langcodes").Language
+pygil.globalAcquire()
+let Language = pyImport("langcodes").Language
+pygil.release()
 
 const defaultLimit = 10
 const bufsize = 20000 - 256 # FIXME: snc.bufsize returns 0...
@@ -64,10 +65,14 @@ proc initSonic*() {.gcsafe.} =
             qdebug "Couldn't init Sonic connection to {SONIC_ADDR}:{SONIC_PORT}."
     doassert not snc.isnil, "Is Sonic running?"
 
-proc toISO3(lang: string): string =
-    withPyLock:
+proc toISO3(lang: string): Future[string] {.async.} =
+    if pygil.locked:
         return Language.get(if lang == "": SLang.code
                     else: lang).to_alpha3().to(string)
+    else:
+        withPyLock:
+            return Language.get(if lang == "": SLang.code
+                        else: lang).to_alpha3().to(string)
 
 proc sanitize*(s: string): string =
     ## Replace new lines for search queries and ingestion
@@ -79,7 +84,7 @@ proc addToBackLog(capts: UriCaptures) =
     let l = join([capts.topic, capts.page, capts.art, capts.lang], ",")
     writeLine(f, l)
 
-proc push*(capts: UriCaptures, content: string) =
+proc push*(capts: UriCaptures, content: string) {.async.} =
     ## Push the contents of an article page to the search database
     var ofs = 0
     while ofs <= content.len:
@@ -90,12 +95,12 @@ proc push*(capts: UriCaptures, content: string) =
         if cnt.len == 0:
             break
         try:
+            let lang = await capts.lang.toISO3
             if not snc.push(WEBSITE_DOMAIN,
                     "default", # TODO: Should we restrict search to `capts.topic`?
                     key,
                     cnt,
-                    lang = if capts.lang != "en": capts.lang.toISO3
-                            else: ""):
+                    lang = if capts.lang != "en": lang else: ""):
                 capts.addToBackLog()
                 break
         except:
@@ -107,25 +112,26 @@ proc push*(capts: UriCaptures, content: string) =
                 write(f, cnt)
             break
 
-proc push*(relpath: var string) =
-    relpath.removeSuffix('/')
+proc push*(relpath: string) {.async.} =
+    var vrelpath = relpath
+    vrelpath.removeSuffix('/')
     let
-        fpath = relpath.fp()
-        capts = uriTuple(relpath)
+        fpath = vrelpath.fp()
+        capts = uriTuple(vrelpath)
     let content = if pageCache[][fpath.hash] != "":
                       let page = pageCache[].get(fpath.hash).parseHtml
                       assert capts.lang == "" or page.findel("html").getAttr("lang") == (capts.lang)
                       page.findclass(HTML_POST_SELECTOR).innerText()
                   else:
                       if capts.art != "":
-                        getArticleContent(capts.topic, capts.page, capts.art)
+                        await getArticleContent(capts.topic, capts.page, capts.art)
                       else: ""
     if content == "":
-        warn "search: content matching path {relpath} not found."
+        warn "search: content matching path {vrelpath} not found."
     else:
-        push(capts, content.sanitize)
+        await push(capts, content.sanitize)
 
-proc resumeSonic() =
+proc resumeSonic() {.async.} =
     ## Push all backlogged articles to search database
     assert (not snc.isnil)
     for l in lines(SONIC_BACKLOG):
@@ -136,7 +142,7 @@ proc resumeSonic() =
             slug = s[2]
             lang = s[3]
         var relpath = lang / topic / page / slug
-        push(relpath)
+        await push(relpath)
     writeFile(SONIC_BACKLOG, "")
 
 proc query*(topic: string, keywords: string, lang: string = SLang.code, limit = defaultLimit): Future[seq[string]] {.async.} =
@@ -149,11 +155,13 @@ proc query*(topic: string, keywords: string, lang: string = SLang.code, limit = 
                   let lp = (src: lang, trg: SLang.code)
                   let translate = getTfun(lp)
                   # echo "?? ", translate(keywords, lp)
-                  something (await translate(keywords, lp)), keywords
+                  let tkw = await translate(keywords, lp)
+                  something tkw, keywords
               else: keywords
-    debug "query: kws -- {kws}, keys -- {keywords}"
+    logall "query: kws -- {kws}, keys -- {keywords}"
     try:
-        return sncq.query(WEBSITE_DOMAIN, "default", kws, lang = SLang.code.toISO3, limit = limit)
+        let lang = await SLang.code.toISO3
+        return sncq.query(WEBSITE_DOMAIN, "default", kws, lang = lang, limit = limit)
     except:
         debug "query: failed {getCurrentExceptionMsg()} "
         return newSeq[string]()
@@ -161,7 +169,7 @@ proc query*(topic: string, keywords: string, lang: string = SLang.code, limit = 
 proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[string]] {.async.} =
     # Partial inputs language can't be handled if we
     # only injest the source language into sonic
-    debug "suggest: topic: {topic}, input: {input}"
+    logall "suggest: topic: {topic}, input: {input}"
     try:
         return sncq.suggest(WEBSITE_DOMAIN, "default", input.split[^1], limit = limit)
     except:
@@ -175,8 +183,8 @@ proc deleteFromSonic*(capts: UriCaptures): int =
     let key = join([capts.topic, capts.page, capts.art], "/")
     snc.flush(WEBSITE_DOMAIN, object_name=key)
 
-proc pushAllSonic*(clear=true) =
-    syncTopics()
+proc pushAllSonic*(clear=true) {.async.} =
+    await syncTopics()
     if clear:
         discard snc.flush(WEBSITE_DOMAIN)
     for (topic, state) in topicsCache:
@@ -192,7 +200,7 @@ proc pushAllSonic*(clear=true) =
                         capts = uriTuple(relpath)
                         content = ar.pyget("content").sanitize
                     echo "pushing ", relpath
-                    push(capts, content)
+                    await push(capts, content)
     discard sncc.trigger("consolidate")
 
 when isMainModule:

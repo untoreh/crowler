@@ -73,9 +73,9 @@ proc doQuery(q: auto, sents: seq[string]): Future[seq[string]] {.async.} =
         # debug "query: calling translation function, bucket: {q.bucket.len()}, query: {query.len}"
         let res = await q.call(query, q.pair)
         # let res = q.doCall(query)
-        debug "query: response size: {res.len}"
+        logall "query: response size: {res.len}"
         result = res.split(splitsep)
-        debug "query: split translations"
+        logall "query: split translations"
         if len(result) == len(sents):
             debug "query: translation successful."
             return
@@ -185,7 +185,8 @@ proc translate*[Q, T](q: ptr Q, el: T, srv: service) =
         if length > q[].bufsize:
             debug "Translating element singularly since it is big"
             elUpdate(q[], el, srv)
-            debug "Saving translations! {slations[].len}"
+            let n = slations[].len
+            debug "Saving translations! {n}"
         else:
             if reachedBufSize(length, q[]):
                 q[].push()

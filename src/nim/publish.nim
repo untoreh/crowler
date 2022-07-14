@@ -97,18 +97,18 @@ proc addArticle(lsh: LocalitySensitive[uint64], a: Article): bool =
         return true
     false
 
-proc curPageNumber(topic: string): int =
+proc curPageNumber(topic: string): Future[int] {.async.} =
     withPyLock:
         return site.get_top_page(topic).to(int)
     # return getSubdirNumber(topic, curdir)
 
 proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, istop = false,
-        with_arts = false) =
+        with_arts = false) {.async.} =
     ## Writes a single page (fetching its related articles, if its not a template) to storage
     topicPage(topic, pagenum, istop)
 
     info "Updating page:{pagenum} for topic:{topic} with entries:{pagecount}"
-    processHTML(topic,
+    await processHTML(topic,
                 pagenum / "index",
                 pagetree)
     # if we pass a pagecount we mean to finalize
@@ -117,16 +117,16 @@ proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, i
             discard site.update_page_size(topic, pagenum.parseInt, pagecount, final = true)
     if with_arts:
         for a in arts:
-            processHtml(topic / pagenum, a.slug, (waitFor buildPost(a)), a)
+            await processHtml(topic / pagenum, a.slug, (waitFor buildPost(a)), a)
 
 proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
     ## Always update both the homepage and the previous page
-    let pages = topicPages(topic)
+    let pages = waitFor topicPages(topic)
     var pagenum = pn.intToStr
     # current articles count
     let pn = pagenum.parseInt
     # the current page is the homepage
-    pubPage(topic, pagenum, pagecount)
+    waitFor pubPage(topic, pagenum, pagecount)
     # Also build the previous page if we switched page
     if newpage:
         # make sure the second previous page is finalized
@@ -137,11 +137,11 @@ proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
             let final = pagesize[1].to(bool)
             if not final:
                 pagenum = (pn-2).intToStr
-                pubPage(topic, pagenum, pagecount, finalize = true)
+                waitFor pubPage(topic, pagenum, pagecount, finalize = true)
         # now update the just previous page
         pagecount = pages[pn-1][0].to(int)
         pagenum = (pn-1).intToStr
-        pubPage(topic, pagenum, pagecount, finalize = true)
+        waitFor pubPage(topic, pagenum, pagecount, finalize = true)
 
 # proc resetPages(topic: string) =
 #     ## Takes all the published articles in `done`
@@ -162,7 +162,7 @@ proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
                       posts: var seq[(VNode, Article)],
                       donePy: var seq[PyObject],
                       doneArts: var seq[Article]): bool {.gcsafe.} =
-    var arts = getArticles(topic, pagenum = pagenum)
+    var arts = waitFor getArticles(topic, pagenum = pagenum)
     let pubtime = getTime().toUnix
     if arts.len == 0:
         return false
@@ -184,28 +184,28 @@ proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
                 a.topic = topic
                 a.py["topic"] = topic
             posts.add(((waitFor buildPost(a)), a))
-            withPyLock:
+            syncPyLock:
                 a.py["slug"] = uslug
                 a.py["title"] = utitle
                 a.py["page"] = pagenum
                 a.py["pubTime"] = pubtime
     # update done articles after uniqueness checks
-    withPyLock:
+    syncPyLock:
         for (_, a) in posts:
             donePy.add a.py
             doneArts.add a
-    updateTopicPubdate()
-    withPyLock:
+    waitFor updateTopicPubdate()
+    syncPyLock:
         discard site.save_done(topic, len(arts), donePy, pagenum)
-    true
+    return true
 
-proc pubTopic*(topic: string): bool {.gcsafe.} =
+proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
     ##  Generates html for a list of `Article` objects and writes to file.
     withPyLock:
         doassert topic in site.load_topics()[1]
     info "pub: topic - {topic}"
-    var pagenum = curPageNumber(topic)
-    let newpage = pageSize(topic, pagenum) > cfg.MAX_DIR_FILES
+    var pagenum = waitFor curPageNumber(topic)
+    let newpage = (waitFor pageSize(topic, pagenum)) > cfg.MAX_DIR_FILES
     if newpage:
         pagenum += 1
     # The subdir (at $pagenum) at this point must be already present on storage
@@ -237,7 +237,7 @@ proc pubTopic*(topic: string): bool {.gcsafe.} =
     info "Writing {newposts} articles for topic: {topic}"
     # FIXME: should this be here?
     for (tree, a) in posts:
-        processHtml(pagedir, a.slug, tree, a)
+        waitFor processHtml(pagedir, a.slug, tree, a)
     # after writing the new page, ensure home points to the new page
     when not cfg.SERVER_MODE:
         if newpage:
@@ -245,7 +245,7 @@ proc pubTopic*(topic: string): bool {.gcsafe.} =
     # if its a new page, the page posts count is equivalent to the just published count
     var pagecount: int
     pagecount = newposts
-    withPyLock:
+    syncPyLock:
         if not newpage:
             # add previous published articles
             let pagesize = site.get_page_size(topic, pagenum)
@@ -257,12 +257,12 @@ proc pubTopic*(topic: string): bool {.gcsafe.} =
     finalizePages(topic, pagenum, newpage, pagecount)
     # update feed file
     when cfg.RSS:
-        let tfeed = topic.fetchFeed
+        let tfeed = waitFor topic.fetchFeed
         tfeed.update(topic, doneArts, dowrite = true)
     when cfg.SEARCH_ENABLED:
         for ar in doneArts:
             var relpath = topic / $pagenum / ar.slug
-            search.push(relpath)
+            waitFor search.push(relpath)
     clearSiteMap(topic)
     # update ydx turbo items
     when cfg.YDX:
@@ -277,10 +277,11 @@ initLock(pubLock)
 lastPubTime[] = getTime()
 let siteCreated = create(Time)
 try:
-    withPyLock:
-        assert pybi.hasattr(site, "created").to(bool)
+    syncPyLock:
+        assert pyhasAttr(site, "created"), "site does not have creation date"
         siteCreated[] = parse(site.created.to(string), "yyyy-MM-dd").toTime
 except:
+    warn getCurrentExceptionMsg()
     siteCreated[] = fromUnix(0)
 proc pubTimeInterval(): int =
     ## This formula gradually reduces the interval between publications
@@ -291,12 +292,12 @@ proc maybePublish*(topic: string): bool {.gcsafe.} =
     if pubLock.tryacquire:
         defer: pubLock.release
         # Don't publish each topic more than `CRON_TOPIC_FREQ`
-        if inHours(t - topicPubdate()) > pubTimeInterval():
+        if inHours(t - waitFor topicPubdate()) > pubTimeInterval():
             lastPubTime[] = t
-            return pubTopic(topic)
+            return waitFor pubTopic(topic)
 
 proc resetTopic(topic: string) =
-    withPyLock:
+    syncPyLock():
         discard site.reset_topic_data(topic)
     pageCache[].del(topic.feedKey)
     clearSiteMap(topic)
@@ -304,7 +305,7 @@ proc resetTopic(topic: string) =
 
 proc pubAllPages(topic: string, clear = true) =
     ## Starting from the homepage, rebuild all archive pages, and their articles
-    let (topdir, numdone) = topic.getState
+    let (topdir, numdone) = waitFor topic.getState
     assert topdir == numdone, fmt"{topdir}, {numdone}"
     if clear:
         for d in walkDirs(SITE_PATH / topic / "*"):
@@ -313,12 +314,12 @@ proc pubAllPages(topic: string, clear = true) =
         for n in 0..topdir:
             ensureDir(topic_path / $n)
     block:
-        let pagecount = pageSize(topic, topdir)
-        pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true, istop = true)
+        let pagecount = waitFor pageSize(topic, topdir)
+        waitFor pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true, istop = true)
     for n in 0..<topdir:
         let pagenum = n
-        var pagecount = pageSize(topic, n)
-        pubPage(topic, $pagenum, pagecount, finalize = true, with_arts = true)
+        var pagecount = waitfor pageSize(topic, n)
+        waitFor pubPage(topic, $pagenum, pagecount, finalize = true, with_arts = true)
     ensureHome(topic, topdir)
 
 # proc refreshPageSizes(topic: string) =

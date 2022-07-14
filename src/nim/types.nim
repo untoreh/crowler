@@ -3,7 +3,8 @@ import
     nimpy / py_lib,
     std / osproc,
     sets, locks,
-    sharedtables, lrucache
+    sharedtables, lrucache,
+    chronos
 import pyutils
 export pyutils
 # Generics
@@ -111,14 +112,16 @@ proc initArticle*(data: PyObject, pagenum: int): Article =
 proc default*(_: typedesc[Article]): Article = initArticle(PyNone, 0)
 
 proc initTypes*() =
-    withPyLock:
+    try:
+        pygil.globalAcquire()
+        emptyArt = default(Article)
+    except:
         try:
-            emptyArt = default(Article)
-        except:
-            try:
-                echo fmt"types: failed to initialize default article {getCurrentExceptionMsg()}"
-                quit()
-            except: quit()
+            stdout.write fmt"types: failed to initialize default article {getCurrentExceptionMsg()}\n"
+            quit()
+        except: quit()
+    finally:
+        pygil.release()
 
 import
     locktpl,

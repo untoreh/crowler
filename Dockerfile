@@ -1,6 +1,7 @@
 FROM ubuntu:focal AS sonic
+ENV DEBIAN_FRONTEND=noninteractive
 RUN apt update; \
-    apt install -y curl libclang-dev build-essential; \
+    apt install -y curl libclang-dev build-essential gdb vim; \
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -q --profile minimal --default-toolchain stable -y && \
     /root/.cargo/bin/cargo install sonic-server && \
     cp /root/.cargo/bin/sonic /usr/local/bin && \
@@ -19,7 +20,15 @@ FROM gost AS nimrt
 RUN apt -y install git lld
 RUN curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
 RUN echo PATH=/root/.nimble/bin:\$PATH >> /root/.profile
+RUN ln -sr /root/.choosenim/toolchains/*/tools /root/.nimble
 SHELL ["/bin/bash", "-lc"]
+
+FROM nirmrt as pyenv
+RUN curl https://pyenv.run | bash
+RUN echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.profile
+RUN echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.profile
+RUN echo 'eval "$(pyenv init -)"' >> ~/.profile
+
 
 FROM nimrt AS siteenv
 ENV PROJECT_DIR=/site
@@ -59,11 +68,11 @@ FROM site AS wsl
 ENV CONFIG_NAME wsl
 ENV SITE_PORT 5050
 HEALTHCHECK --timeout=5s CMD timeout 5 curl --fail http://localhost:5050 || exit 1
-RUN cd /site; nimble build # ; strip -s cli
+RUN cd /site; nimble build ; strip -s cli
 
 FROM site as wsl
 ENV CONFIG_NAME wsl
 ENV SITE_PORT 5051
 ENV NEW_TOPICS_ENABLED True
 HEALTHCHECK --timeout=5s CMD timeout 5 curl --fail http://localhost:5051 || exit 1
-RUN cd /site; nimble build # ; strip -s cli
+RUN cd /site; nimble build ; strip -s cli

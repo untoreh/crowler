@@ -7,10 +7,8 @@ import nimpy,
        strformat,
        tables,
        macros,
-       locks
-
-from nimpy/py_types import PPyObject
-from nimpy {.all.} import newPyObject
+       locks,
+       chronos
 
 import
     cfg,
@@ -29,16 +27,19 @@ proc initTFuncCache*() =
         tFuncCache = createShared(Table[(service, langpair), TFunc])
 
 proc ensurePy(srv: service): PyObject =
+    if not pygil.locked:
+        warn "ensurepy: calling python without python lock (should already be locked)"
     try:
         return case srv:
             of deep_translator:
                 pyImport($srv)
             of base_translator:
-                discard relPyImport("proxies_pb")
-                relPyImport($srv)
+                pyImport($srv)
     except Exception as e:
-        if "ModuleNotFoundError" in e.msg:
+        if "ModuleNotFoundError" in e.msg or "No module named" in e.msg:
             if getEnv("VIRTUAL_ENV", "") != "":
+                let sys = pyImport("sys")
+                info "translate: installing {srv} with pip, syspat: {sys.path}"
                 let res = execCmd(fmt"pip install {srv}")
                 if res != 0:
                     raise newException(OSError, fmt"Failed to install {srv}, check your python virtual environment.")
@@ -47,40 +48,40 @@ proc ensurePy(srv: service): PyObject =
         else:
             raise e
 
-discard pybi.exec: """
-from time import sleep
-def tryWrapper(fn, n: int, def_val=""):
-    def wrappedFn(*args, tries=1, e=None):
-        if tries < n:
-            try:
-                return fn(*args)
-            except Exception as e:
-                sleep(tries)
-                return wrappedFn(*args, tries=tries+1, e=e)
-        else:
-            print("wrapped function reached max tries, last exception was: ", e)
-            return def_val
-    return wrappedFn
-"""
-let tryWrapper = pyglo["tryWrapper"]
+# discard pybi.exec: """
+# from time import sleep
+# def tryWrapper(fn, n: int, def_val=""):
+#     def wrappedFn(*args, tries=1, e=None):
+#         if tries < n:
+#             try:
+#                 return fn(*args)
+#             except Exception as e:
+#                 sleep(tries)
+#                 return wrappedFn(*args, tries=tries+1, e=e)
+#         else:
+#             print("wrapped function reached max tries, last exception was: ", e)
+#             return def_val
+#     return wrappedFn
+# """
+# let tryWrapper = pyglo["tryWrapper"]
 
-proc trywrapPyFunc*(fn: PyObject, tries = 3, defVal = ""): PyObject =
-    debug "trywrap: returning try wrapper {tries}"
-    return tryWrapper(fn, tries, defVal)
+# proc trywrapPyFunc*(fn: PyObject, tries = 3, defVal = ""): PyObject =
+#     debug "trywrap: returning try wrapper {tries}"
+#     return tryWrapper(fn, tries, defVal)
 
 template pySafeCall(code: untyped): untyped =
-    debug "pysafe: acquiring lock"
-    {.locks: [pyLock].}:
+    logall "pysafe: acquiring lock"
+    {.locks: [pyGilLock].}:
         try:
-            pyLock.acquire()
-            debug "pysafe: lock acquired"
+            await pygil.acquire()
+            logall "pysafe: lock acquired"
             code
         except:
-            debug "pysafe: Failed with exception... {getCurrentException()[]}"
+            logall "pysafe: Failed with exception... {getStackTrace()}"
         finally:
-            debug "pysafe: releasing lock"
-            pyLock.release()
-        debug "pysafe: lock released"
+            logall "pysafe: releasing lock"
+            pygil.release()
+        logall "pysafe: lock released"
 
 proc getProxies(srv: service = deep_translator): auto =
     case srv:
@@ -96,32 +97,32 @@ proc getProxies(srv: service = deep_translator): auto =
 
 proc initTranslator*(srv: service = default_service, provider: string = "", source: Lang = SLang,
         targets: HashSet[Lang] = TLangs): Translator =
-    var py = ensurePy(srv)
-    new(result)
-    case srv:
-        of deep_translator:
-            result.py = py
-            result.apis = toHashSet(["GoogleTranslator", "LingueeTranslator",
-                    "MyMemoryTranslator"]) # "single_detection", "batch_detection"
-            result.name = srv
-            let prov = if provider == "": "GoogleTranslator" else: provider
-            assert prov in result.apis
-            result.provider = prov
-            let
-                provFn = result.py.getattr(prov)
-                src = source.code
-                cls = provFn()
-                proxies = getProxies(srv)
-            for l in targets:
-                for suplang in cls.getAttr("_languages").values():
-                    let sl = suplang.to(string)
-                    if l.code in sl:
-                        result.tr[(src, sl)] = provFn(source = src, target = sl, proxies = proxies)
-        of base_translator:
-            result.py = py.getattr("Translator")()
-            result.name = base_translator
-            result.provider = ""
-    result
+    syncPyLock:
+        var py = ensurePy(srv)
+        new(result)
+        case srv:
+            of deep_translator:
+                result.py = py
+                result.apis = toHashSet(["GoogleTranslator", "LingueeTranslator",
+                        "MyMemoryTranslator"]) # "single_detection", "batch_detection"
+                result.name = srv
+                let prov = if provider == "": "GoogleTranslator" else: provider
+                assert prov in result.apis
+                result.provider = prov
+                let
+                    provFn = result.py.getattr(prov)
+                    src = source.code
+                    cls = provFn()
+                    proxies = getProxies(srv)
+                for l in targets:
+                    for suplang in cls.getAttr("_languages").values():
+                        let sl = suplang.to(string)
+                        if l.code in sl:
+                            result.tr[(src, sl)] = provFn(source = src, target = sl, proxies = proxies)
+            of base_translator:
+                result.py = py.getattr("Translator")()
+                result.name = base_translator
+                result.provider = ""
 
 let slatorObj = initTranslator()
 let slator* = slatorObj.unsafeAddr
@@ -140,7 +141,7 @@ template translatorFunc(src: string, lang: langPair) {.dirty.} =
             debug "tfun: applied f ({src.len})"
         while true:
             pySafeCall:
-                debug "tfun: waiting for translation {rdy}, {lang}, {j.isnil}"
+                logall "tfun: waiting for translation {rdy}, {lang}, {j.isnil}"
                 rdy = j.ready().to(bool)
             if rdy:
                 debug "tfun: getting translation value job"
@@ -159,14 +160,18 @@ template translatorFunc(src: string, lang: langPair) {.dirty.} =
     except Exception as e:
         raise newException(ValueError, fmt"Translation failed with error: {e.msg}")
 
+pygil.globalAcquire()
 var pyf {.threadvar.}: PyObject
+pygil.release()
 proc baseTranslatorFunc(src: string, lang: langPair): Future[string] {.gcsafe, async.} =
-    pyf = slator.py.getattr("translate")
+    withPyLock:
+        pyf = slator.py.getattr("translate")
     proc doJob(): PyObject {.closure.} = pySched.apply(pyf, src, lang.trg)
     translatorFunc(src, lang)
 
 proc deepTranslatorFunc(src: string, lang: langPair): Future[string] {.gcsafe, async.} =
-    pyf = slator.tr[lang].getattr("translate").trywrapPyFunc
+    withPyLock:
+        pyf = slator.tr[lang].getattr("translate").trywrapPyFunc
     proc doJob(): PyObject {.closure.} = pySched.apply(pyf, src)
     translatorFunc(src, lang)
 

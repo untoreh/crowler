@@ -1,0 +1,16 @@
+-d:release
+--threads:on
+-d:threadsafe
+-d:asyncBackend=chronos
+--gc:arc
+--deepcopy:on
+-d:useMalloc
+--nimcache:"/tmp/.nimcache"
+--passC:"-fuse-ld=lld"
+--passL:"$PROJECT_DIR/src/rust/target/release/libminify_html_c.a"
+-d:ssl
+# -d:lto
+--verbosity:0
+-d:GzipEnable=false
+-d:TimeOut=180
+# -d:findPyLib

@@ -22,8 +22,8 @@ const
     SITE_PATH* = PROJECT_PATH / "site"
     SITE_ASSETS_DIR* = BASE_URL / "assets"
     DATA_PATH* = PROJECT_PATH / "data"
-    DATA_ASSETS_PATH* = DATA_PATH / "assets"
-    DATA_ADS_PATH* = DATA_PATH / "ads"
+    DATA_ASSETS_PATH* = DATA_PATH / "assets" / WEBSITE_NAME
+    DATA_ADS_PATH* = DATA_PATH / "ads" / WEBSITE_NAME
     ASSETS_PATH* = PROJECT_PATH / "src" / "assets"
     CSS_REL_URL* = $(SITE_ASSETS_DIR / WEBSITE_NAME / "bundle.css")
     JS_REL_URL* = $(SITE_ASSETS_DIR / WEBSITE_NAME / "bundle.js")

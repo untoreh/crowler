@@ -24,12 +24,14 @@
 .langs-dropdown-content.show {
   display: block;
   right: -1rem;
+  pointer-events: visible;
 }
 
-[dir=rtl] .langs-dropdown-content.show {
+[dir="rtl"] .langs-dropdown-content.show {
   display: block;
   left: -1rem;
   right: 0;
+  pointer-events: visible;
 }
 
 .langs-dropdown-content a {
@@ -37,6 +39,7 @@
   font-variant: petite-caps;
   white-space: break-spaces;
   margin: 0.1rem 0 0.1rem 0;
+  height: 100%;
 }
 
 .menu-lang-btn::before {
@@ -45,7 +48,7 @@
 
 @media (max-width: 680px) {
   .lang-link {
-    height: 3rem;
+    padding: 0.5rem 0;
   }
 }
 
@@ -95,6 +98,7 @@
     left: -100vw;
     &.show {
       left: 3.25rem; // needed for avoiding to tune z-index in vertical menu
+      pointer-events: visible;
     }
   }
 }

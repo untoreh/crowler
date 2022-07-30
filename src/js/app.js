@@ -2,6 +2,9 @@ import { MDCRipple } from "@material/ripple";
 import { MDCTopAppBar } from "@material/top-app-bar";
 import { getCookie, $, $$ } from "./lib.js";
 import { setupSuggest } from "./suggest.js";
+// import "../css/app.scss";
+// import after `app.scss`
+// import "uno.css";
 
 function toggleTheme() {
   let el = document.body;
@@ -25,7 +28,9 @@ function toggleTheme() {
       el.classList.add("light");
     }
   }
-  document.cookie = `darkTheme=${el.classList.contains("dark")}; SameSite=Strict`;
+  document.cookie = `darkTheme=${el.classList.contains(
+    "dark"
+  )}; SameSite=Strict`;
 }
 
 function toggleVisibility(el, hide = false) {
@@ -38,56 +43,56 @@ function toggleVisibility(el, hide = false) {
 
 function toggleShow(el, hide = false) {
   if (hide) {
-    el.classList.remove("show")
+    el.classList.remove("show");
   } else {
-    el.classList.toggle("show")
+    el.classList.toggle("show");
   }
 }
 
 function toggleDrawer(_, hide = false) {
   let el = $(".menu-list");
-  toggleVisibility(el, hide)
+  toggleVisibility(el, hide);
 }
 
 function toggleLangs(e, hide = false) {
-  let el = $(".langs-dropdown-content", e.target)
-  toggleShow(el, hide)
+  let el = $(".langs-dropdown-content", e.target);
+  // let el = e.target.nextElementSibling;
+  // if (!el.classList.contains(".langs-dropdown-content")) {
+  //   console.log("Can't find lang menu in clicked element")
+  // }
+  toggleShow(el, hide);
 }
 
 function closeMenus(e) {
-  let el = e.target
-  let cls = el.classList
-  e.stopPropagation()
-  if (!cls.contains("langs-dropdown-content") &&
-      !cls.contains("translate")) {
-    let langs = $$(".langs-dropdown-content")
-    langs.forEach(l => toggleShow(l, true))
+  let el = e.target;
+  let cls = el.classList;
+  e.stopPropagation();
+  if (!cls.contains("langs-dropdown-content") && !cls.contains("translate")) {
+    let langs = $$(".langs-dropdown-content");
+    langs.forEach((l) => toggleShow(l, true));
   }
-  let pcls = el.parentElement.classList
-  if (!cls.contains("menu-btn") &&
-      !cls.contains("menu-list") &&
-      !pcls.contains("menu-list") &&
-      !pcls.contains("menu-lang-btn")) {
-    toggleDrawer(null, true)
+  let pcls = el.parentElement.classList;
+  if (
+    !cls.contains("menu-btn") &&
+    !cls.contains("menu-list") &&
+    !pcls.contains("menu-list") &&
+    !pcls.contains("menu-lang-btn")
+  ) {
+    toggleDrawer(null, true);
   }
 }
 
 window.onload = function () {
   // dark light
-  $$(".dk-toggle")
-    .forEach((el) => (el.onclick = toggleTheme));
+  $$(".dk-toggle").forEach((el) => (el.onclick = toggleTheme));
   toggleTheme();
 
   $("html,body").onclick = closeMenus;
   $(".menu-btn").onclick = toggleDrawer;
-  $$(".menu-lang-btn").forEach(el =>
-    el.onclick = toggleLangs
-  )
+  $$(".menu-lang-btn").forEach((el) => (el.onclick = toggleLangs));
 
   // button
-  const iconButtonRipple = new MDCRipple(
-    $(".mdc-icon-button")
-  );
+  const iconButtonRipple = new MDCRipple($(".mdc-icon-button"));
   iconButtonRipple.unbounded = true;
 
   // appbar

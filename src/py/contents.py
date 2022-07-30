@@ -32,7 +32,7 @@ def parsesource(url, topic, site: Site):
         if f:
             logger.info("Adding %s feeds.", len(f))
             FEEDS.extend(f)
-        a = art.fillarticle(url, data, topic)
+        a = art.fillarticle(url, data, topic, site)
         if a:
             logger.info("Adding %s articles", len(a))
             ARTICLES.append(a)
@@ -43,12 +43,13 @@ def parsesource(url, topic, site: Site):
         LAST_SOURCE = (None, None)
 
 
-def parsearticle(url, topic):
+def parsearticle(url, topic, site: Site):
     data = ut.fetch_data(url)
     if data:
-        a = art.fillarticle(url, data, topic)
+        a = art.fillarticle(url, data, topic, site)
         if a:
             ARTICLES.append(a)
+            return a
         else:
             logger.info("Couldn't parse an article from url %s .", url)
 
@@ -91,7 +92,7 @@ def fromsources(sources, topic, site: Site, n=cfg.POOL_SIZE, use_proxies=True):
     return (ARTICLES, FEEDS)
 
 
-def fromfeeds(sources, n=cfg.POOL_SIZE, use_proxies=True):
+def fromfeeds(sources, site: Site, n=cfg.POOL_SIZE, use_proxies=True):
     """Create list of feeds from a subset of links found in the source file, according to SRC_SAMPLE_SIZE."""
     global ARTICLES
     sched.initPool()
@@ -105,7 +106,7 @@ def fromfeeds(sources, n=cfg.POOL_SIZE, use_proxies=True):
         if not url:
             continue
         logger.info("Fetching articles from %s", url)
-        j = pool.apply(parsearticle, url, topic)
+        j = pool.apply(parsearticle, url, topic, site)
         jobs.append(j)
     for n, j in enumerate(jobs):
         j.wait()

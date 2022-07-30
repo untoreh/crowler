@@ -184,7 +184,7 @@ def run_parse2_job(site: Site, topic):
         logger.warning("Couldn't find feeds for topic %s@%s", topic, site.name)
         return None
     logger.info("Search %d feeds for articles...", len(feed_links))
-    articles = cnt.fromfeeds(feed_links)
+    articles = cnt.fromfeeds(feed_links, site)
     a = None
     if articles:
         logger.info("%s@%s: Saving %d articles.", topic, site.name, len(articles))

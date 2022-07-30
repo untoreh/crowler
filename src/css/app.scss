@@ -1,12 +1,12 @@
 // @use '@material/button/mdc-button';
 // @use '@material/button';
-
 @use "@material/theme";
 @use "@material/icon-button" as iicbs;
 @use "@material/icon-button/styles" as icbs;
 @use "@material/top-app-bar/mdc-top-app-bar";
 @use "@material/ripple";
 
+@import "icons.scss";
 @import "colors.scss";
 @import "mixins.scss";
 
@@ -23,7 +23,10 @@ header {
 //////////////////////////
 
 .post-title {
-  text-align: center;
+  // text-align: center;
+}
+.post-desc {
+  @include width-available;
 }
 
 .wsl-logo {
@@ -38,7 +41,6 @@ header,
 .title-wrap {
   font-variant: small-caps;
 }
-
 body {
   font-family: "Noto Serif";
   margin: 0;
@@ -114,30 +116,30 @@ footer {
   }
 }
 
-.post-info,
-.post-info * {
+.post-info {
   display: flex;
-  flex: auto;
+  flex-flow: row;
 }
 
 .social-share {
-  vertical-align: middle;
-  padding: 0.5rem;
   background: var(--mdc-theme-primary);
-  border-radius: 4px 0 0 4px;
-  display: inline-block;
+  border-radius: 4px 4px 0 0;
+  display: flex;
+  flex-flow: row;
+  width: 100%;
   & a {
-    text-decoration: none;
-    text-align: center;
+    width: 50%;
     & button {
+      width: 50%;
       display: block;
+      height: 32px;
+      margin: auto;
     }
   }
 }
 
 .post-source {
   background: var(--mdc-theme-primary);
-  border-radius: 0 4px 4px 0;
   padding: 0.5rem;
   & a {
     text-decoration: none;
@@ -164,21 +166,63 @@ footer {
   font-size: 0.9rem;
 }
 
+.footer-links {
+  font-size: 1.5rem;
+  font-variant: all-petite-caps;
+  & > a {
+    padding: 0 0.25rem 0 0.25rem;
+    position: relative;
+    padding-left: 2rem;
+    text-align: left;
+    display: inline-block;
+    margin-right: -1rem;
+    transition: ease-in 0.2s;
+    padding-bottom: 0.25rem;
+    margin-bottom: -0.25rem;
+    &:after {
+      content: "|";
+      text-decoration: none;
+      padding: 1rem;
+    }
+    & .icon {
+      display: inline-block;
+      position: absolute;
+      left: 0;
+      top: 0.25rem;
+    }
+    &.ad-link {
+      margin-right: -2.5rem;
+      margin-left: -1.25rem;
+      clip-path: polygon(15% 0%, 80% 0%, 80% 120%, 15% 120%);
+      &:hover {
+        filter: invert(1);
+        background-color: var(--mdc-theme-primary);
+      }
+      & .icon {
+        &:first-child {
+          left: 0.95rem;
+          top: 0.3rem;
+        }
+        &:last-child {
+          right: 1.5rem;
+          left: unset;
+          top: 0.3rem;
+        }
+      }
+    }
+  }
+}
+
 .footer-copyright {
   font-family: Times;
   padding: 1rem 0 0 0.25rem;
   & a {
     margin-left: 1rem;
+    text-decoration: none;
   }
-}
-
-.footer-links {
-  font-size: 1.5rem;
-  font-variant: all-petite-caps;
-}
-
-.footer-links > a {
-  padding: 0 0.25rem 0 0.25rem;
+  font-weight: lighter;
+  font-family: verdana;
+  font-size: 0.75rem;
 }
 
 .mdc-ripple-button {
@@ -193,6 +237,8 @@ footer {
   width: 100%;
   height: 100%;
   position: absolute;
+  top: 0;
+  left: 0;
 }
 
 .social-share .mdc-icon-button {
@@ -208,7 +254,6 @@ footer {
   margin-right: 0.25rem;
   text-align: center;
   display: inline-block;
-  vertical-align: middle;
   padding: 0;
   border-style: none;
   box-shadow: var(--mdc-theme-on-surface) 0px 0px 1px;
@@ -243,6 +288,9 @@ footer {
   list-style: none;
   @include border-style;
   padding: 0.25rem;
+  & > * {
+    margin: 0.5rem 0;
+  }
   & a {
     font-variant: small-caps;
   }
@@ -262,6 +310,18 @@ footer {
     left: 0.5rem;
     color: var(--mdc-theme-on-primary);
   }
+  & button {
+    text-align: center;
+    display: flex;
+    flex-flow: column;
+    width: 3rem;
+    height: auto;
+    margin: 0.5rem 0;
+  }
+}
+// chrome needs this
+section.menu-list > button {
+  overflow: visible;
 }
 
 .entry {
@@ -284,11 +344,15 @@ footer {
 }
 
 header .page {
-  padding: 0 1rem 0 1rem;
+  padding: 1rem 1rem;
+  height: calc(100% - 1rem);
+  min-width: 2rem;
+  text-align: center;
 }
 
 .material-icons {
   font-variant: none;
+  --webkit-font-display: block;
 }
 .entry-title {
   margin-bottom: 0.5rem;
@@ -307,9 +371,9 @@ header .page {
     min-width: 8rem;
     object-fit: fill;
     border-radius: 0.75rem;
-    padding: 0.5rem;
-    font-size: 10rem;
-    line-height: 8rem;
+    min-height: 8rem;
+    background: url("https://api.iconify.design/bx/image.svg") no-repeat center
+      center/cover;
   }
 }
 .entry-tags {
@@ -324,9 +388,9 @@ header .page {
     border-radius: 5px;
     display: inline-flex;
     margin-top: 4px;
-    & i {
-      font-size: 1rem;
+    div {
       display: inline-block;
+      padding: 0.1rem 0.5rem;
       vertical-align: middle;
     }
   }
@@ -338,6 +402,12 @@ header .page {
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: center;
+  overflow-x: scroll;
+  scrollbar-width: none;
+  height: 100%;
+  &::-webkit-scrollbar {
+    display: none;
+  }
   & .topic-item {
     display: inline-block;
     padding: 0 0.5rem 0 0.5rem;
@@ -347,14 +417,24 @@ header .page {
     width: 100%;
     line-height: 2rem;
     & a {
-      display: block ruby;
+      display: block;
       height: calc(100% - 1rem);
       padding: 0.5rem;
       font-family: Noto Serif;
       font-variant: simplified;
-      font-size: 1.25rem;
       text-overflow: ellipsis;
       overflow: hidden;
+      text-decoration: none;
+      font-size: 1rem;
+      font-weight: normal;
+      background-color: var(--mdc-theme-secondary);
+      filter: invert(0.1);
+      border-radius: 4px;
+      box-shadow: 0 0 0.8px  var(--mdc-theme-surface);
+      transition: ease-in 0.2s;
+      &:hover {
+        filter: invert(1);
+      }
     }
     & .separator {
       height: 100%;
@@ -368,22 +448,57 @@ header .page {
   }
 }
 
+.menu-list .topics-shadow {
+  display: none;
+}
+section {
+  position: relative;
+  .topics-shadow {
+    box-shadow: 30px 0px 10px var(--mdc-theme-primary) inset,
+      -30px 0px 10px var(--mdc-theme-primary) inset;
+    height: 100%;
+    @include width-available;
+    position: absolute;
+    z-index: 9999;
+    pointer-events: none;
+    top: 0;
+    margin-left: -1rem;
+  }
+}
+section > button > * {
+  pointer-events: none;
+}
+
 section[role="toolbar"] {
   min-width: 18rem;
+  padding: 0;
+
+  & .menu-lang-btn {
+    margin-right: 1rem;
+  }
 }
 
 .menu-list-topics {
   padding: 0;
   text-align: center;
+  overflow-y: scroll;
+  max-height: calc(100% - 12.5rem);
+  scrollbar-width: none; // firefox
+  &::-webkit-scrollbar {
+    // chrome
+    display: none;
+  }
   & .menu-topic-item {
-    display: grid;
     vertical-align: middle;
     padding: 0;
     border-top: 1px dotted var(--mdc-theme-surface);
+    height: 3rem;
+    line-height: 3rem;
     a {
-      position: relative; // for tooltips positioning
+      // position: relative; // for tooltips positioning
       width: 100%;
-      padding-top: 0.25rem;
+      display: inline-block;
+      pdding: 0.5rem 0;
       font-weight: bold;
       text-transform: uppercase;
       text-decoration: none;
@@ -410,10 +525,16 @@ form.search {
   max-width: 20rem;
   & button {
     float: right;
+    top: 0;
+    height: 100%;
+    position: absolute;
   }
   & .clear-search-btn {
     position: absolute;
     right: 3.25rem;
+    top: 0;
+    height: 100%;
+    margin: 0;
   }
   .search-suggest {
     color: black;
@@ -465,7 +586,6 @@ form.search {
     position: relative;
     margin: 0 0.25rem;
     & img {
-      // width: calc(100% - 1rem);
       border-style: inset;
       border-radius: 2px;
       object-fit: fill;
@@ -489,6 +609,24 @@ form.search {
       -webkit-box-orient: vertical;
       line-height: 1.6rem;
     }
+  }
+}
+
+.post-links .ad-link {
+  border-radius: 0 0 4px 4px;
+  padding: 0.5rem;
+  background: var(--mdc-theme-surface);
+  display: inline-flex;
+  flex-flow: row;
+  @include width-available;
+  transition: ease-in 0.2s;
+  & .icon {
+    margin-left: 33%;
+    float: right;
+  }
+  &:hover {
+    filter: invert(1);
+    background-color: var(--mdc-theme-primary);
   }
 }
 

@@ -1,4 +1,6 @@
-import os, socket
+import os, socket, sys
+if os.getenv("LIBPYTHON_PATH", "").endswith("d.so"):
+    sys.path.extend(['/opt/python-dbg/lib/python310.zip', '/opt/python-dbg/lib/python3.10', '/opt/python-dbg/lib/python3.10/lib-dynload', '/opt/python-dbg/lib/python3.10/site-packages'])
 from pathlib import Path
 import warnings
 import pycurl

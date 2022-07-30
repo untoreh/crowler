@@ -3,8 +3,24 @@
 //   overflow-x: hidden;
 // }
 @media (max-width: 599px) {
+  html {
+    font-size: 0.9rem;
+  }
   .menu-list {
     top: 3.5rem;
+    display: flex;
+    flex-flow: column;
+    height: 100vh;
+  }
+  .menu-list-topics .menu-topic-item {
+    padding: 0.5rem 0;
+  }
+  section.menu-list > * {
+    display: flex;
+    flex-flow: column;
+    width: 100%;
+    list-style: none;
+    overflow-x: hidden;
   }
   .related-posts {
     display: block;
@@ -15,6 +31,52 @@
         width: calc(100% - 1rem);
         height: 3rem;
         bottom: 0.5rem;
+      }
+    }
+  }
+  .footer-links {
+    display: flex;
+    flex-flow: column;
+    text-align: center;
+  }
+  .footer-links {
+    font-size: 1.5rem;
+    font-variant: all-petite-caps;
+    display: flex;
+    flex-flow: column;
+    width: fit-content;
+    margin: auto;
+  }
+  .footer-copyright {
+    text-align: center;
+  }
+  .footer-links {
+    & > a {
+      margin-left: unset;
+      margin-right: unset;
+      &.ad-link {
+        clip-path: unset;
+        margin-left: unset;
+        margin-right: 6.5rem;
+        & .icon {
+          &:first-child {
+          }
+          &:last-child {
+            right: 1.5rem;
+          }
+        }
+      }
+      &:after {
+        content: unset;
+      }
+    }
+    & .icon {
+      &:first-child {
+        left: -2.5%;
+      }
+      &:last-child {
+        right: unset;
+        left: 3%;
       }
     }
   }
@@ -29,6 +91,13 @@
   .right.app-bar-logo {
     display: none;
   }
+  html {
+    font-size: 0.8rem;
+  }
+  main {
+    margin: auto 0;
+    width: calc(100vw - 2rem);
+  }
 }
 
 @media (min-width: 361px) and (max-width: 460px) {
@@ -36,6 +105,12 @@
   //   display: flex;
   //   flex-direction: row-reverse;
   // }
+  .image-link {
+    float: none;
+    width: 100%;
+    display: block;
+    text-align: center;
+  }
   .app-bar-logo.right {
     display: initial;
   }
@@ -58,6 +133,9 @@
   .dark .app-bar-logo .logo-dark-wrap,
   .menu-btn {
     display: initial;
+    display: block;
+    height: 100%;
+    margin: 0 0.5rem;
   }
   .app-bar-logo {
     text-align: center;

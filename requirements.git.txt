@@ -1,0 +1,13 @@
+# parsing
+git+https://github.com/html5lib/html5lib-python@master  # for python3.10 use latest
+git+https://github.com/nidhaloff/deep-translator@master
+
+
+# proxy-checker
+git+https://github.com/orehunt/proxybroker2@master
+
+# sources
+git+https://github.com/searxng/searxng
+
+# config
+git+https://github.com/untoreh/colors.py

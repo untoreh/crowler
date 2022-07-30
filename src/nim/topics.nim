@@ -9,15 +9,18 @@ import
 type
     TopicState* = tuple[topdir: int, group: PyObject]
     Topics* = LockTable[string, TopicState]
+
+pygil.globalAcquire()
 let
     topicsCache*: Topics = initLockTable[string, TopicState]()
     emptyTopic* = (topdir: -1, group: PyObject())
     pyTopicsMod = if os.getEnv("NEW_TOPICS_ENABLED", "") != "":
-                      discard relPyImport("proxies_pb") # required by topics
-                      discard relPyImport("translator") # required by topics
-                      discard relPyImport("adwords_keywords") # required by topics
-                      relPyImport("topics")
+                      # discard relPyImport("proxies_pb") # required by topics
+                      # discard relPyImport("translator") # required by topics
+                      # discard relPyImport("adwords_keywords") # required by topics
+                      pyImport("topics")
                   else: PyNone
+pygil.release()
 
 proc lastPageNum*(topic: string): Future[int] {.async.} =
     withPyLock:

@@ -27,4 +27,5 @@ requires "fusion"
 requires "minhash"
 requires "json_serialization"
 requires "zippy"
+requires "https://github.com/ringabout/Xio" # dep of fsnotify, but `xio` link in nimble index is broken
 requires "fsnotify"

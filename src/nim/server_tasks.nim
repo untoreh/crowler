@@ -49,7 +49,7 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
         if topic != "":
             # Don't publish each topic more than `CRON_TOPIC_FREQ`
             debug "pubtask: {topic} was published {inHours(t - topicPubdate())} hours ago."
-            if maybePublish(topic):
+            if await maybePublish(topic):
                 # clear homepage and topic page cache
                 deletePage("")
                 deletePage("/" & topic)

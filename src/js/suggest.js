@@ -121,6 +121,9 @@ function setupInput() {
                     window.location = url
                 }
                 break;
+            case 27: //esc
+                e.preventDefault()
+            visible($("div.search-suggest", form), false)
         }
     });
 }

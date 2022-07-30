@@ -35,11 +35,23 @@ ENGINES = [
     "startpage",
     "duckduckgo",
     "bing",
-    "onesearch",
     "qwant",
-    "digg",
+    "gigablast",
+    "unsplash",
 ]
+ENGINES_IMG = [
+    "google_images",
+    "duckduckgo_images",
+    "bing_images",
+    "unsplash",
+    "flickr_noapi",
+    "frinkiac",
+    "openverse",
+]
+# ENGINES_IMG_ONLY = {"flickr_noapi", "frinkiac", "openverse"}
+""
 N_ENGINES = len(ENGINES)
+N_ENGINES_IMG = len(ENGINES_IMG)
 R_ENGINES = []
 
 
@@ -50,27 +62,37 @@ def get_engine():
         yield e
 
 
+def get_engine_img():
+    engines = [e.split("_")[0] for e in ENGINES_IMG.copy()]
+    shuffle(engines)
+    for e in engines:
+        yield e
+
+
 def get_engine_params(engine):
+    cats = "general" if engine in ENGINES else "images"
     params = {
         "shortcut": engine,
         "engine": engine,
-        "name": engine,
+        "name": engine.split("_")[0],
         "timeout": cfg.REQ_TIMEOUT,
-        "categories": "general",
+        "categories": cats,
     }
-    if cfg.PROXIES_ENABLED:
+    if False:  # cfg.PROXIES_ENABLED:
         params["network"] = {
             "verify": False,
             "proxies": cfg.STATIC_PROXY_EP,
             "retries": 3,
             "retry_on_http_error": True,
-            "max_redirects": 30
+            "max_redirects": 30,
         }
     return params
 
 
 ENGINES_PARAMS = [get_engine_params(engine) for engine in ENGINES]
 search.initialize(settings_engines=ENGINES_PARAMS)
+ENGINES_PARAMS_IMG = [get_engine_params(engine) for engine in ENGINES_IMG]
+search.initialize(settings_engines=ENGINES_PARAMS_IMG)
 
 
 @retry(tries=cfg.SRC_MAX_TRIES, delay=1, backoff=3.0, logger=None)
@@ -152,13 +174,50 @@ def fromkeyword_async(keyword="trending", n_engines=1, filter_lang=False):
     n = 0
     kwjobs = []
     kwlang = tr.detect(keyword) if filter_lang else "all"
-    for egn in get_engine():
+    for (egn, _) in get_engine():
         n += 1
         if n > n_engines:
             break
         j = sched.apply(try_search, keyword, egn, 1, kwlang)
         kwjobs.append(j)
     return kwjobs
+
+
+from typing import NamedTuple
+
+
+class Img(NamedTuple):
+    title: str
+    url: str
+    origin: str
+
+
+def get_images(kw, maxiter=3, min_count=1, raw=False):
+    """"""
+    results = []
+    itr = 0
+    try:
+        for egn in get_engine_img():
+            response = single_search(
+                kw,
+                egn,
+                pages=1,
+                lang="all",
+                timeout=cfg.REQ_TIMEOUT,
+                category="images",
+            )
+            results.extend(response)
+            if len(results) > min_count or itr > maxiter:
+                break
+            itr += 1
+    finally:
+        return (
+            results
+            if raw
+            else [
+                Img(title=r["title"], url=r["img_src"], origin=r["url"]) for r in results
+            ]
+        )
 
 
 def print_results(res):

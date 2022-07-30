@@ -117,31 +117,36 @@ proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, i
             discard site.update_page_size(topic, pagenum.parseInt, pagecount, final = true)
     if with_arts:
         for a in arts:
-            await processHtml(topic / pagenum, a.slug, (waitFor buildPost(a)), a)
+            await processHtml(topic / pagenum, a.slug, (await buildPost(a)), a)
 
-proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
+proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: ptr int) {.async.} =
     ## Always update both the homepage and the previous page
-    let pages = waitFor topicPages(topic)
+    let pages = await topicPages(topic)
     var pagenum = pn.intToStr
     # current articles count
+    let pnStr = pagenum
     let pn = pagenum.parseInt
     # the current page is the homepage
-    waitFor pubPage(topic, pagenum, pagecount)
+    await pubPage(topic, pnStr, pagecount[])
     # Also build the previous page if we switched page
     if newpage:
         # make sure the second previous page is finalized
         let pn = pagenum.parseInt
         if pn > 1:
-            let pagesize = pages[pn-2]
-            pagecount = pagesize[0].to(int)
-            let final = pagesize[1].to(bool)
+            var pagesize: PyObject
+            var final: bool
+            withPyLock:
+                pagesize = pages[pn-2]
+                pagecount[] = pagesize[0].to(int)
+                final = pagesize[1].to(bool)
             if not final:
                 pagenum = (pn-2).intToStr
-                waitFor pubPage(topic, pagenum, pagecount, finalize = true)
+                await pubPage(topic, pagenum, pagecount[], finalize = true)
         # now update the just previous page
-        pagecount = pages[pn-1][0].to(int)
+        withPyLock:
+            pagecount[] = pages[pn-1][0].to(int)
         pagenum = (pn-1).intToStr
-        waitFor pubPage(topic, pagenum, pagecount, finalize = true)
+        await pubPage(topic, pagenum, pagecount[], finalize = true)
 
 # proc resetPages(topic: string) =
 #     ## Takes all the published articles in `done`
@@ -159,10 +164,10 @@ proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: var int) =
 #             newdone.add()
 
 proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
-                      posts: var seq[(VNode, Article)],
-                      donePy: var seq[PyObject],
-                      doneArts: var seq[Article]): bool {.gcsafe.} =
-    var arts = waitFor getArticles(topic, pagenum = pagenum)
+                      posts: ptr seq[(VNode, Article)],
+                      donePy: ptr seq[PyObject],
+                      doneArts: ptr seq[Article]): Future[bool] {.gcsafe, async.} =
+    var arts = await getArticles(topic, pagenum = pagenum)
     let pubtime = getTime().toUnix
     if arts.len == 0:
         return false
@@ -183,20 +188,20 @@ proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
             if a.topic == "":
                 a.topic = topic
                 a.py["topic"] = topic
-            posts.add(((waitFor buildPost(a)), a))
-            syncPyLock:
+            posts[].add(((await buildPost(a)), a))
+            withPyLock:
                 a.py["slug"] = uslug
                 a.py["title"] = utitle
                 a.py["page"] = pagenum
                 a.py["pubTime"] = pubtime
     # update done articles after uniqueness checks
-    syncPyLock:
-        for (_, a) in posts:
-            donePy.add a.py
-            doneArts.add a
-    waitFor updateTopicPubdate()
-    syncPyLock:
-        discard site.save_done(topic, len(arts), donePy, pagenum)
+    withPyLock:
+        for (_, a) in posts[]:
+            donePy[].add a.py
+            doneArts[].add a
+    await updateTopicPubdate()
+    withPyLock:
+        discard site.save_done(topic, len(arts), donePy[], pagenum)
     return true
 
 proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
@@ -204,8 +209,8 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
     withPyLock:
         doassert topic in site.load_topics()[1]
     info "pub: topic - {topic}"
-    var pagenum = waitFor curPageNumber(topic)
-    let newpage = (waitFor pageSize(topic, pagenum)) > cfg.MAX_DIR_FILES
+    var pagenum = await curPageNumber(topic)
+    let newpage = (await pageSize(topic, pagenum)) > cfg.MAX_DIR_FILES
     if newpage:
         pagenum += 1
     # The subdir (at $pagenum) at this point must be already present on storage
@@ -218,7 +223,7 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
         donePy: seq[PyObject]
         doneArts: seq[Article]
     while posts.len == 0 and (getTime() - startTime).inSeconds < cfg.PUBLISH_TIMEOUT:
-        if not filterDuplicates(topic, lsh, pagenum, posts, donePy, doneArts):
+        if not await filterDuplicates(topic, lsh, pagenum, posts.addr, donePy.addr, doneArts.addr):
             break
 
     # At this point articles "state" is updated on python side
@@ -237,7 +242,7 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
     info "Writing {newposts} articles for topic: {topic}"
     # FIXME: should this be here?
     for (tree, a) in posts:
-        waitFor processHtml(pagedir, a.slug, tree, a)
+        await processHtml(pagedir, a.slug, tree, a)
     # after writing the new page, ensure home points to the new page
     when not cfg.SERVER_MODE:
         if newpage:
@@ -245,7 +250,7 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
     # if its a new page, the page posts count is equivalent to the just published count
     var pagecount: int
     pagecount = newposts
-    syncPyLock:
+    withPyLock:
         if not newpage:
             # add previous published articles
             let pagesize = site.get_page_size(topic, pagenum)
@@ -254,15 +259,15 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
                 pagecount += pagesize[0].to(int)
         discard site.update_page_size(topic, pagenum, pagecount)
 
-    finalizePages(topic, pagenum, newpage, pagecount)
+    await finalizePages(topic, pagenum, newpage, pagecount.addr)
     # update feed file
     when cfg.RSS:
-        let tfeed = waitFor topic.fetchFeed
+        let tfeed = await topic.fetchFeed
         tfeed.update(topic, doneArts, dowrite = true)
     when cfg.SEARCH_ENABLED:
         for ar in doneArts:
             var relpath = topic / $pagenum / ar.slug
-            waitFor search.push(relpath)
+            await search.push(relpath)
     clearSiteMap(topic)
     # update ydx turbo items
     when cfg.YDX:
@@ -287,14 +292,14 @@ proc pubTimeInterval(): int =
     ## This formula gradually reduces the interval between publications
     max(cfg.CRON_TOPIC_FREQ_MIN, cfg.CRON_TOPIC_FREQ_MAX - ((getTime() - siteCreated[]).inMinutes.int.div (3600 * 24) * 26))
 
-proc maybePublish*(topic: string): bool {.gcsafe.} =
+proc maybePublish*(topic: string): Future[bool] {.gcsafe, async.} =
     let t = getTime()
     if pubLock.tryacquire:
         defer: pubLock.release
         # Don't publish each topic more than `CRON_TOPIC_FREQ`
-        if inHours(t - waitFor topicPubdate()) > pubTimeInterval():
+        if inHours(t - (await topicPubdate())) > pubTimeInterval():
             lastPubTime[] = t
-            return waitFor pubTopic(topic)
+            return await pubTopic(topic)
 
 proc resetTopic(topic: string) =
     syncPyLock():
@@ -303,24 +308,26 @@ proc resetTopic(topic: string) =
     clearSiteMap(topic)
     saveLS(topic, initLS())
 
-proc pubAllPages(topic: string, clear = true) =
+proc pubAllPages(topic: string, clear = true) {.async.} =
     ## Starting from the homepage, rebuild all archive pages, and their articles
-    let (topdir, numdone) = waitFor topic.getState
+    let (topdir, numdone) = await topic.getState
     assert topdir == numdone, fmt"{topdir}, {numdone}"
-    if clear:
-        for d in walkDirs(SITE_PATH / topic / "*"):
-            removeDir(d)
-        let topic_path = SITE_PATH / topic
-        for n in 0..topdir:
-            ensureDir(topic_path / $n)
+    when not cfg.SERVER_MODE:
+        if clear:
+            for d in walkDirs(SITE_PATH / topic / "*"):
+                removeDir(d)
+            let topic_path = SITE_PATH / topic
+            for n in 0..topdir:
+                ensureDir(topic_path / $n)
     block:
-        let pagecount = waitFor pageSize(topic, topdir)
-        waitFor pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true, istop = true)
+        let pagecount = await pageSize(topic, topdir)
+        await pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true, istop = true)
     for n in 0..<topdir:
         let pagenum = n
-        var pagecount = waitfor pageSize(topic, n)
-        waitFor pubPage(topic, $pagenum, pagecount, finalize = true, with_arts = true)
-    ensureHome(topic, topdir)
+        var pagecount = await pageSize(topic, n)
+        await pubPage(topic, $pagenum, pagecount, finalize = true, with_arts = true)
+    when not cfg.SERVER_MODE:
+        ensureHome(topic, topdir)
 
 # proc refreshPageSizes(topic: string) =
 #     withPyLock:

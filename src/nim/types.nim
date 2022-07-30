@@ -27,6 +27,8 @@ type
         pubDate*: Time
         pubTime*: Time
         imageUrl*: string
+        imageTitle*: string
+        imageOrigin*: string
         icon*: string
         url*: string
         slug*: string
@@ -95,14 +97,15 @@ proc initArticle*(data: PyObject, pagenum: int): Article =
         a.author = pyget(data, "author")
         a.pubDate = pydate(data.pyget("pubDate", PyNone), getTime())
         a.pubTime = pydate(data.pyget("pubTime", PyNone), default(Time))
-        a.imageUrl = pyget(data, "imageUrl")
         a.icon = pyget(data, "icon")
         a.url = pyget(data, "url")
         a.slug = pyget(data, "slug")
+        a.imageUrl = pyget(data, "imageUrl")
+        a.imageTitle = pyget(data, "imageTitle", a.desc)
+        a.imageOrigin = pyget(data, "imageOrigin", a.url)
         # a.lang = pyget(data, "lang")
         a.topic = pyget(data, "topic")
         a.page = pyget(data, "page", pagenum)
-        a.slug = pyget(data, "slug")
         a.tags = pyget(data, "tags", emptyseq)
         a.py = data
         a

@@ -58,26 +58,27 @@ proc buildTopicSitemap(topic: string): Future[XmlNode] {.async.} =
     result.attrs = {"xmlns": xmlNamespace, "xmlns:xhtml": xhtmlNamespace}.toXmlAttributes
     let done = await topicDonePages(topic)
     var n_entries = 0
-    for pagenum in done:
-        if n_entries > maxEntries:
-            warn "Number of URLs for sitemap of topic: {topic} exceeds limit! {n_entries}/{maxEntries}"
-            break
-        for a in done[pagenum]:
-            if pyisnone(a):
-                continue
-            let
-                url = newElement("url")
-                loc = newElement("loc")
-            loc.add getArticleUrl(a, topic).escape.newText
-            url.add loc
-            for lang in TLangsCodes:
-                let link = newElement("xhtml:link")
-                link.attrs = {"href": getArticleUrl(a, topic, lang).escape,
-                               "hreflang": lang,
-                               "rel": "alternate"}.toXmlAttributes
-                url.add link
-                n_entries += 1
-            result.add url
+    withPyLock:
+        for pagenum in done:
+            if n_entries > maxEntries:
+                warn "Number of URLs for sitemap of topic: {topic} exceeds limit! {n_entries}/{maxEntries}"
+                break
+            for a in done[pagenum]:
+                if pyisnone(a):
+                    continue
+                let
+                    url = newElement("url")
+                    loc = newElement("loc")
+                loc.add getArticleUrl(a, topic).escape.newText
+                url.add loc
+                for lang in TLangsCodes:
+                    let link = newElement("xhtml:link")
+                    link.attrs = {"href": getArticleUrl(a, topic, lang).escape,
+                                "hreflang": lang,
+                                "rel": "alternate"}.toXmlAttributes
+                    url.add link
+                    n_entries += 1
+                result.add url
 
 
 proc sitemapKey(topic: string): string = topic & "-sitemap.xml"

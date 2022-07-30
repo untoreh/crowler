@@ -23,6 +23,7 @@ docker/
 !data/ads/.gitkeep
 **data/assets/
 !data/assets/.gitkeep
+data.debug/
 
 # Added by cargo
 

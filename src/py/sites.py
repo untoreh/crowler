@@ -9,6 +9,8 @@ from datetime import datetime
 import numpy as np
 import tomli
 import zarr as za
+from bloom_filter2 import BloomFilter
+
 # social
 from praw import Reddit
 from praw.models.reddit.subreddit import Subreddit
@@ -62,7 +64,11 @@ class Site:
         self._config = read_sites_config(sitename)
         self.site_dir = cfg.DATA_DIR / "sites" / sitename
         self.req_cache_dir = self.site_dir / "cache"
-
+        self.img_bloom = BloomFilter(
+            max_elements=10**8,
+            error_rate=0.01,
+            filename=(self.site_dir / "bloom_images.bin", -1),
+        )
         self.blacklist_path = self.site_dir / "blacklist.txt"
         self.blacklist = blacklist.load_blacklist(self)
 
@@ -95,7 +101,9 @@ class Site:
             log.warn("Facebook page id not set.")
         self._fb_page_token = self._config.get("facebook_page_token", "")
         if self._fb_page_id:
-            assert self._fb_page_token, "To submit posts to facebook, a page access token is required."
+            assert (
+                self._fb_page_token
+            ), "To submit posts to facebook, a page access token is required."
         self._fb_graph = FBApi(self._fb_page_token)
         self._feed_path = self._fb_page_id + "/feed" if self._fb_page_id else ""
         self.has_facebook = True
@@ -105,12 +113,16 @@ class Site:
         self.load_topics()
         topic, art = self.choose_article()
         if not isinstance(art, dict):
-            log.warn(f"Could not choose an article while publishing to fb page, site: {self.name}.")
+            log.warn(
+                f"Could not choose an article while publishing to fb page, site: {self.name}."
+            )
             return
         url = self.article_url(art, topic)
-        self._fb_graph.post(self._feed_path,
-                            link=url,
-                            caption=art["title"],)
+        self._fb_graph.post(
+            self._feed_path,
+            link=url,
+            caption=art["title"],
+        )
 
     def _init_reddit(self):
         import base64
@@ -166,7 +178,9 @@ class Site:
             consumer_key, consumer_secret, access_key, access_secret
         )
         self.has_twitter = True
-        self.twitter_url = "https://twitter.com/" + self._config.get("twitter_handle", "")
+        self.twitter_url = "https://twitter.com/" + self._config.get(
+            "twitter_handle", ""
+        )
 
     def tweet(self):
         topic, a = self.choose_article()
@@ -443,6 +457,16 @@ class Site:
             self.load_topics(force=True)
             time.sleep(self.topics_sync_freq)
 
+    def is_img_new(self, img: str):
+        return img in self.img_bloom
+
+    def get_new_img(self, kw: str):
+        if "get_images" not in globals():
+            from .sources import get_images
+        images = get_images(kw)
+        for img in images:
+            if img.url not in self.img_bloom:
+                return img
 
 # def init_topic(topic: str):
 #     tg = topic_group(topic)

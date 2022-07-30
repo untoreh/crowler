@@ -1,19 +1,16 @@
 # APT dependencies: libcurl4-openssl-dev
+# installed from pip cli
+# wheel, requests pyyaml, bs4, six
 # parsing
-wheel
-pyyaml
-beautifulsoup4
-git+https://github.com/html5lib/html5lib-python@master  # for python3.10 use latest
 html-parser
-# lxml
+lxml
 feedparser
 feedfinder2
-# lassie
+lassie
 spacy
 alt-profanity-check
 clean-text
 deep_translator
-git+https://github.com/nidhaloff/deep-translator@master
 textblob
 
 # requests
@@ -23,12 +20,11 @@ pysocks
 retry
 user_agent
 zict
-# proxy-checker
-git+https://github.com/orehunt/proxybroker2@master
 
 # data
 google-ads
 zarr
+bloom_filter2
 # ALPINE distro packages
 # py3-numpy
 # py3-curl
@@ -43,7 +39,6 @@ langcodes
 trafilatura # for python 3.10 install `python-tzlocal` from distro packages
 goose3
 pytrends
-git+https://github.com/searx/searx
 lingua-language-detector
 
 # tags
@@ -58,8 +53,6 @@ praw
 python-twitter
 facepy
 
-# config
-git+https://github.com/untoreh/colors.py
 tomli
 # not needed...
 # textacy

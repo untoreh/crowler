@@ -5,7 +5,8 @@ import
     std/xmlparser,
     lists,
     strformat,
-    chronos
+    chronos,
+    chronos/asyncsync
 
 import
     cfg,
@@ -23,6 +24,7 @@ template `attrs=`(node: XmlNode, code: untyped) =
 
 var feed* {.threadvar.}: Feed
 threadVars((rss, chann, channTitle, channLink, channDesc, XmlNode))
+var feedLock: ptr AsyncLock
 
 var feedLinkEl {.threadvar.}: VNode
 var topicFeeds* {.threadvar.}: LockLruCache[string, Feed]
@@ -30,31 +32,33 @@ var topicFeeds* {.threadvar.}: LockLruCache[string, Feed]
 proc newFeed(): Feed = newElement("xml")
 
 proc initFeed*() {.gcsafe.} =
-    topicFeeds = initLockLruCache[string, Feed](RSS_N_CACHE)
-    initCache()
-    feed = newFeed()
+  feedLock = create(AsyncLock)
+  feedLock[] = newAsyncLock()
+  topicFeeds = initLockLruCache[string, Feed](RSS_N_CACHE)
+  initCache()
+  feed = newFeed()
 
-    rss = newElement("rss")
-    rss.attrs = {"version": "2.0"}
-    feed.add rss
+  rss = newElement("rss")
+  rss.attrs = {"version": "2.0"}
+  feed.add rss
 
-    chann = newElement("channel")
-    rss.add chann
+  chann = newElement("channel")
+  rss.add chann
 
-    channTitle = newElement("title")
-    channTitle.add newText("")
-    chann.add channTitle
+  channTitle = newElement("title")
+  channTitle.add newText("")
+  chann.add channTitle
 
-    channLink = newElement("link")
-    channLink.add newText("")
-    chann.add channLink
+  channLink = newElement("link")
+  channLink.add newText("")
+  chann.add channLink
 
-    channDesc = newElement("description")
-    channDesc.add newText("")
-    chann.add channDesc
+  channDesc = newElement("description")
+  channDesc.add newText("")
+  chann.add channDesc
 
-    feedLinkEl = newVNode(VNodeKind.link)
-    feedLinkEl.setAttr("rel", "alternate")
+  feedLinkEl = newVNode(VNodeKind.link)
+  feedLinkEl.setAttr("rel", "alternate")
 
 proc drainChannel(chann: XmlNode): seq[XmlNode] {.sideEffect.} =
     var n = 0
@@ -88,13 +92,13 @@ proc articleItem(ar: Article): XmlNode =
     return item
 
 proc getTopicFeed*(topic: string, title: string, description: string, arts: seq[Article]): Feed =
-    chann.clearChannel()
-    channTitle[0].text = title.escape
-    channLink[0].text = ($(WEBSITE_URL / topic)).escape
-    channDesc[0].text = description.escape
-    for ar in arts:
-        chann.add articleItem(ar)
-    deepCopy(feed)
+  chann.clearChannel()
+  channTitle[0].text = title.escape
+  channLink[0].text = ($(WEBSITE_URL / topic)).escape
+  channDesc[0].text = description.escape
+  for ar in arts:
+      chann.add articleItem(ar)
+  deepCopy(feed)
 
 proc feedLink*(title, path: string): VNode {.gcsafe.} =
     feedLinkEl.setAttr("title", title)
@@ -135,18 +139,21 @@ template updateFeed*(a: Article) =
         feed.update(a.topic, @[a])
 
 proc fetchFeedString*(topic: string): Future[string] {.async.} =
-    return pageCache[].lgetOrPut(topic.feedKey):
-        let
-            topPage = await topic.lastPageNum
-            prevPage = max(0, topPage - 1)
-        var
-            arts = await getDoneArticles(topic, prevPage)
-            tfeed = getTopicFeed(topic, topic, (await topicDesc(topic)), arts)
-        if topPage > prevPage:
-            arts = await getLastArticles(topic)
-            tfeed.update(topic, arts, dowrite = false)
-        topicFeeds[topic] = tfeed
-        tfeed.toXmlString
+  return pageCache[].lgetOrPut(topic.feedKey):
+    await feedLock[].acquire
+    defer: feedLock[].release
+    let
+        topPage = await topic.lastPageNum
+        prevPage = max(0, topPage - 1)
+    var
+        arts = await getDoneArticles(topic, prevPage)
+        tfeed = getTopicFeed(topic, topic, (await topicDesc(topic)), arts)
+    if topPage > prevPage:
+        arts = await getLastArticles(topic)
+        tfeed.update(topic, arts, dowrite = false)
+    topicFeeds[topic] = tfeed
+    tfeed.toXmlString
+
 
 proc fetchFeed*(topic: string): Future[Feed] {.async.} =
     try:
@@ -159,29 +166,31 @@ proc fetchFeed*(topic: string): Future[Feed] {.async.} =
             result = topicFeeds.put(topic, parseXml(feedStr))
 
 proc fetchFeedString*(): Future[string] {.async.} =
-    return pageCache[].lgetOrPut(static(WEBSITE_TITLE.feedKey)):
-        var arts: seq[Article]
-        let pytopics = await loadTopics(cfg.MENU_TOPICS)
-        var topicName: string
-        for topic in pytopics:
-            withPyLock:
-                topicName = topic[0].to(string) ## topic holds topic name and description
-            let ta = await getLastArticles(topicName)
-            if ta.len > 0:
-                arts.add ta[^1]
-        let sfeed = getTopicFeed("", WEBSITE_TITLE, WEBSITE_DESCRIPTION, arts)
-        topicFeeds[WEBSITE_TITLE] = sfeed
-        sfeed.toXmlString
+  return pageCache[].lgetOrPut(static(WEBSITE_TITLE.feedKey)):
+    var arts: seq[Article]
+    let pytopics = await loadTopics(cfg.MENU_TOPICS)
+    var topicName: string
+    for topic in pytopics:
+      withPyLock:
+        topicName = topic[0].to(string) ## topic holds topic name and description
+      let ta = await getLastArticles(topicName)
+      if ta.len > 0:
+        arts.add ta[^1]
+    await feedLock[].acquire
+    defer: feedLock[].release
+    let sfeed = getTopicFeed("", WEBSITE_TITLE, WEBSITE_DESCRIPTION, arts)
+    topicFeeds[WEBSITE_TITLE] = sfeed
+    sfeed.toXmlString
 
 proc fetchFeed*(): Future[Feed] {.async.} =
-    try:
-        result = topicFeeds[WEBSITE_TITLE]
-    except:
-        let feedStr = await fetchFeedString()
-        result = try:
-            topicFeeds[WEBSITE_TITLE]
-        except KeyError:
-            topicFeeds.put(WEBSITE_TITLE, parseXml(feedStr))
+  try:
+    result = topicFeeds[WEBSITE_TITLE]
+  except:
+    let feedStr = await fetchFeedString()
+    result = try:
+      topicFeeds[WEBSITE_TITLE]
+    except KeyError:
+      topicFeeds.put(WEBSITE_TITLE, parseXml(feedStr))
 
 
 initFeed()

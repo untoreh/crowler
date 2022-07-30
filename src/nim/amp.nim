@@ -12,7 +12,8 @@ import tables,
        uri,
        lrucache,
        chronos,
-       chronos/apps/http/httpclient
+       chronos/apps/http/httpclient,
+       chronos/asyncsync
 
 import cfg,
        utils,
@@ -37,6 +38,7 @@ threadVars(
     (ampLinkEl, VNode)
 )
 
+var ampLock: ptr AsyncLock
 const skipFiles = ["bundle.css"]
 
 proc asLocalUrl(path: string): string {.inline.} =
@@ -217,82 +219,87 @@ proc pre(pattern: static string): Regex {.gcsafe.} =
     res
 
 proc ampPage*(tree: VNode): Future[VNode] {.gcsafe, async.} =
-    let
-        inBody = tree.find(VNodeKind.body).deepcopy
-        inHead = tree.find(VNodeKind.head).deepcopy
-    let (outHtml, outHead, outBody) = ampTemplate()
-    outHtml.setAttr("amp", "")
-    for (a, v) in tree.find(html).attrs:
-        outHtml.setattr(a, v)
+  ## Amp processing uses global vars and requires lock.
+  await ampLock[].acquire()
+  defer: ampLock[].release()
+  let
+      inBody = tree.find(VNodeKind.body).deepcopy
+      inHead = tree.find(VNodeKind.head).deepcopy
+  let (outHtml, outHead, outBody) = ampTemplate()
+  outHtml.setAttr("amp", "")
+  for (a, v) in tree.find(html).attrs:
+      outHtml.setattr(a, v)
 
-    styleScript.setLen 0
-    styleStr = ""
+  styleScript.setLen 0
+  styleStr = ""
 
-    await processHead(inHead, outHead)
-    await processBody(inBody, outBody, outHead)
+  await processHead(inHead, outHead)
+  await processBody(inBody, outBody, outHead)
 
-    # add remaining styles to head
-    styleStr.add styleScript
-        .join("\n")
-        # NOTE: the replacement should be ordered from most frequent to rarest
-        # # remove troublesome animations
-        .replace(pre"""\s*?@(\-[a-zA-Z]+-)?keyframes\s+?.+?{\s*?.+?({.+?})+?\s*?}""", "")
-        # # remove !important hints
-        .replace(pre"""!important""", "")
-        # remove charset since not allowed
-        .replace(pre"""@charset\s+\"utf-8\"\s*;?/i""", "")
+  # add remaining styles to head
+  styleStr.add styleScript
+      .join("\n")
+      # NOTE: the replacement should be ordered from most frequent to rarest
+      # # remove troublesome animations
+      .replace(pre"""\s*?@(\-[a-zA-Z]+-)?keyframes\s+?.+?{\s*?.+?({.+?})+?\s*?}""", "")
+      # # remove !important hints
+      .replace(pre"""!important""", "")
+      # remove charset since not allowed
+      .replace(pre"""@charset\s+\"utf-8\"\s*;?/i""", "")
 
-    if styleStr.len > 75000:
-        raise newException(ValueError, "Style size above limit for amp pages.")
+  if styleStr.len > 75000:
+      raise newException(ValueError, "Style size above limit for amp pages.")
 
-    styleScript.setLen 0
-    styleElCustom.delete(0)
-    styleElCustom.add verbatim(styleStr)
-    return ampDoc
+  styleScript.setLen 0
+  styleElCustom.delete(0)
+  styleElCustom.add verbatim(styleStr)
+  return ampDoc
 
 proc ampDir(target: string) {.error: "not implemented".} =
-    if not dirExists(target):
-        raise newException(OSError, fmt"Supplied target directory {target} does not exists.")
+  if not dirExists(target):
+      raise newException(OSError, fmt"Supplied target directory {target} does not exists.")
 
 
 proc initAmp*() =
-    vbtmcache = newLruCache[array[5, byte], XmlNode](32)
-    rootDir = SITE_PATH
+  ampLock = create(AsyncLock)
+  ampLock[] = newAsyncLock()
+  vbtmcache = newLruCache[array[5, byte], XmlNode](32)
+  rootDir = SITE_PATH
 
-    ampDoc = newVNode(VNodeKind.html)
-    ampHead = newVNode(VNodeKind.head)
-    ampBody = newVNode(VNodeKind.body)
-    styleEl1 = newVNode(VNodeKind.style)
-    styleEl2 = newVNode(VNodeKind.style)
-    styleEl2Wrapper = newVNode(VNodeKind.noscript)
-    ampjs = newVNode(script)
-    charset = newVNode(meta)
-    viewport = newVNode(meta)
-    styleElCustom = newVNode(VNodeKind.style)
+  ampDoc = newVNode(VNodeKind.html)
+  ampHead = newVNode(VNodeKind.head)
+  ampBody = newVNode(VNodeKind.body)
+  styleEl1 = newVNode(VNodeKind.style)
+  styleEl2 = newVNode(VNodeKind.style)
+  styleEl2Wrapper = newVNode(VNodeKind.noscript)
+  ampjs = newVNode(script)
+  charset = newVNode(meta)
+  viewport = newVNode(meta)
+  styleElCustom = newVNode(VNodeKind.style)
 
-    filesCache = initTable[string, string]()
-    styleScript = newSeq[string]()
+  filesCache = initTable[string, string]()
+  styleScript = newSeq[string]()
 
-    ampLinkEl = newVNode(VNodeKind.link)
-    ampLinkEl.setAttr("rel", "amphtml")
+  ampLinkEl = newVNode(VNodeKind.link)
+  ampLinkEl.setAttr("rel", "amphtml")
 
-    ampjs.setAttr("async", "")
-    ampjs.setAttr("src", "https://cdn.ampproject.org/v0.js")
-    charset.setAttr("charset", "utf-8")
-    viewport.setAttr("name", "viewport")
-    viewport.setAttr("content", "width=device-width,minimum-scale=1,initial-scale=1")
+  ampjs.setAttr("async", "")
+  ampjs.setAttr("src", "https://cdn.ampproject.org/v0.js")
+  charset.setAttr("charset", "utf-8")
+  viewport.setAttr("name", "viewport")
+  viewport.setAttr("content", "width=device-width,minimum-scale=1,initial-scale=1")
 
-    styleEl1.setAttr("amp-boilerplate", "")
-    styleEl1.add newVNode(VNodeKind.text)
-    styleEl1[0].text = "body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}"
-    styleEl2.setAttr("amp-boilerplate", "")
-    styleEl2.add newVNode(VNodeKind.text)
-    styleEl2[0].text = "body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}"
+  styleEl1.setAttr("amp-boilerplate", "")
+  styleEl1.add newVNode(VNodeKind.text)
+  styleEl1[0].text = "body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}"
+  styleEl2.setAttr("amp-boilerplate", "")
+  styleEl2.add newVNode(VNodeKind.text)
+  styleEl2[0].text = "body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}"
 
-    styleEl2Wrapper.add styleEl2
-    styleElCustom.setAttr("amp-custom", "")
-    styleElCustom.setAttr("type", "text/css")
-    styleElCustom.add newVNode(VNodeKind.text)
+  styleEl2Wrapper.add styleEl2
+  styleElCustom.setAttr("amp-custom", "")
+  styleElCustom.setAttr("type", "text/css")
+  styleElCustom.add newVNode(VNodeKind.text)
 
 initAmp()
 

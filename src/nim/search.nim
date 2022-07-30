@@ -205,7 +205,7 @@ proc pushAllSonic*(clear=true) {.async.} =
 
 when isMainModule:
     initSonic()
-    pushAllSonic()
+    # pushAllSonic()
 
     echo waitFor query("mini", "crossword")
     # push(relpath)

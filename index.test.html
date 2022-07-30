@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en" prefix="">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- <link rel="preconnect" href="https://fonts.googleapis.com" />
+         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+         <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons" />
+         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+Display:ital,wght@0,100;0,300;0,700;1,100;1,300&amp;family=Noto+Serif:ital,wght@0,400;0,700;1,400&amp;family=Petrona:ital,wght@0,400;0,800;1,100;1,400&amp;display=swap" /> -->
+  <style type="text/css" src="src/css/app.scss"></style>
+  <link rel="icon" href=
+  "http://wsl:5050/assets/logo/dev/logo-icon.png" type=
+  "image/x-icon">
+  <link rel="icon" href=
+  "http://wsl:5050/assets/logo/dev/logo-icon.svg" type=
+  "image/svg+xml">
+  <style>
+  .app-bar-logo, .logo-light-wrap {display: none;}
+  </style>
+</head>
+<body topic="" style="white-space: pre-line;">
+
+  <header id="app-bar" class="mdc-top-app-bar menu">
+    <div class="mdc-top-app-bar__row">
+      <section class=
+      "mdc-top-app-bar__section mdc-top-app-bar__section--align-start">
+        <button class=
+        "material-icons mdc-top-app-bar__action-item mdc-icon-button menu-btn"
+        aria-label="open menu" title="Menu Drawer"></button>
+        <div class="mdc-icon-button__ripple">
+          <button class=
+          "material-icons mdc-top-app-bar__action-item mdc-icon-button menu-btn"
+          aria-label="open menu" title="Menu Drawer"></button>
+        </div><button class=
+        "material-icons mdc-top-app-bar__action-item mdc-icon-button menu-btn"
+        aria-label="open menu" title="Menu Drawer">menu</button>
+        <a class="left app-bar-logo mdc-icon-button" href=
+        "http://wsl:5050" aria-label="Website Logo">
+        <div class="mdc-icon-button__ripple"></div><span class=
+        "logo-dark-wrap"><img src=
+        "http://wsl:5050/assets/logo/dev/logo-dark.svg"></span>
+        <span class="logo-light-wrap"><img src=
+        "http://wsl:5050/assets/logo/dev/logo.svg"></span></a>
+        <button class=
+        "material-icons mdc-top-app-bar__action-item mdc-icon-button dk-toggle"
+        aria-label="toggle dark theme" title=
+        "Switch website color between dark and light theme."></button>
+        <div class="mdc-icon-button__ripple">
+          <button class=
+          "material-icons mdc-top-app-bar__action-item mdc-icon-button dk-toggle"
+          aria-label="toggle dark theme" title=
+          "Switch website color between dark and light theme."></button>
+        </div><button class=
+        "material-icons mdc-top-app-bar__action-item mdc-icon-button dk-toggle"
+        aria-label="toggle dark theme" title=
+        "Switch website color between dark and light theme."><div class="i-mdi-brightness-4"></div></button>
+        <a class="page mdc-ripple-button mdc-top-app-bar__title"
+        title="/ " href="http://wsl:5050/">
+        <div class="mdc-ripple-surface"></div>/</a>
+        <ul class="app-bar-topics">
+          <li class="topic-item mdc-icon-button">
+            <div class="mdc-icon-button__ripple"></div><a href=
+            "http://wsl:5050/dvd-video-rentals" title=
+            "DVD &amp; Video Rentals">DVD & Video Rentals</a>
+            <span class="separator"></span>
+          </li>
+          <li class="topic-item mdc-icon-button">
+            <div class="mdc-icon-button__ripple"></div><a href=
+            "http://wsl:5050/mini" title="Mini">Mini</a>
+            <span class="separator"></span>
+          </li>
+          <li class="topic-item mdc-icon-button">
+            <div class="mdc-icon-button__ripple"></div><a href=
+            "http://wsl:5050/desktop-computers" title=
+            "Desktop Computers">Desktop Computers</a> <span class=
+            "separator"></span>
+          </li>
+          <li class="topic-item mdc-icon-button">
+            <div class="mdc-icon-button__ripple"></div><a href=
+            "http://wsl:5050/christmas" title=
+            "Christmas">Christmas</a> <span class=
+            "separator"></span>
+          </li>
+          <li class="topic-item mdc-icon-button">
+            <div class="mdc-icon-button__ripple"></div><a href=
+            "http://wsl:5050/rugs-carpets" title=
+            "Rugs &amp; Carpets">Rugs & Carpets</a> <span class=
+            "separator"></span>
+          </li>
+        </ul>
+      </section>
+      <section class=
+      "mdc-top-app-bar__section mdc-top-app-bar__section--align-end"
+      role="toolbar">
+        <form class="search" method="get" action="/s/">
+          <label class="search-field" for="search-input"></label>
+          <input id="search-input" class="search-input"
+          autocomplete="off" type="text" name="q" placeholder=
+          "Search...">
+          <ul class="search-suggest" style="display: none;">
+          </ul><button class=
+          "material-icons mdc-top-app-bar__action-item mdc-icon-button clear-search-btn"
+          aria-label="Clear Search" title=
+          "Clear search input."></button>
+          <div class="mdc-icon-button__ripple">
+            <button class=
+            "material-icons mdc-top-app-bar__action-item mdc-icon-button clear-search-btn"
+            aria-label="Clear Search" title=
+            "Clear search input."></button>
+          </div><button class=
+          "material-icons mdc-top-app-bar__action-item mdc-icon-button clear-search-btn"
+          aria-label="Clear Search" title=
+                              "Clear search input."><div class=i-mdi-clear></div></button> <button class=
+          "material-icons mdc-top-app-bar__action-item mdc-icon-button search-btn"
+          aria-label="Search" title=
+          "Search across the website."></button>
+          <div class="mdc-icon-button__ripple">
+            <button class=
+            "material-icons mdc-top-app-bar__action-item mdc-icon-button search-btn"
+            aria-label="Search" title=
+            "Search across the website."></button>
+          </div><button class=
+          "material-icons mdc-top-app-bar__action-item mdc-icon-button search-btn"
+          aria-label="Search" title=
+                              "Search across the website."><div class="i-mdi-search"></div></button>
+        </form>
+        <div class="menu-lang-btn" title=
+        "Change website's language">
+          <button class=
+          "material-icons mdc-top-app-bar__action-item mdc-icon-button translate"
+          aria-label="Languages" title=
+          "Change the language of the website."></button>
+          <div class="mdc-icon-button__ripple">
+            <button class=
+            "material-icons mdc-top-app-bar__action-item mdc-icon-button translate"
+            aria-label="Languages" title=
+            "Change the language of the website."></button>
+          </div><button class=
+          "material-icons mdc-top-app-bar__action-item mdc-icon-button translate"
+          aria-label="Languages" title=
+                              "Change the language of the website."><div class="i-mdi-translate"></div></button>
+          <div class="langs-dropdown-content langs-dropdown-menu">
+            <button class=
+            "material-icons mdc-top-app-bar__action-item mdc-icon-button translate"
+            aria-label="Languages" title=
+            "Change the language of the website."></button>
+            <ul class="lang-list">
+              <a class="lang-link lang-ar" href="/ar/"><span class=
+              "flag flag-sa"></span>Arabic</a><a class=
+              "lang-link lang-bn" href="/bn/"><span class=
+              "flag flag-bd"></span>Bengali</a><a class=
+              "lang-link lang-nl" href="/nl/"><span class=
+              "flag flag-nl"></span>Dutch</a><a class=
+              "lang-link lang-tl" href="/tl/"><span class=
+              "flag flag-ph"></span>Filipino</a><a class=
+              "lang-link lang-fr" href="/fr/"><span class=
+              "flag flag-fr"></span>French</a><a class=
+              "lang-link lang-de" href="/de/"><span class=
+              "flag flag-de"></span>German</a><a class=
+              "lang-link lang-el" href="/el/"><span class=
+              "flag flag-gr"></span>Greek</a><a class=
+              "lang-link lang-hi" href="/hi/"><span class=
+              "flag flag-in"></span>Hindi</a><a class=
+              "lang-link lang-it" href="/it/"><span class=
+              "flag flag-it"></span>Italian</a><a class=
+              "lang-link lang-ja" href="/ja/"><span class=
+              "flag flag-jp"></span>Japanese</a><a class=
+              "lang-link lang-jw" href="/jw/"><span class=
+              "flag flag-id"></span>Javanese</a><a class=
+              "lang-link lang-ko" href="/ko/"><span class=
+              "flag flag-kr"></span>Korean</a><a class=
+              "lang-link lang-ms" href="/ms/"><span class=
+              "flag flag-ms"></span>Malay</a><a class=
+              "lang-link lang-zh-CN" href="/zh-CN/"><span class=
+              "flag flag-cn"></span>Mandarin Chinese</a><a class=
+              "lang-link lang-pl" href="/pl/"><span class=
+              "flag flag-pl"></span>Polish</a><a class=
+              "lang-link lang-pt" href="/pt/"><span class=
+              "flag flag-pt"></span>Portuguese</a><a class=
+              "lang-link lang-pa" href="/pa/"><span class=
+              "flag flag-in"></span>Punjabi</a><a class=
+              "lang-link lang-ro" href="/ro/"><span class=
+              "flag flag-ro"></span>Romanian</a><a class=
+              "lang-link lang-ru" href="/ru/"><span class=
+              "flag flag-ru"></span>Russian</a><a class=
+              "lang-link lang-es" href="/es/"><span class=
+              "flag flag-es"></span>Spanish</a><a class=
+              "lang-link lang-sv" href="/sv/"><span class=
+              "flag flag-se"></span>Swedish</a><a class=
+              "lang-link lang-th" href="/th/"><span class=
+              "flag flag-th"></span>Thai</a><a class=
+              "lang-link lang-tr" href="/tr/"><span class=
+              "flag flag-tr"></span>Turkish</a><a class=
+              "lang-link lang-uk" href="/uk/"><span class=
+              "flag flag-ua"></span>Ukranian</a><a class=
+              "lang-link lang-ur" href="/ur/"><span class=
+              "flag flag-pk"></span>Urdu</a><a class=
+              "lang-link lang-vi" href="/vi/"><span class=
+              "flag flag-vn"></span>Vietnamese</a><a class=
+              "lang-link lang-zu" href="/zu/"><span class=
+              "flag flag-za"></span>Zulu</a>
+            </ul>
+          </div>
+        </div><a class="right app-bar-logo mdc-icon-button" href=
+        "http://wsl:5050" aria-label="Website Logo">
+        <div class="mdc-icon-button__ripple"></div><span class=
+        "logo-dark-wrap"><img src=
+        "http://wsl:5050/assets/logo/dev/logo-dark.svg"></span>
+        <span class="logo-light-wrap"><img src=
+        "http://wsl:5050/assets/logo/dev/logo.svg"></span></a>
+      </section>
+    </div>
+  </header>
+  <section class="menu-list mdc-top-app-bar--fixed-adjust">
+    <button class=
+    "material-icons mdc-top-app-bar__action-item mdc-icon-button dk-toggle"
+    aria-label="toggle dark theme" title=
+    "Switch website color between dark and light theme."></button>
+    <div class="mdc-icon-button__ripple">
+      <button class=
+      "material-icons mdc-top-app-bar__action-item mdc-icon-button dk-toggle"
+      aria-label="toggle dark theme" title=
+      "Switch website color between dark and light theme."></button>
+    </div><button class=
+    "material-icons mdc-top-app-bar__action-item mdc-icon-button dk-toggle"
+    aria-label="toggle dark theme" title=
+                        "Switch website color between dark and light theme."><div class="i-mdi-brightness-4"></div></button>
+    <div class="menu-lang-btn" title="Change website's language">
+      <button class=
+      "material-icons mdc-top-app-bar__action-item mdc-icon-button translate"
+      aria-label="Languages" title=
+      "Change the language of the website."></button>
+      <div class="mdc-icon-button__ripple">
+        <button class=
+        "material-icons mdc-top-app-bar__action-item mdc-icon-button translate"
+        aria-label="Languages" title=
+        "Change the language of the website."></button>
+      </div><button class=
+      "material-icons mdc-top-app-bar__action-item mdc-icon-button translate"
+      aria-label="Languages" title=
+      "Change the language of the website."><div class="i-mdi-translate"></div></button>
+      <div class="langs-dropdown-content langs-dropdown-menu">
+        <button class=
+        "material-icons mdc-top-app-bar__action-item mdc-icon-button translate"
+        aria-label="Languages" title=
+        "Change the language of the website."></button>
+        <ul class="lang-list">
+          <a class="lang-link lang-ar" href="/ar/"><span class=
+          "flag flag-sa"></span>Arabic</a><a class=
+          "lang-link lang-bn" href="/bn/"><span class=
+          "flag flag-bd"></span>Bengali</a><a class=
+          "lang-link lang-nl" href="/nl/"><span class=
+          "flag flag-nl"></span>Dutch</a><a class=
+          "lang-link lang-tl" href="/tl/"><span class=
+          "flag flag-ph"></span>Filipino</a><a class=
+          "lang-link lang-fr" href="/fr/"><span class=
+          "flag flag-fr"></span>French</a><a class=
+          "lang-link lang-de" href="/de/"><span class=
+          "flag flag-de"></span>German</a><a class=
+          "lang-link lang-el" href="/el/"><span class=
+          "flag flag-gr"></span>Greek</a><a class=
+          "lang-link lang-hi" href="/hi/"><span class=
+          "flag flag-in"></span>Hindi</a><a class=
+          "lang-link lang-it" href="/it/"><span class=
+          "flag flag-it"></span>Italian</a><a class=
+          "lang-link lang-ja" href="/ja/"><span class=
+          "flag flag-jp"></span>Japanese</a><a class=
+          "lang-link lang-jw" href="/jw/"><span class=
+          "flag flag-id"></span>Javanese</a><a class=
+          "lang-link lang-ko" href="/ko/"><span class=
+          "flag flag-kr"></span>Korean</a><a class=
+          "lang-link lang-ms" href="/ms/"><span class=
+          "flag flag-ms"></span>Malay</a><a class=
+          "lang-link lang-zh-CN" href="/zh-CN/"><span class=
+          "flag flag-cn"></span>Mandarin Chinese</a><a class=
+          "lang-link lang-pl" href="/pl/"><span class=
+          "flag flag-pl"></span>Polish</a><a class=
+          "lang-link lang-pt" href="/pt/"><span class=
+          "flag flag-pt"></span>Portuguese</a><a class=
+          "lang-link lang-pa" href="/pa/"><span class=
+          "flag flag-in"></span>Punjabi</a><a class=
+          "lang-link lang-ro" href="/ro/"><span class=
+          "flag flag-ro"></span>Romanian</a><a class=
+          "lang-link lang-ru" href="/ru/"><span class=
+          "flag flag-ru"></span>Russian</a><a class=
+          "lang-link lang-es" href="/es/"><span class=
+          "flag flag-es"></span>Spanish</a><a class=
+          "lang-link lang-sv" href="/sv/"><span class=
+          "flag flag-se"></span>Swedish</a><a class=
+          "lang-link lang-th" href="/th/"><span class=
+          "flag flag-th"></span>Thai</a><a class=
+          "lang-link lang-tr" href="/tr/"><span class=
+          "flag flag-tr"></span>Turkish</a><a class=
+          "lang-link lang-uk" href="/uk/"><span class=
+          "flag flag-ua"></span>Ukranian</a><a class=
+          "lang-link lang-ur" href="/ur/"><span class=
+          "flag flag-pk"></span>Urdu</a><a class=
+          "lang-link lang-vi" href="/vi/"><span class=
+          "flag flag-vn"></span>Vietnamese</a><a class=
+          "lang-link lang-zu" href="/zu/"><span class=
+          "flag flag-za"></span>Zulu</a>
+        </ul>
+      </div>
+    </div>
+    <ul class="menu-list-topics">
+      <li class="menu-topic-item mdc-icon-button">
+        <div class="mdc-icon-button__ripple"></div><a href=
+        "http://wsl:5050/dvd-video-rentals" title=
+        "DVD &amp; Video Rentals">D</a><br>
+      </li>
+      <li class="menu-topic-item mdc-icon-button">
+        <div class="mdc-icon-button__ripple"></div><a href=
+        "http://wsl:5050/mini" title="Mini">M</a><br>
+      </li>
+      <li class="menu-topic-item mdc-icon-button">
+        <div class="mdc-icon-button__ripple"></div><a href=
+        "http://wsl:5050/desktop-computers" title=
+        "Desktop Computers">D</a><br>
+      </li>
+      <li class="menu-topic-item mdc-icon-button">
+        <div class="mdc-icon-button__ripple"></div><a href=
+        "http://wsl:5050/christmas" title="Christmas">C</a><br>
+      </li>
+      <li class="menu-topic-item mdc-icon-button">
+        <div class="mdc-icon-button__ripple"></div><a href=
+        "http://wsl:5050/rugs-carpets" title=
+        "Rugs &amp; Carpets">R</a><br>
+      </li>
+    </ul>
+  </section>
+  <main class="mdc-top-app-bar--fixed-adjust">
+    <article class="post-wrapper">
+      <pre class="post-content" style=
+      "white-space: break-spaces;"></pre>
+      <article class="entry">
+        <h2 id=
+        "rgaminglaptops-im-looking-for-a-new-gaming-pc-for-minecraft-and-other-things-does-anyone-have-an-acer-aspire-5-140-or-can-vouch-that-its-a-good-buy-for-under-500-im-pretty-inexperienced-when-it-comes-to-computers-so-any-advice-is-appreciated"
+        class="entry-title"><a href=
+        "/desktop-computers/0/rgaminglaptops-im-looking-for-a-new-gaming-pc-for-minecraft-and-other-things-does-anyone-have-an-acer-aspire-5-140-or-can-vouch-that-its-a-good-buy-for-under-500-im-pretty-inexperienced-when-it-comes-to-computers-so-any-advice-is-appreciated">
+        r/GamingLaptops - I’m looking for a new gaming pc for
+        Minecraft and other things, does anyone have an Acer Aspire
+        5, 14.0 or can vouch that it’s a good buy for under $500?
+        I’m pretty inexperienced when it comes to computers, so any
+        advice is appreciated!</a></h2>
+        <div class="entry-info">
+          <span class="entry-author">Reddit,</span> <time class=
+          "entry-date" datetime=
+          "2022-06-15T02:00:00+02:00"><i>15/Jun</i></time>
+        </div>
+        <div class="entry-tags">
+          <span class="entry-tag-name"><a href=
+          "//lephaush.net/4/5251771" target=
+          "_blank"><span><i class="material-icons">tag</i></span>community
+          gaming laptops</a></span> <span class=
+          "entry-tag-name"><a href="//lephaush.net/4/5251771"
+          target="_blank"><span><i class=
+          "material-icons">tag</i></span>first sightthe real
+          housewives</a></span> <span class=
+          "entry-tag-name"><a href="//lephaush.net/4/5251771"
+          target="_blank"><span><i class=
+          "material-icons">tag</i></span>lb lifelast week
+          tonight</a></span>
+        </div>
+<a class="image-link" href=
+        "https://www.reddit.com/r/GamingLaptops/comments/v9g8i5/im_looking_for_a_new_gaming_pc_for_minecraft_and/"
+        target="_blank" alt="post image source"><img class=
+        "material-icons" src=
+        "wsl:5050/i/305x305/?%28%B5%2F%FD+G9%02%00https%3A%2F%2Fwww.redditstatic.com%2Fdesktop2x%2Fimg%2Ffavicon%2Fandroid-icon-192x192.png"
+        srcset=
+        "//wsl:5050/i/122x122/?%28%B5%2F%FD+G9%02%00https%3A%2F%2Fwww.redditstatic.com%2Fdesktop2x%2Fimg%2Ffavicon%2Fandroid-icon-192x192.png 320w,//wsl:5050/i/305x305/?%28%B5%2F%FD+G9%02%00https%3A%2F%2Fwww.redditstatic.com%2Fdesktop2x%2Fimg%2Ffavicon%2Fandroid-icon-192x192.png 800w,//wsl:5050/i/733x733/?%28%B5%2F%FD+G9%02%00https%3A%2F%2Fwww.redditstatic.com%2Fdesktop2x%2Fimg%2Ffavicon%2Fandroid-icon-192x192.png 1920w,"
+                                                     alt="image" loading="lazy"></a>
+        <div class="entry-content">
+          FeedsHomePopularAll Explore ValheimGenshin
+          ImpactMinecraftPokimaneHalo InfiniteCall of Duty:
+          WarzonePath of ExileHollow Knight: SilksongEscape from
+          TarkovWatch Dogs: Legion NFLNBAMegan AndersonAtlanta
+          HawksLos Angeles LakersBoston CelticsArsenal
+          F.C.Philadelphia 76ersPremier LeagueUFC The Real Hou...
+          <a class="entry-more" href=
+          "/desktop-computers/0/rgaminglaptops-im-looking-for-a-new-gaming-pc-for-minecraft-and-other-things-does-anyone-have-an-acer-aspire-5-140-or-can-vouch-that-its-a-good-buy-for-under-500-im-pretty-inexperienced-when-it-comes-to-computers-so-any-advice-is-appreciated">
+          [continue]</a>
+        </div>
+        <hr>
+      </article>
+      <pre></pre>
+      <article class="entry">
+        <h2 id=
+        "the-santa-clause-tim-allen-high-resolution-stock-photography-and-images-alamy"
+        class="entry-title"><a href=
+        "/christmas/0/the-santa-clause-tim-allen-high-resolution-stock-photography-and-images-alamy">
+        The santa clause tim allen High Resolution Stock
+        Photography and Images - Alamy</a></h2>
+        <div class="entry-info">
+          <span class="entry-author">Alamy Limited,</span>
+          <time class="entry-date" datetime=
+          "2012-04-10T02:00:00+02:00"><i>10/Apr</i></time>
+        </div>
+        <div class="entry-tags">
+          <span class="entry-tag-name"><a href=
+          "//thaudray.com/4/5251772" target=
+          "_blank"><span><i class="material-icons">tag</i></span>none</a></span>
+        </div><a class="image-link" href="" target="_blank" alt=
+        "post image source"><img class="material-icons" src=""
+        srcset="" alt="image" loading="lazy"></a>
+        <div class="entry-content">
+          RMP1RHTF–Original Film Title: THE SANTA CLAUSE 3: THE
+          ESCAPE CLAUSE. English Title: THE SANTA CLAUSE 3: THE
+          ESCAPE CLAUSE. Film Director: MICHAEL LEMBECK. Year:
+          2006. Stars: TIM ALLEN. Credit: SANTA FROST
+          PRODUCTIONS/WALT DISNEY PICTURES/BOXING CAT FILM /
+          LEDERER, JOSEPH / Album RM2E70GHJ–Tim All... <a class=
+          "entry-more" href=
+          "/christmas/0/the-santa-clause-tim-allen-high-resolution-stock-photography-and-images-alamy">
+          [continue]</a>
+        </div>
+        <hr>
+      </article>
+      <pre></pre>
+      <article class="entry">
+        <h2 id="mini-crossword" class="entry-title"><a href=
+        "/mini/0/mini-crossword">Mini Crossword</a></h2>
+        <div class="entry-info">
+          <span class="entry-author">Los Angeles Times,</span>
+          <time class="entry-date" datetime=
+          "2020-03-31T02:00:00+02:00"><i>31/Mar</i></time>
+        </div>
+        <div class="entry-tags">
+          <span class="entry-tag-name"><a href=
+          "//lephaush.net/4/5251771" target=
+          "_blank"><span><i class="material-icons">tag</i></span>puzzle</a></span>
+          <span class="entry-tag-name"><a href=
+          "//lephaush.net/4/5251771" target=
+          "_blank"><span><i class="material-icons">tag</i></span>recently
+          published</a></span> <span class=
+          "entry-tag-name"><a href="//lephaush.net/4/5251771"
+          target="_blank"><span><i class=
+          "material-icons">tag</i></span>free mini crossword
+          puzzles</a></span>
+        </div><a class="image-link" href=
+        "https://www.latimes.com/games/mini-crossword" target=
+        "_blank" alt="post image source"><img class=
+        "material-icons" src=
+        "wsl:5050/i/305x305/?%28%B5%2F%FD%60%0F%00u%06%00%A2%0F0%1DP%074s0%CE%CE%020%B1R%98%19%40%10%D5%D4%9B%10%C8%DCjm%D4%09%8A%00T%08%D3Ik%0DOkY%89%92%A2%12%B9%C6%18JS%3D%F4lr%96%AA%04%FD%BCe0%A7%05S%F6-Y%9B%AC%D3Yt%CE%19-F%E8%A76%E8%87J%E8%27%1BDe9%C4%24%12%2B%13%E8%2Ax%B1%17%89%13%FA%81~%06%D6%C9%CC%FF%11%80%E0F%A0%93%D1%07%7F%91%D8%144%21-gH%C9U%D7%C3%CD%15%F7k%AA%90%0A%CEP%CA%F0%0A%F7f%16%3C%BB6%F8%9B%B9%F8s%17%CC%AD%C7%0A%A6%BCm%9B%AA%3E%D7%8F4%D1V%DA%2C%27%97v%B2LB%A1%F3%17%26%FFAp%B1%24rM%EE%A38%BB%012%F3%7F%04%03%00+%13%1E6%E3X2%83%06.jpeg"
+        srcset=
+        "//wsl:5050/i/122x122/?%28%B5%2F%FD%60%0F%00u%06%00%A2%0F0%1DP%074s0%CE%CE%020%B1R%98%19%40%10%D5%D4%9B%10%C8%DCjm%D4%09%8A%00T%08%D3Ik%0DOkY%89%92%A2%12%B9%C6%18JS%3D%F4lr%96%AA%04%FD%BCe0%A7%05S%F6-Y%9B%AC%D3Yt%CE%19-F%E8%A76%E8%87J%E8%27%1BDe9%C4%24%12%2B%13%E8%2Ax%B1%17%89%13%FA%81~%06%D6%C9%CC%FF%11%80%E0F%A0%93%D1%07%7F%91%D8%144%21-gH%C9U%D7%C3%CD%15%F7k%AA%90%0A%CEP%CA%F0%0A%F7f%16%3C%BB6%F8%9B%B9%F8s%17%CC%AD%C7%0A%A6%BCm%9B%AA%3E%D7%8F4%D1V%DA%2C%27%97v%B2LB%A1%F3%17%26%FFAp%B1%24rM%EE%A38%BB%012%F3%7F%04%03%00+%13%1E6%E3X2%83%06.jpeg 320w,//wsl:5050/i/305x305/?%28%B5%2F%FD%60%0F%00u%06%00%A2%0F0%1DP%074s0%CE%CE%020%B1R%98%19%40%10%D5%D4%9B%10%C8%DCjm%D4%09%8A%00T%08%D3Ik%0DOkY%89%92%A2%12%B9%C6%18JS%3D%F4lr%96%AA%04%FD%BCe0%A7%05S%F6-Y%9B%AC%D3Yt%CE%19-F%E8%A76%E8%87J%E8%27%1BDe9%C4%24%12%2B%13%E8%2Ax%B1%17%89%13%FA%81~%06%D6%C9%CC%FF%11%80%E0F%A0%93%D1%07%7F%91%D8%144%21-gH%C9U%D7%C3%CD%15%F7k%AA%90%0A%CEP%CA%F0%0A%F7f%16%3C%BB6%F8%9B%B9%F8s%17%CC%AD%C7%0A%A6%BCm%9B%AA%3E%D7%8F4%D1V%DA%2C%27%97v%B2LB%A1%F3%17%26%FFAp%B1%24rM%EE%A38%BB%012%F3%7F%04%03%00+%13%1E6%E3X2%83%06.jpeg 800w,//wsl:5050/i/733x733/?%28%B5%2F%FD%60%0F%00u%06%00%A2%0F0%1DP%074s0%CE%CE%020%B1R%98%19%40%10%D5%D4%9B%10%C8%DCjm%D4%09%8A%00T%08%D3Ik%0DOkY%89%92%A2%12%B9%C6%18JS%3D%F4lr%96%AA%04%FD%BCe0%A7%05S%F6-Y%9B%AC%D3Yt%CE%19-F%E8%A76%E8%87J%E8%27%1BDe9%C4%24%12%2B%13%E8%2Ax%B1%17%89%13%FA%81~%06%D6%C9%CC%FF%11%80%E0F%A0%93%D1%07%7F%91%D8%144%21-gH%C9U%D7%C3%CD%15%F7k%AA%90%0A%CEP%CA%F0%0A%F7f%16%3C%BB6%F8%9B%B9%F8s%17%CC%AD%C7%0A%A6%BCm%9B%AA%3E%D7%8F4%D1V%DA%2C%27%97v%B2LB%A1%F3%17%26%FFAp%B1%24rM%EE%A38%BB%012%F3%7F%04%03%00+%13%1E6%E3X2%83%06.jpeg 1920w,"
+        alt="image" loading="lazy"></a>
+        <div class="entry-content">
+          == Mini Crossword == Welcome to our free mini crossword
+          puzzles. Follow the clues and attempt to fill in all the
+          puzzle’s squares. Check back each day for a new puzzle or
+          explore ones we recently published. Welcome to our free
+          mini crossword puzzles. Follow the clues and attempt to
+          fill in all the... <a class="entry-more" href=
+          "/mini/0/mini-crossword">[continue]</a>
+        </div>
+        <hr>
+      </article>
+      <pre></pre>
+    </article>
+  </main>
+  <div class="site-footer container max border medium no-padding">
+    <footer class=
+    "padding absolute blue white-text primary left bottom">
+      <div class="footer-links">
+        <a class="sitemap" href="/sitemap.xml">Sitemap</a> -
+        <a class="rss" href="/feed.xml">RSS</a> - <a href=
+        "/dmca">DMCA</a> - <a href="/privacy-policy">Privacy
+        Policy</a> - <a href="/terms-of-service">Terms of
+        Service</a>
+      </div>
+      <meta content="661d51899e2c7cfa9a0d8b3ee4e613d3" name=
+      "propeller">
+      <div class="footer-copyright">
+        Except where otherwise noted, this website is licensed
+        under a <a rel="license" href=
+        "http://creativecommons.org/licenses/by/3.0/deed.en_US">Creative
+        Commons Attribution 3.0 Unported License.</a>
+      </div>
+      <script type="module" src="/src/js/app.js"></script>
+    </footer>
+  </div>
+</body>
+</html>

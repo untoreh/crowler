@@ -47,6 +47,16 @@ template lcheckOrPut*[T, K](c: T, k: K, v: untyped): untyped =
         c[k] = v
         c[k]
 
+template alcheckOrPut*[T, K](c: T, k: K, v: untyped): untyped =
+    ## Lazy async `mgetOrPut`
+    mixin get, contains, put, `[]`, `[]=`
+    let check = await (k in c)
+    if check:
+        c[k]
+    else:
+        await c[k] = v
+        c[k]
+
 template logstring(code: untyped): untyped =
     when not compileOption("threads"):
         fmt code
@@ -692,3 +702,4 @@ proc readFileAsync*(file: string): Future[string] {.async.} =
     data.setLen(handler.s.len.get())
     discard Async(handler).readInto(data)
     return data.toString
+

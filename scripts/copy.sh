@@ -4,7 +4,7 @@ trg=docker
 sites=$(echo "${1:-wsl}" | tr "," "\n")
 
 [ -e $trg/cli ] && rm -f $trg/cli
-cp requirements.txt $trg/
+cp requirements{,.git}.txt $trg/
 mkdir -p $trg/run
 cp -a scripts $trg/
 mkdir -p $trg/logs
@@ -41,6 +41,7 @@ libminify=src/rust/target/release/libminify_html_c.a
 mkdir -p "$trg/$(dirname $libminify)"
 cp -a $libminify "${trg}/${libminify}"
 cp -a lib/vendor/imageflow.dist/libimageflow.so $trg/lib
-cp -a nim.cfg $trg/nim.debug.cfg
-cp -a nim.release.cfg $trg/nim.cfg
+cp -a nim.cfg $trg/nim.cfg.debug
+cp -a nim.cfg.release $trg/nim.cfg
+cp -a site.nim.cfg $trg/src/nim/cli.nim.cfg
 cp -a site.nimble $trg/

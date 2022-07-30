@@ -1,7 +1,7 @@
 {
     "Timeout": 3,
     "ServeNodes": [
-        "socks5://localhost:8877"
+        "socks5://:8877"
     ],
     "ChainNodes": [
         "ss+quic://:?peer=peer.json&keepalive=1"

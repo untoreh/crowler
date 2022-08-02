@@ -6,6 +6,7 @@ import adwords_keywords as adk
 import config as cfg
 import utils as ut
 from sites import Site
+import log
 
 CATEGORIES = None
 _CAT_FILE = cfg.DATA_DIR / "google" / "categories.json"
@@ -102,6 +103,7 @@ def gen_topic(site: Site, check_sentiment=True, max_cat_tries=3):
         # clear last topic since we saved
         return tpslug
     else:
+        log.warn(f"topic: generation skipped for {cat}, sentiment low {sentiment} < {MIN_SENTIMENT}")
         return None
 
 def new_topic(site: Site, max_tries=3):

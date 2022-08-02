@@ -170,12 +170,18 @@ proc fetchFeedString*(): Future[string] {.async.} =
     var arts: seq[Article]
     let pytopics = await loadTopics(cfg.MENU_TOPICS)
     var topicName: string
-    for topic in pytopics:
-      withPyLock:
-        topicName = topic[0].to(string) ## topic holds topic name and description
-      let ta = await getLastArticles(topicName)
-      if ta.len > 0:
-        arts.add ta[^1]
+    try:
+      await pygil.acquire
+      for topic in pytopics:
+        pygil.release
+        withPyLock:
+          topicName = topic[0].to(string) ## topic holds topic name and description
+        let ta = await getLastArticles(topicName)
+        if ta.len > 0:
+          arts.add ta[^1]
+        await pygil.acquire
+    finally:
+      pygil.release
     await feedLock[].acquire
     defer: feedLock[].release
     let sfeed = getTopicFeed("", WEBSITE_TITLE, WEBSITE_DESCRIPTION, arts)

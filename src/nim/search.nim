@@ -34,7 +34,7 @@ var
     sncq {.threadvar.}: Sonic
 
 pygil.globalAcquire()
-let Language = pyImport("langcodes").Language
+pyObjPtr((Language, pyImport("langcodes").Language))
 pygil.release()
 
 const defaultLimit = 10
@@ -67,11 +67,11 @@ proc initSonic*() {.gcsafe.} =
 
 proc toISO3(lang: string): Future[string] {.async.} =
     if pygil.locked:
-        return Language.get(if lang == "": SLang.code
+        return Language[].get(if lang == "": SLang.code
                     else: lang).to_alpha3().to(string)
     else:
         withPyLock:
-            return Language.get(if lang == "": SLang.code
+            return Language[].get(if lang == "": SLang.code
                         else: lang).to_alpha3().to(string)
 
 proc sanitize*(s: string): string =
@@ -104,7 +104,8 @@ proc push*(capts: UriCaptures, content: string) {.async.} =
                 capts.addToBackLog()
                 break
         except:
-            debug "sonic: couldn't push content, {getCurrentExceptionMsg()} \n {capts} \n {key} \n {cnt}"
+            let e = getCurrentException()[]
+            debug "sonic: couldn't push content, {e} \n {capts} \n {key} \n {cnt}"
             capts.addToBackLog()
             block:
                 let f = open("/tmp/sonic_debug.log", fmWrite)
@@ -163,7 +164,8 @@ proc query*(topic: string, keywords: string, lang: string = SLang.code, limit = 
         let lang = await SLang.code.toISO3
         return sncq.query(WEBSITE_DOMAIN, "default", kws, lang = lang, limit = limit)
     except:
-        debug "query: failed {getCurrentExceptionMsg()} "
+        let e = getCurrentException()[]
+        debug "query: failed {e} "
         return newSeq[string]()
 
 proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[string]] {.async.} =
@@ -173,7 +175,9 @@ proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[string]] {
     try:
         return sncq.suggest(WEBSITE_DOMAIN, "default", input.split[^1], limit = limit)
     except:
-        debug "suggest: {getCurrentExceptionMsg()}, {getCurrentException().name}"
+        let e = getCurrentException()[]
+        let name = getCurrentException().name
+        debug "suggest: {e}, {name}"
         closeSonic()
         initSonic()
         discard
@@ -188,7 +192,7 @@ proc pushAllSonic*(clear=true) {.async.} =
     if clear:
         discard snc.flush(WEBSITE_DOMAIN)
     for (topic, state) in topicsCache:
-        let done = state.group["done"]
+        let done = state.group[]["done"]
         for page in done:
             var c = len(done[page])
             for n in 0..<c:

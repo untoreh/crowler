@@ -53,14 +53,14 @@ proc getArticles*(topic: string, n = 3, pagenum: int = -1): Future[seq[Article]]
 proc getDoneArticles*(topic: string, pagenum: int): Future[seq[Article]] {.async.} =
     withPyLock:
         let
-            grp = site.topic_group(topic)
+            grp = site[].topic_group(topic)
             arts = pyget(grp, $topicData.done / pagenum.intToStr, PyNone)
 
         if arts.isnil or pyisnone(arts):
             result = @[]
         else:
             info "Fetching {arts.shape[0]} published articles for {topic}/{pagenum}"
-            for data in pybi.reversed(arts):
+            for data in pybi[].reversed(arts):
                 if not pyisnone(data): # blacklisted articles are set to None
                     result.add(initArticle(data, pagenum))
 
@@ -90,8 +90,7 @@ proc getArticleContent*(topic, page, slug: string): Future[string] {.async.} =
         return art.pyget("content")
 
 proc getArticle*(topic, page, slug: auto): Future[Article] {.async.} =
-    var py {.threadvar.}:  PyObject
-    py = await getArticlePy(topic, page, slug)
+    let py = await getArticlePy(topic, page, slug)
     if py.isnil:
         return emptyArt
     withPyLock:
@@ -124,7 +123,7 @@ proc deleteArt*(capts: UriCaptures, cacheOnly=false) {.async.} =
             pageCache[].del(SITE_PATH / "amp" / lang / artPath)
             pageCache[].del(SITE_PATH / lang / artPath)
     if not cacheOnly:
-        let tg = (await topicsCache.fetch(capts.topic)).group
+        let tg = (await topicsCache.fetch(capts.topic)).group[]
         let pageArts = tg[$topicData.done][capts.page]
         let pyslug = capts.art.nimValueToPy().newPyObject
         var toRemove: seq[int]

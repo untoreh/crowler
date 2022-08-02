@@ -5,7 +5,8 @@ import strutils,
        strformat,
        times,
        chronos,
-       locks
+       locks,
+       macros
 
 export nimpy
 export pyLib, locks
@@ -75,7 +76,8 @@ proc relpyImport*(relpath: string, prefix = prefixPy): PyObject =
         discard spec.loader.exec_module(pymodule)
         return pyImport(name.cstring)
     except:
-        raise newException(ValueError, fmt"Cannot import python module, pwd is {getCurrentDir()}, trying to load {abspath} {'\n'} {getCurrentExceptionMsg()}")
+        let e = getCurrentException()[]
+        raise newException(ValueError, fmt"Cannot import python module, pwd is {getCurrentDir()}, trying to load {abspath} {'\n'} {e}")
 
 # we have to load the config before utils, otherwise the module is "partially initialized"
 {.push guard: pyGilLock.}
@@ -88,52 +90,84 @@ block:
             let sys = pyImport("sys")
             discard sys.path.append(pypath)
 
+macro pyObjPtr*(defs: varargs[untyped]): untyped =
+  result = newNimNode(nnkStmtList)
+  for d in defs:
+    let
+        name = d[0]
+        def = d[1]
+    result.add quote do:
+        let `name` = create(PyObject)
+        `name`[] = `def`
+
+macro pyObjPtrExp*(defs: varargs[untyped]): untyped =
+  result = newNimNode(nnkStmtList)
+  for d in defs:
+    let
+        name = d[0]
+        def = d[1]
+    result.add quote do:
+        let `name`* = create(PyObject)
+        `name`[] = `def`
 
 # https://github.com/yglukhov/nimpy/issues/164
-let
-    pybi* = pyBuiltinsModule()
-    pyza* = pyimport("zarr")
-    PyBoolClass = pybi.True.getattr("__class__")
-    PyNoneClass = pybi.None.getattr("__class__")
-    PyDateTimeClass = pyimport("datetime").datetime
-    PyStrClass = pybi.getattr("str")
-    PyIntClass = pybi.getattr("int")
-    PyDictClass = pybi.getattr("dict")
-    PyZArray = pyza.getAttr("Array")
+pyObjPtrExp(
+    (pybi, pyBuiltinsModule()),
+    (pyza, pyimport("zarr")),
+)
+pyObjPtr(
+    (PyBoolClass, pybi[].True.getattr("__class__")),
+    (PyNoneClass, pybi[].None.getattr("__class__")),
+    (PyDateTimeClass, pyimport("datetime").datetime),
+    (PyStrClass, pybi[].getattr("str")),
+    (PyIntClass, pybi[].getattr("int")),
+    (PyDictClass, pybi[].getattr("dict")),
+    ( PyZArray, pyza[].getAttr("Array"))
+)
+# let
+    # pybi* = pyBuiltinsModule()
+    # pyza* = pyimport("zarr")
+    # PyBoolClass = pybi[].True.getattr("__class__")
+    # PyNoneClass = pybi[].None.getattr("__class__")
+    # PyDateTimeClass = pyimport("datetime").datetime
+    # PyStrClass = pybi[].getattr("str")
+    # PyIntClass = pybi[].getattr("int")
+    # PyDictClass = pybi[].getattr("dict")
+    # PyZArray = pyza.getAttr("Array")
 pygil.release()
 {.pop guard:pyGilLock.}
 var PyNone* {.threadvar.}: PyObject
 
-proc pyhasAttr*(o: PyObject, a: string): bool = pybi.hasattr(o, a).to(bool)
+proc pyhasAttr*(o: PyObject, a: string): bool = pybi[].hasattr(o, a).to(bool)
 
 proc pyclass(py: PyObject): PyObject {.inline.} =
-    pybi.type(py)
+    pybi[].type(py)
 
 proc pytype*(py: PyObject): string =
     py.pyclass.getattr("__name__").to(string)
 
 proc pyisbool*(py: PyObject): bool {.exportpy.} =
-    return pybi.isinstance(py, PyBoolClass).to(bool)
+    return pybi[].isinstance(py, PyBoolClass[]).to(bool)
 
-proc pyisnone*(py: PyObject): bool {.exportpy.} =
-    assert not pybi.isnil, "pyn: pybi should not be nil"
-    assert pyhasAttr(pybi, "isinstance"), "pyn: pybi.isinstance should not be nil"
-    assert not PyNoneClass.isnil, "pyn: PyNoneClass should not be nil"
-    let check = pybi.isinstance(py, PyNoneClass)
+proc pyisnone*(py: PyObject): bool {.exportpy, gcsafe.} =
+    assert not pybi[].isnil, "pyn: pybi should not be nil"
+    assert pyhasAttr(pybi[], "isinstance"), "pyn: pybi[].isinstance should not be nil"
+    assert not PyNoneClass[].isnil, "pyn: PyNoneClass should not be nil"
+    let check = pybi[].isinstance(py, PyNoneClass[])
     assert not check.isnil, "pyn: check should not be nil"
     return py.isnil or check.to(bool)
 
 proc pyisdatetime*(py: PyObject): bool {.exportpy.} =
-    return pybi.isinstance(py, PyDateTimeClass).to(bool)
+    return pybi[].isinstance(py, PyDateTimeClass[]).to(bool)
 
 proc pyisstr*(py: PyObject): bool {.exportpy.} =
-    return pybi.isinstance(py, PyStrClass).to(bool)
+    return pybi[].isinstance(py, PyStrClass[]).to(bool)
 
 proc pyisint*(py: PyObject): bool {.exportpy.} =
-    return pybi.isinstance(py, pybi.getattr("int")).to(bool)
+    return pybi[].isinstance(py, pybi[].getattr("int")).to(bool)
 
 proc pyiszarray*(py: PyObject): bool {.exportpy.} =
-    return pybi.isinstance(py, PyZArray).to(bool)
+    return pybi[].isinstance(py, PyZArray[]).to(bool)
 
 
 const ymdFormat* = "yyyy-MM-dd"
@@ -166,23 +200,26 @@ discard pyImport("log")
 let ut* = pyImport("utils")
 doassert not pyisnone(ut)
 discard pyImport("blacklist")
-let site* = pyImport("sites").Site(WEBSITE_NAME)
-doassert not pyisnone(site)
-let pySched* = pyImport("scheduler")
-doassert not pyisnone(pySched)
-discard pySched.initPool()
+let site* = create(PyObject)
+site[] = pyImport("sites").Site(WEBSITE_NAME)
+doassert not pyisnone(site[])
+# let pySched* = pyImport("scheduler")
+pyObjPtrExp((pySched, pyImport("scheduler")))
+doassert not pyisnone(pySched[])
+discard pySched[].initPool()
 pygil.release()
 
 proc initPy*() =
     syncPyLock:
         try:
-            PyNone = pybi.getattr("None")
+            PyNone = pybi[].getattr("None")
         except:
             echo "Can't initialize PyNone"
             quit()
 
 pygil.globalAcquire()
-let pySlice = pybi.slice
+let pyslice = create(PyObject)
+pySlice[] = pybi[].slice
 pygil.release()
 
 proc contains*[K](v: PyObject, k: K): bool =
@@ -204,8 +241,8 @@ proc initPySequence*[T](o: PyObject): PySequence[T] =
 proc `[]`*[S, K](s: PySequence[S], k: K): PyObject =
     s.getitem(k)
 
-proc `slice`*[S](s: PySequence[S], start: int, stop: int, step = 1): PyObject =
-    s.getitem(pySlice(start, stop, step))
+proc `slice`*[S](s: PySequence[S], start: int, stop: int, step = 1): PyObject {.gcsafe.} =
+    s.getitem(pySlice[](start, stop, step))
 
 proc `[]=`*[S, K, V](s: PySequence[S], k: K, v: S) =
     s.setitem(k, v)
@@ -244,10 +281,10 @@ proc pysome*(pys: varargs[PyObject], default = new(PyObject)): PyObject =
     raise e
 
 proc len*(py: PyObject): int =
-    pybi.len(py).to(int)
+    pybi[].len(py).to(int)
 
 proc isa*(py: PyObject, tp: PyObject): bool =
-    pybi.isinstance(py, tp).to(bool)
+    pybi[].isinstance(py, tp).to(bool)
 
 import utils
 

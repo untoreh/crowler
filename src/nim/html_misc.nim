@@ -26,8 +26,8 @@ var
 proc initSocial*() {.gcsafe.} =
   syncPyLock:
     {.cast(gcsafe).}:
-      facebookUrlStr = site.fb_page_url.to(string)
-      twitterUrlStr = site.twitter_url.to(string)
+      facebookUrlStr = site[].fb_page_url.to(string)
+      twitterUrlStr = site[].twitter_url.to(string)
       facebookUrl = facebookUrlStr.unsafeAddr
       twitterUrl = twitterUrlStr.unsafeAddr
 
@@ -52,7 +52,7 @@ proc buildImgUrl*(ar: Article; cls = "image-link"): VNode =
       srcsetstr.add "//" & $(WEBSITE_URL_IMG / size / burl)
       srcsetstr.add " " & view & ","
   buildHtml(a(class = cls, href = ar.imageOrigin, target = "_blank",
-            alt ="Post image source.")):
+            alt = "Post image source.")):
     img(class = "", src = bsrc, srcset = srcsetstr, alt = ar.imageTitle,
             loading = "lazy")
 
@@ -108,3 +108,20 @@ proc buildRelated*(a: Article): Future[VNode] {.async.} =
       c += 1
     if c >= cfg.N_RELATED:
       return
+
+import strutils
+import sets
+import xmltree
+import html_entities
+import strformat
+const selfClosingTags = ["area", "base", "br", "col", "embed", "r", "img", "input", "link", "meta",
+        "param", "source", "track", "wbr", ].toHashSet
+
+func withClosingHtmlTag*(el: XmlNode): string =
+  ## `htmlparser` package seems to avoid closing tags for elements with no content
+  result = ($el).entToUtf8
+  if el.kind == xnElement and (result.endsWith("/>") or
+                               (result.endsWith(fmt"></{el.tag}>") and not (
+                                 el.tag in selfClosingTags))):
+    result[^2] = ' '
+    result.add "</" & el.tag & ">"

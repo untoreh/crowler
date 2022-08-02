@@ -29,7 +29,8 @@ import cfg,
        translate_db,
        translate_srv,
        translate_tr,
-       translate_tforms
+       translate_tforms,
+       html_misc
 
 export translate_types
 
@@ -100,7 +101,6 @@ template translateNode*(otree: XmlNode, q: QueueXml, tformsTags: auto, fin = fal
         # skip empty nodes
         case el.kind:
             of xnText, xnVerbatimText:
-                discard
                 if el.text.isEmptyOrWhitespace:
                     continue
                 if isTranslatable(el):
@@ -117,22 +117,26 @@ template translateNode*(otree: XmlNode, q: QueueXml, tformsTags: auto, fin = fal
                     translate(q.addr, el, srv)
     discard await translate(q.addr, srv, finish = fin)
 
+proc get*[K, V](c: LruCache[K, V], k: K): V = c[k]
 template translateNode*(node: VNode, q: QueueXml) =
     assert node.kind == VNodeKind.verbatim
     let
-        s = node.text
-        tree = try:
-                   vbtmcache[s.key]
-               except:
-                   vbtmcache[s.key] = parseHtml(s)
-                   vbtmcache[s.key]
+        s = $node
+        tree = vbtmcache.lgetOrPut(s.key): parseHtml(s)
         otree = deepcopy(tree)
     when defined(finish):
         finish = false # FIXME: This overrides `finish` argument
     else:
         let finish = true
     translateNode(otree, q, xtformsTags, finish)
-    node.value = $otree
+    type ShString {.shallow.} = string
+    node.value = if otree.kind == xnElement and otree.tag == "document":
+                    var outStr: ShString
+                    for c in otree:
+                      outStr.add withClosingHtmlTag(c)
+                    outStr
+                 else:
+                   withClosingHtmlTag(otree)
 
 when defined(weaveRuntime):
     proc translateHtml(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true): auto =

@@ -70,7 +70,8 @@ proc syncTopics() {.gcsafe.} =
                 debug "synctopics: adding topic {tp} to global"
                 topics[tp] = (topdir: td, group: tg)
     except Exception as e:
-        debug "could not sync topics {getCurrentExceptionMsg()}"
+        let = getCurrentException()[]
+        debug "could not sync topics {e}"
 
 
 proc fp(relpath: string): string =
@@ -247,7 +248,7 @@ proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
                 handleArticle(fpath, capts, ctx)
     except:
         try:
-            let msg = getCurrentExceptionMsg()
+            let msg = getCurrentException()[]
             handle301()
             debug "Router failed, {msg}"
         except:

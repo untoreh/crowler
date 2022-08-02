@@ -51,7 +51,8 @@ proc initStats*() {.raises: [].} =
             let sdb {.global.} = initStatsDB()
             statsDB = sdb.unsafeAddr
     except:
-        qdebug "{getCurrentExceptionMsg()}"
+        let e = getCurrentException()[]
+        qdebug "{e}"
 
 proc `[]=`*[K, V](c: ptr StatsDB, k: K, v: V) {.inline.} =
     c[][k] = v

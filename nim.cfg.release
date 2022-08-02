@@ -1,4 +1,5 @@
 -d:release
+--panics:on
 --passC:"-fuse-ld=lld"
 # -d:lto
 --verbosity:0

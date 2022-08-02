@@ -25,7 +25,8 @@ proc initCache*() {.raises: []} =
             let hc {.global.} = initPageCache()
             pageCache = hc.unsafeAddr
     except:
-        qdebug "{getCurrentExceptionMsg()}"
+        let e = getCurrentException()[]
+        qdebug "{e}"
 
 
 proc `[]=`*[K, V](c: ptr PageCache, k: K, v: V) {.inline.} =

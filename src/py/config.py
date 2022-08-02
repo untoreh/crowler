@@ -53,6 +53,8 @@ def setproxies(p=STATIC_PROXY_EP):
                 del os.environ[name]
             pycurl.Curl = CURL_CLASS
 
+def is_unproxied():
+    return all(name not in os.environ for name in PROXY_VARS)
 
 def set_socket_timeout(timeout):
     socket.setdefaulttimeout(timeout)

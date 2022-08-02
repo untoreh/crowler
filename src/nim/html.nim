@@ -51,15 +51,17 @@ proc initHtml*() =
     initZstd()
     initSocial()
   except:
-    qdebug "Could not initialize html vars {getCurrentExceptionMsg()}, {getStacktrace()}"
+    let e = getCurrentException()[]
+    qdebug "Could not initialize html vars {e}"
 
 template kxi*(): int = 0
 template addEventHandler*(n: VNode; k: EventKind; action: string; kxi: int) =
   n.setAttr($k, action)
 
-proc icon*(name: string; txt = ""; cls = ""): VNode =
-  buildHtml(tdiv(class = name)):
-    text txt
+proc icon*(name: string; txt = " "; cls = ""): VNode =
+  buildHtml():
+    tdiv(class = name):
+      text txt
 
 
 const mdc_button_classes = "material-icons mdc-top-app-bar__action-item mdc-icon-button"
@@ -115,10 +117,9 @@ proc buildHead*(path: string; description = ""; topic = "";
     breadcrumbs(crumbsNode(ar)).asVNode
 
     # styles
-    # link(rel = "preconnect", href = "https://fonts.googleapis.com")
-    # link(rel = "preconnect", href = "https://fonts.gstatic.com", crossorigin = "")
-    # link(rel = "stylesheet", href = "https://fonts.googleapis.com/icon?family=Material+Icons")
-    # link(rel = "stylesheet", href = "https://fonts.googleapis.com/css2?family=Noto+Serif+Display:ital,wght@0,100;0,300;0,700;1,100;1,300&family=Noto+Serif:ital,wght@0,400;0,700;1,400&family=Petrona:ital,wght@0,400;0,800;1,100;1,400&display=swap")
+    link(rel = "preconnect", href = "https://fonts.googleapis.com")
+    link(rel = "preconnect", href = "https://fonts.gstatic.com", crossorigin = "")
+    link(rel = "stylesheet", href = "https://fonts.googleapis.com/css2?family=Noto+Serif+Display:ital,wght@0,100;0,300;0,700;1,100;1,300&family=Noto+Serif:ital,wght@0,400;0,700;1,400&family=Petrona:ital,wght@0,400;0,800;1,100;1,400&display=swap")
     link(rel = "stylesheet", href = CSS_REL_URL)
     title:
       text ar.title
@@ -129,6 +130,7 @@ proc buildHead*(path: string; description = ""; topic = "";
     meta(name = "date", content = something($ar.pubDate, $now()))
     link(rel = "icon", href = FAVICON_PNG_URL, type = "image/x-icon")
     link(rel = "icon", href = FAVICON_SVG_URL, type = "image/svg+xml")
+    link(rel="apple-touch-icon", sizes="180x180", href = APPLE_PNG180_URL)
     # https://stackoverflow.com/questions/21147149/flash-of-unstyled-content-fouc-in-firefox-only-is-ff-slow-renderer
     verbatim("<script>const _ = null</script>")
     for ad in insertAd(ADS_HEAD): ad
@@ -249,9 +251,9 @@ proc buildLogo(pos: string): VNode =
             aria-label = "Website Logo"):
       tdiv(class = "mdc-icon-button__ripple")
       span(class = "logo-dark-wrap"):
-        img(src = LOGO_DARK_URL)
+        img(src = LOGO_DARK_URL, loading = "lazy")
       span(class = "logo-light-wrap"):
-        img(src = LOGO_URL)
+        img(src = LOGO_URL, loading = "lazy")
 
 
 proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): Future[
@@ -412,12 +414,21 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): Future[
 
 const pageContent* = postContent
 
-proc asHtml*(data: auto; minify: static[bool] = true;
+template asHtml*(data: VNode, minify: static[bool] = true; minify_css: bool = true): string =
+  assert not data.isnil, "Data cannot be nil"
+  asHtml($data, minify, minify_css)
+
+proc asHtml*(data: string ; minify: static[bool] = true;
     minify_css: bool = true): string =
-  let html = "<!DOCTYPE html>"&"\n" & $data
+  let html = "<!DOCTYPE html>" & "\n" & data
   sdebug "html: raw size {len(html)}"
   result = when minify:
-             html.minifyHtml(minify_css = minify_css, minify_js = false)
+             html.minifyHtml(minify_css = minify_css,
+                             minify_js = false,
+                             keep_closing_tags = true,
+                             do_not_minify_doctype = true,
+                             keep_spaces_between_attributes = true,
+                             ensure_spec_compliant_unquoted_attribute_values = true)
            else:
              html
   sdebug "html: minified size {len(result)}"
@@ -536,5 +547,6 @@ proc ldjData*(el: VNode; filepath, relpath: string; lang: langPair; a: Article) 
     trgurl = pathLink(relpath, code = lang.trg, rel = false)
 
   let ldjTr = ldjTrans(relpath, srcurl, trgurl, lang, a)
+
 
 

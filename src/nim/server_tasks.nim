@@ -25,7 +25,7 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
     var backoff = 1
     # start the topic sync thread from python
     withPyLock:
-        discard pysched.apply(site.topics_watcher)
+        discard pysched[].apply(site[].topics_watcher)
 
     while len(topicsCache) == 0:
         debug "pubtask: waiting for topics to be created..."
@@ -92,7 +92,7 @@ proc deleteLowTrafficArts*(topic: string): Future[void] {.gcsafe, async.} =
                     await deleteArt(capts)
     for n in pagesToReset:
         withPyLock:
-            discard site.update_pubtime(topic, n)
+            discard site[].update_pubtime(topic, n)
 
 const cleanupInterval = (60 * 3600 * 2).seconds
 proc cleanupTask*(): Future[void] {.async.} =

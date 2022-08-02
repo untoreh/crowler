@@ -5,6 +5,7 @@ from pathlib import Path
 from random import choice
 from typing import Dict, List, MutableSequence, Optional, Tuple
 from datetime import datetime
+import re
 
 import numpy as np
 import tomli
@@ -80,6 +81,7 @@ class Site:
         self.created = self._config.get("created", "1970-01-01")
         self.created_dt = datetime.fromisoformat(self.created)
         self.domain = self._config.get("domain", "")
+        self.domain_rgx = re.compile(f"(?:https?:)?//{self.domain}")
         assert (
             self.domain != ""
         ), f"domain not found in site configuration for {self._name} read from {cfg.SITES_CONFIG_FILE}"
@@ -118,11 +120,19 @@ class Site:
             )
             return
         url = self.article_url(art, topic)
-        self._fb_graph.post(
-            self._feed_path,
-            link=url,
-            caption=art["title"],
-        )
+        url = re.sub(self.domain_rgx, "", url)
+        dom = self.domain.split(".")[0]
+        message = f"{art['desc']}\nContinue at: {dom} {url}"
+        try:
+            assert cfg.is_unproxied()
+            self._fb_graph.post(
+                self._feed_path,
+                link=self.fb_page_url,
+                title=art["title"],
+                message=message,
+            )
+        except Exception as e:
+            log.warn(e)
 
     def _init_reddit(self):
         import base64

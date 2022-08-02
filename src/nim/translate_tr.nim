@@ -38,15 +38,15 @@ proc clear(ss: splitSent) =
 
 proc len(ss: splitSent): int = ss.size
 
-type JobsQueueTypeXml = seq[(seq[XmlNode], Queue, seq[seq[string]])]
-type JobsQueueTypeVNode = seq[(seq[VNode], Queue, seq[seq[string]])]
+type JobsQueueTypeXml = seq[(seq[XmlNode], QueueXml, seq[seq[string]])]
+type JobsQueueTypeVNode = seq[(seq[VNode], QueueDom, seq[seq[string]])]
 
 var
     jobsQueueX {.threadvar.}: JobsQueueTypeXml
     jobsQueueV {.threadvar.}: JobsQueueTypeVNode
 
-proc addJob(els: seq[XmlNode], q: Queue, batches: seq[seq[string]]) = jobsQueueX.add (els, q, batches)
-proc addJob(els: seq[VNode], q: Queue, batches: seq[seq[string]]) = jobsQueueV.add (els, q, batches)
+proc addJob(els: seq[XmlNode], q: QueueXml, batches: seq[seq[string]]) = jobsQueueX.add (els, q, batches)
+proc addJob(els: seq[VNode], q: QueueDom, batches: seq[seq[string]]) = jobsQueueV.add (els, q, batches)
 
 let splitCache = initLockLRUCache[string, seq[string]](1000)
 
@@ -147,7 +147,7 @@ proc elementsUpdate[T](q: var T) =
     # q.bucket.setLen(0)
     # q.sz = 0
 
-proc doQueryAll(els: auto, q: Queue, batches: seq[seq[string]]): Future[void] {.async.} =
+proc doQueryAll(els: auto, q: QueueXml | QueueDom, batches: seq[seq[string]]): Future[void] {.async.} =
     # We might have multiple batches when translating a single element
     var tr: seq[string]
     if len(els) == 1:
@@ -177,7 +177,7 @@ proc doTrans*() {.async.} =
         await j
     saveToDB(force=true)
 
-proc translate*[Q, T](q: ptr Q, el: T, srv: service) =
+proc translate*[T](q: ptr[QueueXml | QueueDom], el: T, srv: service) =
     if q.isnil:
         return
     let (success, length) = setFromDB(q[].pair, el)
@@ -193,18 +193,17 @@ proc translate*[Q, T](q: ptr Q, el: T, srv: service) =
             q[].bucket.add(el)
             q[].sz += length
 
-proc translate*[Q, T](q: ptr Q, el: T, srv: service, finish: bool): Future[bool] {.async.} =
+proc translate*[T](q: ptr[QueueXml | QueueDom], el: T, srv: service, finish: bool): Future[bool] {.async.} =
     if finish:
         if q.isnil:
             return true
         let (success, _) = setFromDB(q[].pair, el)
         if not success:
-            var batches: seq[seq[string]]
             addJob(@[el], q[], el.getText)
             await doTrans()
     return true
 
-proc translate*[Q](q: ptr Q, srv: service, finish: bool): Future[bool] {.async.} =
+proc translate*(q: ptr[QueueXml | QueueDom], srv: service, finish: bool): Future[bool] {.async.} =
     if finish and q[].sz > 0:
         q[].push()
         await doTrans()

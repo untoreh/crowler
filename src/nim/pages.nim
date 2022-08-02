@@ -130,7 +130,8 @@ proc articleEntry(ar: Article): Future[VNode] {.async.} =
           text "[continue]"
       hr()
   except:
-    warn "articles: entry creation failed {getCurrentExceptionMsg()}"
+    let e = getCurrentException()[]
+    warn "articles: entry creation failed {e}"
     raise getCurrentException()
 
 proc buildShortPosts*(arts: seq[Article], homepage = false): Future[
@@ -159,9 +160,13 @@ proc processPage*(lang, amp: string, tree: VNode, relpath = "index"): Future[
       filedir = SITE_PATH
       tpath = filedir / lang / relpath
     var fc = initFileContext(tree, filedir, relpath,
-        (src: SLang.code, trg: lang), tpath)
+          (src: SLang.code, trg: lang), tpath)
     debug "page: translating page to {lang}"
-    result = await translateLang(fc)
+    try:
+      result = await translateLang(fc)
+    except:
+      let e = getCurrentException()[]
+      debug "{e}"
   else:
     result = tree
   if amp != "":
@@ -182,6 +187,7 @@ proc pageFromTemplate*(tpl, lang, amp: string): Future[string] {.async.} =
     slug = slugify(title)
     page = await buildPage(title = title, content = txt, wrap=true)
     processed = await processPage(lang, amp, page, relpath = tpl)
+  doassert not processed.isnil, fmt"failed to processed template {tpl}, {lang}, {amp}"
   return processed.asHtml(minify_css = (amp == ""))
 
 proc articleTree*(capts: auto): Future[VNode] {.async.} =
@@ -197,6 +203,7 @@ proc articleTree*(capts: auto): Future[VNode] {.async.} =
     debug "article: processing"
     return await processPage(capts.lang, capts.amp, post, relpath = capts.art)
   else:
+    assert not py.isnil
     debug "article: could not fetch python article, {py}"
 
 proc articleHtml*(capts: auto): Future[string] {.gcsafe, async.} =
@@ -218,7 +225,7 @@ proc buildHomePage*(lang, amp: string): Future[(VNode, VNode)] {.async.} =
   for _ in 0..<cfg.N_TOPICS:
     var topic: string
     withPyLock:
-      topic = site.get_random_topic().to(string)
+      topic = site[].get_random_topic().to(string)
     if topic in processed:
       continue
     else:
@@ -231,7 +238,8 @@ proc buildHomePage*(lang, amp: string): Future[(VNode, VNode)] {.async.} =
   let pagetree = await buildPage(title = "",
                        content = verbatim(content),
                        slug = "",
-                       topic = "",)
+                       topic = "",
+                       desc = WEBSITE_DESCRIPTION)
   return (pagetree, await processPage(lang, amp, pagetree))
 
 proc buildSearchPage*(topic: string, kws: string, lang: string): Future[

@@ -71,17 +71,17 @@ proc ensurePy(srv: service): PyObject =
 
 template pySafeCall(code: untyped): untyped =
     logall "pysafe: acquiring lock"
-    {.locks: [pyGilLock].}:
-        try:
-            await pygil.acquire()
-            logall "pysafe: lock acquired"
-            code
-        except:
-            logall "pysafe: Failed with exception... {getStackTrace()}"
-        finally:
-            logall "pysafe: releasing lock"
-            pygil.release()
-        logall "pysafe: lock released"
+    # {.locks: [pyGilLock].}:
+    try:
+        await pygil.acquire()
+        logall "pysafe: lock acquired"
+        code
+    except CatchableError as e:
+        warn "pysafe: Failed with exception...{e}"
+    finally:
+        logall "pysafe: releasing lock"
+        pygil.release()
+    logall "pysafe: lock released"
 
 proc getProxies(srv: service = deep_translator): auto =
     case srv:
@@ -166,13 +166,13 @@ pygil.release()
 proc baseTranslatorFunc(src: string, lang: langPair): Future[string] {.gcsafe, async.} =
     withPyLock:
         pyf = slator.py.getattr("translate")
-    proc doJob(): PyObject {.closure.} = pySched.apply(pyf, src, lang.trg)
+    proc doJob(): PyObject {.closure.} = pySched[].apply(pyf, src, lang.trg)
     translatorFunc(src, lang)
 
 proc deepTranslatorFunc(src: string, lang: langPair): Future[string] {.gcsafe, async.} =
     withPyLock:
         pyf = slator.tr[lang].getattr("translate").trywrapPyFunc
-    proc doJob(): PyObject {.closure.} = pySched.apply(pyf, src)
+    proc doJob(): PyObject {.closure.} = pySched[].apply(pyf, src)
     translatorFunc(src, lang)
 
 # proc deepTranslatorFunc(src: string, lang: langPair): string {.gcsafe.} =

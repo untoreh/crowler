@@ -128,7 +128,7 @@ def run_parse1_job(site, topic):
     """
     try:
         sources = ensure_sources(site, topic)
-    except ValueError:
+    except ValueError as e:
         logger.warning(
             "Couldn't find sources for topic %s, site: %s.", topic, site.name
         )
@@ -203,27 +203,33 @@ def new_topic(site: Site, force=False):
 
 def site_loop(site: Site, target_delay=3600 * 8):
     site.load_topics()
+    backoff = 0
     while True:
-        topics = list(site.topics_dict.keys())
-        # print(h.heap())
-        loop_start = time.time()
-        for topic in topics:
-            run_parse1_job(site, topic)
-        if random.randrange(3) == 0:
+        try:
+            topics = list(site.topics_dict.keys())
+            # print(h.heap())
+            loop_start = time.time()
             for topic in topics:
-                run_parse2_job(site, topic)
-        if site.new_topics_enabled:
-            new_topic(site)
-        if site.has_reddit:
-            site.reddit_submit()
-        if site.has_twitter:
-            site.tweet()
-        if site.has_facebook:
-            site.facebook_post()
-        time.sleep(target_delay - (time.time() - loop_start))
-        random.shuffle(
-            topics
-        )  # in case of crashes helps to distribute queryies more uniformly
+                run_parse1_job(site, topic)
+            if random.randrange(3) == 0:
+                for topic in topics:
+                    run_parse2_job(site, topic)
+            if site.new_topics_enabled:
+                new_topic(site)
+            if site.has_reddit:
+                site.reddit_submit()
+            if site.has_twitter:
+                site.tweet()
+            if site.has_facebook:
+                site.facebook_post()
+            time.sleep(target_delay - (time.time() - loop_start))
+            random.shuffle(
+                topics
+            )  # in case of crashes helps to distribute queryies more uniformly
+        except Exception as e:
+            logger.warning(e, f" (site: {site.name})", )
+            backoff += 1
+            time.sleep(backoff)
 
 
 def run_server(sites):

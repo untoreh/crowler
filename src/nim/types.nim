@@ -120,7 +120,8 @@ proc initTypes*() =
         emptyArt = default(Article)
     except:
         try:
-            stdout.write fmt"types: failed to initialize default article {getCurrentExceptionMsg()}\n"
+            let e = getCurrentException()[]
+            stdout.write fmt"types: failed to initialize default article {e}\n"
             quit()
         except: quit()
     finally:

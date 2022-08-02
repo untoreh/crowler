@@ -99,7 +99,7 @@ proc addArticle(lsh: LocalitySensitive[uint64], a: Article): bool =
 
 proc curPageNumber(topic: string): Future[int] {.async.} =
     withPyLock:
-        return site.get_top_page(topic).to(int)
+        return site[].get_top_page(topic).to(int)
     # return getSubdirNumber(topic, curdir)
 
 proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, istop = false,
@@ -114,7 +114,7 @@ proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, i
     # if we pass a pagecount we mean to finalize
     if finalize:
         withPyLock:
-            discard site.update_page_size(topic, pagenum.parseInt, pagecount, final = true)
+            discard site[].update_page_size(topic, pagenum.parseInt, pagecount, final = true)
     if with_arts:
         for a in arts:
             await processHtml(topic / pagenum, a.slug, (await buildPost(a)), a)
@@ -153,7 +153,7 @@ proc finalizePages(topic: string, pn: int, newpage: bool, pagecount: ptr int) {.
 #     ## and resets their page numbers
 #     let done = topicDonePages(topic)
 #     withPyLock:
-#         assert isa(done, site.za.Group)
+#         assert isa(done, site[].za.Group)
 #         let topdir = len(done)
 #         if topdir == 0:
 #             return
@@ -201,13 +201,13 @@ proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
             doneArts[].add a
     await updateTopicPubdate()
     withPyLock:
-        discard site.save_done(topic, len(arts), donePy[], pagenum)
+        discard site[].save_done(topic, len(arts), donePy[], pagenum)
     return true
 
 proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
     ##  Generates html for a list of `Article` objects and writes to file.
     withPyLock:
-        doassert topic in site.load_topics()[1]
+        doassert topic in site[].load_topics()[1]
     info "pub: topic - {topic}"
     var pagenum = await curPageNumber(topic)
     let newpage = (await pageSize(topic, pagenum)) > cfg.MAX_DIR_FILES
@@ -253,11 +253,11 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
     withPyLock:
         if not newpage:
             # add previous published articles
-            let pagesize = site.get_page_size(topic, pagenum)
+            let pagesize = site[].get_page_size(topic, pagenum)
             # In case we didn't save the count, re-read from disk
             if not pyisnone(pagesize):
                 pagecount += pagesize[0].to(int)
-        discard site.update_page_size(topic, pagenum, pagecount)
+        discard site[].update_page_size(topic, pagenum, pagecount)
 
     await finalizePages(topic, pagenum, newpage, pagecount.addr)
     # update feed file
@@ -283,10 +283,10 @@ lastPubTime[] = getTime()
 let siteCreated = create(Time)
 try:
     syncPyLock:
-        assert pyhasAttr(site, "created"), "site does not have creation date"
-        siteCreated[] = parse(site.created.to(string), "yyyy-MM-dd").toTime
+        assert pyhasAttr(site[], "created"), "site does not have creation date"
+        siteCreated[] = parse(site[].created.to(string), "yyyy-MM-dd").toTime
 except:
-    warn getCurrentExceptionMsg()
+    warn getCurrentException()[]
     siteCreated[] = fromUnix(0)
 proc pubTimeInterval(): int =
     ## This formula gradually reduces the interval between publications
@@ -303,7 +303,7 @@ proc maybePublish*(topic: string): Future[bool] {.gcsafe, async.} =
 
 proc resetTopic(topic: string) =
     syncPyLock():
-        discard site.reset_topic_data(topic)
+        discard site[].reset_topic_data(topic)
     pageCache[].del(topic.feedKey)
     clearSiteMap(topic)
     saveLS(topic, initLS())
@@ -331,14 +331,14 @@ proc pubAllPages(topic: string, clear = true) {.async.} =
 
 # proc refreshPageSizes(topic: string) =
 #     withPyLock:
-#         let grp = site.topic_group(topic)
+#         let grp = site[].topic_group(topic)
 #         let donearts = grp[$topicData.done]
-#         assert isa(donearts, site.za.Group)
+#         assert isa(donearts, site[].za.Group)
 #         assert len(donearts) == len(grp[$topicData.pages])
 #         let topdir = len(donearts) - 1
 #         for pagenum in 0..<topdir:
-#             discard site.update_page_size(topic, pagenum, len(donearts[$pagenum]), final = true)
-#         discard site.update_page_size(topic, topdir, len(donearts[$topdir]), final = false)
+#             discard site[].update_page_size(topic, pagenum, len(donearts[$pagenum]), final = true)
+#         discard site[].update_page_size(topic, topdir, len(donearts[$topdir]), final = false)
 
 # import translate
 # when isMainModule:

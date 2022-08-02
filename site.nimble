@@ -9,7 +9,7 @@ installExt    = @["nim"]
 bin           = @["cli"]
 
 # Dependencies
-
+echo "building... "
 requires "nim >= 1.6.0"
 requires "karax#master"
 requires "https://github.com/untoreh/nim-sonic-client#master"
@@ -29,3 +29,4 @@ requires "json_serialization"
 requires "zippy"
 requires "https://github.com/ringabout/Xio" # dep of fsnotify, but `xio` link in nimble index is broken
 requires "fsnotify"
+requires "zip"

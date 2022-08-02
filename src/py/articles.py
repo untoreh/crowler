@@ -207,6 +207,21 @@ def search_img(final: dict, site: Site):
             site.img_bloom.add(img.url)
             break
 
+rgx_1 = re.compile(r"\.\s*\n")
+rgx_2 = re.compile(r"[^a-zA-Z0-9\n\s]{3,}|(.\s+)\1{2,}")
+rgx_3 = re.compile(r" {2,}")
+rgx_4 = re.compile(r"\!\[.*?\].*?\(.*?\)")
+def clean_content(content: str):
+    ""
+    # double new lines for better formatting
+    content = re.sub(rgx_1, "\n\n", content)
+    # clean repeated charaters
+    content = re.sub(rgx_2, "", content)
+    # compact whitespace
+    content = re.sub(rgx_3, "", content)
+    # some weird broken md links
+    content = re.sub(rgx_4, "", content)
+
 def fillarticle(url, data, topic, site: Site):
     """Using `trafilatura`, `goose` and `lassie` machinery to parse article data."""
     log.debug("pyarticle: parsing %s", url)
@@ -221,7 +236,7 @@ def fillarticle(url, data, topic, site: Site):
             goo = {}
         la = {}
         # first try content
-        if tra["text"]:
+        if tra["text"] >= goo["cleaned_text"]:
             final["content"] = tra["text"]
             final["source"] = "tra"
         else:
@@ -245,12 +260,8 @@ def fillarticle(url, data, topic, site: Site):
             or not isrelevant(final["title"], final["content"])
         ):
             return {}
-        # double new lines for better formatting
-        final["content"] = final["content"].replace(r"\.\s*\n", "\n\n")
-        # clean repeated charaters
-        final["content"] = re.sub(r"[^a-zA-Z0-9\n\s]{3,}|(.\s+)\1{2,}", "", final["content"])
-        # compact whitespace
-        final["content"] = re.sub(r" {2,}", "", final["content"])
+
+        final["content"] = clean_content(final["content"])
 
         final["slug"] = ut.slugify(final["title"])
         final["desc"] = tra["description"] or goo.get("meta", {}).get("description")

@@ -39,7 +39,9 @@ proc join*(tup: UriCaptures, sep = "/", n = 0): string =
     s.join(sep)
 
 proc suffixPath*(relpath: string): string =
-    if relpath == "" or relpath == "/":
+    var relpath = relpath
+    relpath.removeSuffix("/")
+    if relpath == "":
         "index.html"
     elif relpath.splitFile.ext == "":
         relpath & ".html"
@@ -82,6 +84,7 @@ type Header* = enum
     hencoding = "Content-Encoding"
     hlang = "Accept-Language"
     hetag = "ETag"
+    hloc = "Location"
 
 # proc add*(h: Header, v: string) = baseHeaders.add $h & ": " & v
 

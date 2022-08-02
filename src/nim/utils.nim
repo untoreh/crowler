@@ -28,7 +28,7 @@ const baseUri* = initUri()
 var loggingLock: Lock
 initLock(loggingLock)
 
-template procName(): string = strutils.split(getStacktrace())[^2]
+template procName*(): string = strutils.split(getStacktrace())[^2]
 
 template lgetOrPut*[T, K](c: T, k: K, v: untyped): untyped =
     ## Lazy `mgetOrPut`
@@ -47,19 +47,18 @@ template lcheckOrPut*[T, K](c: T, k: K, v: untyped): untyped =
         c[k] = v
         c[k]
 
-template alcheckOrPut*[T, K](c: T, k: K, v: untyped): untyped =
+template alcheckOrPut*[T, K](c: T, k: K, v: untyped): untyped {.dirty.} =
     ## Lazy async `mgetOrPut`
     mixin get, contains, put, `[]`, `[]=`
-    let check = await (k in c)
-    if check:
-        c[k]
+    if (await (k in c)):
+        await c[k]
     else:
-        await c[k] = v
-        c[k]
+        await c.put(k, v)
+        await c[k]
 
 template logstring(code: untyped): untyped =
     when not compileOption("threads"):
-        fmt code
+        procName() & " " & fmt code
     else:
         fmt"{getThreadId()} - " & fmt code
 

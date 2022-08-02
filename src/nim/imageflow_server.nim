@@ -74,7 +74,7 @@ proc processImgData(imgKey: (string, string, string)) {.async.} =
     await imgLock[].acquire
     if not addImg(data):
       return
-    let query = fmt"width={width}&height={height}&mode=max"
+    let query = fmt"width={width}&height={height}&mode=max&format=webp"
     logall "ifl server: serving image hash: {hash(await decodedUrl.imgData)}, size: {width}x{height}"
     # process and send back
     imgOut[imgKey] = processImg(query)
@@ -132,7 +132,7 @@ proc startImgFlow*() {.raises: [].} =
 #             debug "ifl server: bad url"
 #             ctx.reply(Http404)
 #     except:
-#         let msg = getCurrentExceptionMsg()
+#         let msg = getCurrentException()[]
 #         ctx.reply(Http501)
 #         qdebug "Router failed, {msg}"
 #         discard

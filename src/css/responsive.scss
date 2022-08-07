@@ -60,9 +60,11 @@
         margin-right: 6.5rem;
         & .icon {
           &:first-child {
+            top: 1.3rem;
           }
           &:last-child {
             right: 1.5rem;
+            top: 1.3rem;
           }
         }
       }

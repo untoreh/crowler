@@ -41,12 +41,6 @@ template withSyncLock(l: AsyncLock, code) =
   finally:
     l.release()
 
-template withASyncLock(l: AsyncLock, code) =
-  try:
-    await l.acquire()
-    code
-  finally:
-    l.release()
 
 import macros
 macro initLocks(syms: varargs[untyped]) =

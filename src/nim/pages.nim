@@ -169,6 +169,7 @@ proc processPage*(lang, amp: string, tree: VNode, relpath = "index"): Future[
       debug "{e}"
   else:
     result = tree
+  doassert not result.isnil
   if amp != "":
     debug "page: amping"
     result = await result.ampPage
@@ -198,6 +199,7 @@ proc articleTree*(capts: auto): Future[VNode] {.async.} =
     if not pyisnone(py):
       debug "article: building post"
       a = initArticle(py, parseInt(capts.page))
+  assert not a.isnil
   let post = await buildPost(a)
   if not post.isnil:
     debug "article: processing"

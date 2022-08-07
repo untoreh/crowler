@@ -99,6 +99,16 @@ template ldjWebpage(): VNode {.dirty.} =
               props = ldjPageProps
   ).asVNode
 
+proc styleLink(url: string): VNode =
+  buildHtml(tdiv):
+    link(rel="preload", `as`="style", href=url)
+    link(rel="stylesheet", media="print", onload="this.onload=null;this.removeAttribute('media');", href = url)
+    noscript():
+      link(rel="stylesheet", href=url)
+
+  # echo nodes
+  # for n in nodes: result.add n
+
 proc buildHead*(path: string; description = ""; topic = "";
     ar = emptyArt): VNode {.gcsafe.} =
   let canon = $(WEBSITE_URL / path)
@@ -109,7 +119,7 @@ proc buildHead*(path: string; description = ""; topic = "";
     feedLink(topic, path / topic)
     ampLink(path)
     for t in opgPage(ar): t
-    for n in langLinksNodes(canon): n
+    for n in langLinksNodes(canon, rel=true): n
 
     # LDJ
     ldjWebsite()
@@ -119,10 +129,11 @@ proc buildHead*(path: string; description = ""; topic = "";
     # styles
     link(rel = "preconnect", href = "https://fonts.googleapis.com")
     link(rel = "preconnect", href = "https://fonts.gstatic.com", crossorigin = "")
-    link(rel = "stylesheet", href = "https://fonts.googleapis.com/css2?family=Noto+Serif+Display:ital,wght@0,100;0,300;0,700;1,100;1,300&family=Noto+Serif:ital,wght@0,400;0,700;1,400&family=Petrona:ital,wght@0,400;0,800;1,100;1,400&display=swap")
-    link(rel = "stylesheet", href = CSS_REL_URL)
+    for s in styleLink(NOTO_FONT_URL): s
+    initStyle(CSS_CRIT_PATH)
+    for s in styleLink(CSS_BUN_URL): s
     title:
-      text ar.title
+      text something(ar.title, WEBSITE_TITLE)
     meta(name = "title", content = ar.title)
     meta(name = "keywords", content = ar.tags.join(","))
     meta(name = "description", content = something(description, ar.desc))
@@ -197,15 +208,16 @@ proc topicsList*(ucls: string; icls: string; small: static[
     bool] = true): Future[VNode] {.async.} =
   result = newVNode(VNodeKind.ul)
   result.setAttr("class", ucls)
-  let topics = await loadTopics(MENU_TOPICS)
+  let topics = await loadTopics(-MENU_TOPICS) # NOTE: the sign is negative, we load the most recent N topics
   result.add buildHtml(tdiv(class = "topics-shadow"))
-  defer: pygil.release()
   await pygil.acquire()
+  defer: pygil.release()
   for tpc in topics:
     let topic_slug = $tpc[0]
     let topic_name = $tpc[1]
     pygil.release()
     if await isEmptyTopic(topic_slug):
+      await pygil.acquire()
       continue
     let liNode = buildHtml(li(class = fmt"{icls}")):
       # tdiv(class = "mdc-icon-button__ripple") # not used without material icons
@@ -251,9 +263,9 @@ proc buildLogo(pos: string): VNode =
             aria-label = "Website Logo"):
       tdiv(class = "mdc-icon-button__ripple")
       span(class = "logo-dark-wrap"):
-        img(src = LOGO_DARK_URL, loading = "lazy")
+        img(src = LOGO_DARK_URL, loading = "lazy", alt="logo-dark")
       span(class = "logo-light-wrap"):
-        img(src = LOGO_URL, loading = "lazy")
+        img(src = LOGO_URL, loading = "lazy", alt="logo-light")
 
 
 proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): Future[
@@ -342,7 +354,7 @@ proc postTitle(a: Article): Future[VNode] {.async.} =
         tdiv(class = "post-source"):
           a(href = a.url):
             img(src = a.icon, loading = "lazy", alt = "web",
-                class = "material-icons")
+                                        class = "material-icons")
             text a.getAuthor
         adLink tags, AdLinkStyle.ico
 
@@ -418,12 +430,14 @@ template asHtml*(data: VNode, minify: static[bool] = true; minify_css: bool = tr
   assert not data.isnil, "Data cannot be nil"
   asHtml($data, minify, minify_css)
 
+# NOTE: disable css minification since it breaks inline css
+# https://github.com/wilsonzlin/minify-html/issues/89
 proc asHtml*(data: string ; minify: static[bool] = true;
     minify_css: bool = true): string =
   let html = "<!DOCTYPE html>" & "\n" & data
   sdebug "html: raw size {len(html)}"
   result = when minify:
-             html.minifyHtml(minify_css = minify_css,
+             html.minifyHtml(minify_css = false,
                              minify_js = false,
                              keep_closing_tags = true,
                              do_not_minify_doctype = true,

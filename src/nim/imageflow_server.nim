@@ -80,7 +80,7 @@ proc processImgData(imgKey: (string, string, string)) {.async.} =
     imgOut[imgKey] = processImg(query)
 
     imgEvent[].fire; imgEvent[].clear
-  except ValueError:
+  except CatchableError:
     imgOut[imgKey] = ("", "")
     imgEvent[].fire; imgEvent[].clear
   finally:

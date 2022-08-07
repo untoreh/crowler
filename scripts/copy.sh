@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -e
 trg=docker
+
+if [ "$1" = "-css" ]; then
+    buildCss="-b"
+    shift
+else
+    buildCss=
+fi
 sites=$(echo "${1:-wsl}" | tr "," "\n")
 
 [ -e $trg/cli ] && rm -f $trg/cli
@@ -28,7 +35,7 @@ ln -srf $trg/src/py $trg/lib/
 
 for site in $sites; do
     [ "$site" = scraper ] && continue
-    scripts/cssconfig.sh -b $site
+    scripts/cssconfig.sh $buildCss $site
     for fn in dist/*{.js,.css,.png}; do
         # name=$(basename ${fn%%.*})
         # ext=${fn##*.}

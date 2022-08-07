@@ -124,7 +124,7 @@ template setEncoding() {.dirty.} =
   let rqHeaders = reqCtx.rq[rqid].headers
   assert not rqHeaders.isnil
   debug "reply: declaring accept"
-  let accept = rqHeaders.AcceptEncoding()
+  let accept = $rqHeaders.AcceptEncoding()
   if ("*" in accept) or ("gzip" in accept):
     debug "reply: encoding gzip"
     reqCtx.respHeaders.ContentEncoding("gzip")
@@ -394,7 +394,6 @@ template handleCacheClear() =
       discard
 
 template abort() =
-  echo "aborting!"
   if unlikely(reqCtx.cached):
     reqCtxCache.del(relpath)
 
@@ -529,7 +528,7 @@ when declared(Taskpool):
 
 proc doServe*(address: string, callback: ScorperCallback): Future[
     Scorper] {.async.} =
-  var server = newScorper(address, callback)
+  var server = newScorper(address, callback, flags = {ReuseAddr, ReusePort})
   server.start()
 
   await server.join()
@@ -567,10 +566,7 @@ proc startServer*(doclear = false, port = 0, loglevel = "info") =
   while true:
     try:
       srv = waitFor doServe(address, callback)
-      # waitFor serve(address, callback)
     except:
-      if not srv.isnil:
-        srv.sock.closeSocket()
       let e = getCurrentException()[]
       debug "server: {e} \n restarting server..."
       sleep 500

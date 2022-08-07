@@ -16,6 +16,10 @@ import zarr as za
 from numcodecs import Blosc
 from trafilatura import fetch_url as _fetch_url
 
+import imghdr
+from urllib.request import urlopen
+from io import BytesIO
+
 import config as cfg
 from config import strtobool
 
@@ -105,6 +109,13 @@ def save_file(
             f.write("\n")
         return r
 
+def is_img_url(url: str):
+    try:
+        with urlopen(url) as f:
+            what = imghdr.what(BytesIO(f.read(12)))
+            return bool(what)
+    except:
+        return False
 
 def slugify(value, allow_unicode=False):
     """

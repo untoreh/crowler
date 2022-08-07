@@ -171,14 +171,12 @@ footer {
   font-size: 1.5rem;
   font-variant: all-petite-caps;
   & > a {
-    padding: 0 0.25rem 0 0.25rem;
+    padding: 1rem 0.5rem 1rem 2rem;
     position: relative;
-    padding-left: 2rem;
     text-align: left;
     display: inline-block;
     margin-right: -1rem;
     transition: ease-in 0.2s;
-    padding-bottom: 0.25rem;
     margin-bottom: -0.25rem;
     &:after {
       content: "|";
@@ -189,7 +187,7 @@ footer {
       display: inline-block;
       position: absolute;
       left: 0;
-      top: 0.25rem;
+      top: 1.25rem;
     }
     &.ad-link {
       margin-right: -2.5rem;
@@ -201,13 +199,13 @@ footer {
       }
       & .icon {
         &:first-child {
-          left: 0.95rem;
-          top: 0.3rem;
+          left: 0.8rem;
+          top: 1.25rem;
         }
         &:last-child {
           right: 1.5rem;
           left: unset;
-          top: 0.3rem;
+          top: 1.25rem;
         }
       }
     }
@@ -431,7 +429,7 @@ header .page {
       background-color: var(--mdc-theme-secondary);
       filter: invert(0.1);
       border-radius: 4px;
-      box-shadow: 0 0 0.8px  var(--mdc-theme-surface);
+      box-shadow: 0 0 0.8px var(--mdc-theme-surface);
       transition: ease-in 0.2s;
       &:hover {
         filter: invert(1);

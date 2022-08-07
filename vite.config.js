@@ -7,6 +7,7 @@ import autoprefixer from "autoprefixer";
 import legacy from "@vitejs/plugin-legacy";
 import Unocss from "unocss/vite";
 import presetIcons from "@unocss/preset-icons";
+import critical from 'rollup-plugin-critical'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -46,22 +47,34 @@ export default defineConfig({
         // ...other presets
       ],
     }),
+    // critical({
+    //   criticalUrl: 'wsl:5050',
+    //   criticalBase: './',
+    //   criticalPages: [
+    //     { uri: ''},
+    //     { uri: 'privacy-policy'},
+    //     { uri: 'mini'},
+    //     {uri: 'mini/0/mini-crossword'}
+    //   ],
+    //   criticalConfig: {
+    //   },
+    // }),
     // legacy({
     //   targets: ["defaults", "not IE 11"],
     // }),
   ],
-  css: {
-    postcss: {
-      plugins: [autoprefixer()],
+css: {
+  postcss: {
+    plugins: [autoprefixer()],
     },
-  },
-  build: {
-    lib: {
-      entry: "src/js/app.js",
+},
+build: {
+  lib: {
+    entry: "src/js/app.js",
       name: "app",
-      fileName: "app"
-    },
+        fileName: "app"
   },
+},
 });
 
 // UnoCSS({

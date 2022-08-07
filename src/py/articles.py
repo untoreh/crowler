@@ -30,6 +30,7 @@ def check_spacy_model():
     lsv_path = cfg.CACHE_DIR / "last_spacy_version.txt"
     if not cfg.CACHE_DIR.exists():
         import os
+
         os.makedirs(cfg.CACHE_DIR)
     lsv_path.touch()
     with open(lsv_path, "r") as f:
@@ -118,7 +119,9 @@ def trafi(url, data=None, precise=False):
     )
 
 
-url_rgx = re.compile(r"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()!@:%_\+.~#?&\/\/=]*)")
+url_rgx = re.compile(
+    r"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()!@:%_\+.~#?&\/\/=]*)"
+)
 profanity_rgx = re.compile(r"(\n|\s|\.|\?|\!)")
 
 
@@ -130,6 +133,7 @@ def replace_profanity(data):
         return None
     sents[match] = " [...] "
     return "".join(sents)
+
 
 def test_profanity(content):
     """Test which non token based splitting method is better for profanity checking.
@@ -162,6 +166,7 @@ def test_profanity(content):
         pp4,
     )
 
+
 def abs_url(url: str, baseurl) -> str:
     if url and baseurl:
         u = parse_url(url)._asdict()
@@ -173,6 +178,7 @@ def abs_url(url: str, baseurl) -> str:
             u["port"] = b.port
             return str(Url(**u))
     return url
+
 
 def remove_urls(title: str | None) -> str | None:
     if title is None:
@@ -188,31 +194,41 @@ def remove_urls(title: str | None) -> str | None:
     else:
         return clean_title.strip()
 
+
 def add_img(final, urls: List[Callable], site: Site) -> bool:
     for f in urls:
         url = f()
-        if url and (url != final["icon"]) and (url not in site.img_bloom):
+        if (
+            url
+            and (url != final["icon"])
+            and (url not in site.img_bloom)
+            and ut.is_img_url(url)
+        ):
             final["imageUrl"] = url
             return True
     return False
+
 
 def search_img(final: dict, site: Site):
     """Attempt to search for an image for the article with search engines."""
     imgs = get_images(final["title"])
     for img in imgs:
-        if img.url not in site.img_bloom:
+        if img.url not in site.img_bloom and ut.is_img_url(img.url):
             final["imageUrl"] = img.url
             final["imageTitle"] = img.title
             final["imageOrigin"] = img.origin
             site.img_bloom.add(img.url)
             break
 
+
 rgx_1 = re.compile(r"\.\s*\n")
 rgx_2 = re.compile(r"[^a-zA-Z0-9\n\s]{3,}|(.\s+)\1{2,}")
 rgx_3 = re.compile(r" {2,}")
 rgx_4 = re.compile(r"\!\[.*?\].*?\(.*?\)")
+
+
 def clean_content(content: str):
-    ""
+    """"""
     # double new lines for better formatting
     content = re.sub(rgx_1, "\n\n", content)
     # clean repeated charaters
@@ -221,6 +237,7 @@ def clean_content(content: str):
     content = re.sub(rgx_3, "", content)
     # some weird broken md links
     content = re.sub(rgx_4, "", content)
+
 
 def fillarticle(url, data, topic, site: Site):
     """Using `trafilatura`, `goose` and `lassie` machinery to parse article data."""
@@ -252,13 +269,14 @@ def fillarticle(url, data, topic, site: Site):
         # Ensure articles are always in the chosen source language
         if final["lang"] != tr.SLang.code:
             log.debug("articles: different lang? %s", final["lang"])
-            final["content"] = tr.translate(final["content"], to_lang=tr.SLang.code, from_lang=final["lang"])
-            final["title"] = tr.translate(final["title"], to_lang=tr.SLang.code, from_lang=final["lang"])
+            final["content"] = tr.translate(
+                final["content"], to_lang=tr.SLang.code, from_lang=final["lang"]
+            )
+            final["title"] = tr.translate(
+                final["title"], to_lang=tr.SLang.code, from_lang=final["lang"]
+            )
         final["content"] = replace_profanity(final["content"])
-        if (
-            not final["content"]
-            or not isrelevant(final["title"], final["content"])
-        ):
+        if not final["content"] or not isrelevant(final["title"], final["content"]):
             return {}
 
         final["content"] = clean_content(final["content"])
@@ -277,14 +295,17 @@ def fillarticle(url, data, topic, site: Site):
         la = lassie_img(url, data, final)
         if not final["icon"]:
             final["icon"] = abs_url(goo["meta"]["favicon"], url)
-        if final["imageUrl"] in site.img_bloom:
-            img_f = [lambda: abs_url(goo["image"], url), lambda: goo["opengraph"].get("image", "") ]
+        if final["imageUrl"] in site.img_bloom or not ut.is_img_url(final["imageUrl"]):
+            img_f = [
+                lambda: abs_url(goo["image"], url),
+                lambda: goo["opengraph"].get("image", ""),
+            ]
             if not add_img(final, img_f, site):
                 search_img(final, site)
         else:
             site.img_bloom.add(final["imageUrl"])
         if not final.get("imageTitle", ""):
-            final["imageTitle"] = goo["desc"] or la["description"] or final["desc"]
+            final["imageTitle"] =  la["description"] if la["description"] != final["desc"] else ""
         if not final.get("imageOrigin", ""):
             final["imageOrigin"] = final["imageUrl"]
         final["topic"] = topic

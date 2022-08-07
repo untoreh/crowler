@@ -241,13 +241,15 @@ proc initPySequence*[T](o: PyObject): PySequence[T] =
 proc `[]`*[S, K](s: PySequence[S], k: K): PyObject =
     s.getitem(k)
 
-proc `slice`*[S](s: PySequence[S], start: int, stop: int, step = 1): PyObject {.gcsafe.} =
+proc `slice`*[S](s: PySequence[S], start: int | PyObject, stop: int | PyObject, step = 1): PyObject {.gcsafe.} =
     s.getitem(pySlice[](start, stop, step))
 
 proc `[]=`*[S, K, V](s: PySequence[S], k: K, v: S) =
     s.setitem(k, v)
 
 proc `$`*(s: PySequence): string = $s.py
+
+proc len*(s: PySequence): int = s.py.len
 
 iterator items*[S](s: PySequence[S]): PyObject =
     for i in s.py:

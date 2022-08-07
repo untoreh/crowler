@@ -1,9 +1,6 @@
 -d:release
---panics:on
 --passC:"-fuse-ld=lld"
 # -d:lto
+# --panics:on
 --verbosity:0
--d:GzipEnable=false
--d:TimeOut=180
-# -d:findPyLib
 --putenv:LIBPYTHON_PATH="/usr/local/lib/libpython3.10.so"

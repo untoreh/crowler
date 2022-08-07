@@ -1,3 +1,2 @@
-- topics generation / topic header on wsl
 - PWA manifest
 - research ads

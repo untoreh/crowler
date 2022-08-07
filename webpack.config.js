@@ -1,6 +1,7 @@
 const autoprefixer = require("autoprefixer");
 const path = require("path");
 // const UnoCSS = require("unocss/webpack").default;
+const CriticalCssPlugin = require('critical-css-webpack-plugin')
 
 module.exports = {
   // for unocss, https://stackoverflow.com/questions/64557638/how-to-polyfill-node-core-modules-in-webpack-5
@@ -8,6 +9,38 @@ module.exports = {
   context: path.resolve(__dirname, "src"),
   entry: ["./css/app.scss", "./js/app.js"],
   // plugins: [UnoCSS({})],
+  plugins: [new CriticalCssPlugin(
+    {
+      inline: false,
+      base: "./site",
+      src: "http://wsl:5050",
+      dimensions: [
+        {
+          width: 1200,
+        },
+        {
+          width: 600,
+        },
+        {
+          width: 400,
+        },
+        {
+          width: 200,
+        },
+      ],
+      target: {
+        css: "../dist/bundle-crit.css",
+        uncritical: '../dist/bundle.css',
+      },
+      // extract: true,
+      ignore: {
+        atrule: ['@font-face'],
+        rule: [/\.i-mdi-.*/],
+        // decl: (node, value) => /flags\.png/.test(value),
+      },
+    }
+  )
+  ],
   mode: "production",
   devServer: {
     static: {
@@ -71,7 +104,8 @@ module.exports = {
             loader: "postcss-loader",
             options: {
               postcssOptions: {
-                plugins: [autoprefixer()],
+                plugins: [autoprefixer(),
+                ],
               },
             },
           },

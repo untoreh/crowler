@@ -23,6 +23,8 @@ import
   html,
   ads
 
+# import ./test                     #
+# static: echo "using test!"
 
 proc clearPage*(url: string) =
   initThread()
@@ -105,9 +107,8 @@ proc genPage(relpath: string) =
 
 when isMainModule:
   dispatchMulti([startServer], [clearPage], [cliPubTopic], [cliReindexSearch], [
-      clearSource], [clearPageCache], [versionInfo])
+      clearSource], [clearPageCache], [versionInfo], [showStats])
 
   # initThread()
   # genPage("/")
 
-# import test                     #

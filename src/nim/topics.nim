@@ -49,10 +49,14 @@ proc loadTopics*(force=false): Future[PySequence[TopicTuple]] {.async.} =
     withPyLock:
         return initPySequence[TopicTuple](site[].load_topics(force)[0])
 
-proc loadTopics*(n: int): Future[PySequence[TopicTuple]] {.async.} =
+proc loadTopics*(n: int): Future[seq[PyObject]]  {.async.} =
     let tp  = await loadTopics()
     withPyLock:
-        return initPySequence[TopicTuple](tp.slice(0, n))
+      let tp_slice = if n >= 0: tp.slice(0, n)
+                     else: tp.slice(n, PyNone)
+      return collect:
+        for n in 0..<tp_slice.len:
+          tp_slice[n]
 
 proc topicDesc*(topic: string): Future[string] {.async.} =
     withPyLock:

@@ -3,7 +3,7 @@ import time
 from collections import deque
 from pathlib import Path
 from random import choice
-from typing import Dict, List, MutableSequence, Optional, Tuple
+from typing import Dict, Iterator, List, MutableSequence, Optional, Tuple
 from datetime import datetime
 import re
 
@@ -440,27 +440,43 @@ class Site:
         assert self.topics_arr is not None
         self.topics_arr[idx, 2] = int(time.time())
 
-    def iter_topic_articles(self, topic: str):
-        tg = self.topic_group(topic)
+    def iter_published_articles(self, topic: str) -> Iterator[dict]:
+        done = self.load_done(topic)
+        top_idx = len(done) - 1
         # previous pages
-        for pagenum in tg[ZarrKey.done.name]:
-            done = self.load_done(topic)
-            for a in done[pagenum]:
-                yield a
-        # last page
-        for a in tg[ZarrKey.articles.name]:
-            yield a
+        for n in range(top_idx):
+            for a in done[n]:
+                if isinstance(a, dict):
+                    yield a
 
     def get_random_topic(self, n=10):
         assert self.topics_arr is not None
         return choice(self.topics_arr[-n:])[0]
 
     def remove_broken_articles(self, topic):
-        valid = []
-        for a in enumerate(self.load_articles(topic=topic)):
-            if a is not int:
-                valid.append(a)
-        self.save_articles(valid, topic=topic, reset=True)
+        # valid_unpub = []
+        arts = self.load_articles(topic=topic)
+        for n, a in enumerate(arts):
+            if a is not dict or a.get("topic", "") != topic:
+                arts[n] = None
+            # if a is not int or a.get("topic", "") != topic:
+            #     valid_unpub.append(a)
+        # if len(arts) > len(valid_unpub):
+        #     self.save_articles(valid_unpub, topic=topic, reset=True)
+
+        # published
+        done = self.load_done(topic)
+        top_idx = len(done) - 1
+        for n in range(top_idx):
+            # valid_pub = []
+            page_arts = done[n]
+            for n, a in enumerate(page_arts):
+                if a is not dict or a.get("topic", "") != topic:
+                   page_arts[n] = None
+                # if isinstance(a, dict):
+                #     valid_pub.append(a)
+            # if len(done[n]) > len(valid_pub):
+            #     save_zarr(valid_pub, k=ZarrKey.done, subk=n, root=self.topic_dir(topic))
 
     def topics_watcher(self):
         while True:

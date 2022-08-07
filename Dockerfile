@@ -3,7 +3,7 @@ FROM debian:bookworm AS sonic
 ENV DEBIAN_FRONTEND=noninteractive
 ENV CURL_V 7.83.1
 RUN apt update; \
-    apt install -y python3-dbg curl clang libclang-dev build-essential gdb vim; \
+    apt install -y  curl clang libclang-dev build-essential; \
     # wget -q -O /usr/local/bin/curl https://github.com/moparisthebest/static-curl/releases/download/v$CURL_V/curl-amd64 && \
     # chmod +x /usr/local/bin/curl && \
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -q --profile minimal --default-toolchain stable -y && \
@@ -12,6 +12,8 @@ RUN apt update; \
     /root/.cargo/bin/rustup self uninstall -y && \
     apt remove libclang-dev; \
     apt autoremove -y
+# debug tools
+RUN apt install -y python3-dbg gdb vim procps auditd
 
 FROM sonic AS gost
 ENV GOST_V=2.11.2
@@ -26,6 +28,13 @@ RUN curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
 RUN echo PATH=/root/.nimble/bin:\$PATH >> /root/.profile
 RUN ln -sr /root/.choosenim/toolchains/*/tools /root/.nimble
 RUN bash -c "$(curl -fsSL https://gef.blah.cat/sh)"
+# required by gef
+RUN apt -y install locales; \
+    sed '/en_US.UTF-8/s/^# //g' -i /etc/locale.gen && \
+    locale-gen
+ENV LANG en_US.UTF-8
+ENV LANGUAGE en_US:en
+ENV LC_ALL en_US.UTF-8
 SHELL ["/bin/bash", "-lc"]
 
 # FROM nimrt as pyenv

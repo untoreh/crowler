@@ -3,7 +3,7 @@ import { MDCTopAppBar } from "@material/top-app-bar";
 import { getCookie, $, $$ } from "./lib.js";
 import { setupSuggest } from "./suggest.js";
 // import "../css/app.scss";
-// import after `app.scss`
+/** after `app.scss` **/
 // import "uno.css";
 
 function toggleTheme() {

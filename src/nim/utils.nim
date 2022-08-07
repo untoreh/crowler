@@ -15,7 +15,8 @@ import os,
        uri,
        karax / vdom,
        std/importutils,
-       normalize
+       normalize,
+       chronos
 
 
 import translate_types
@@ -27,6 +28,13 @@ const baseUri* = initUri()
 
 var loggingLock: Lock
 initLock(loggingLock)
+
+template withASyncLock*(l: AsyncLock, code) =
+  try:
+    await l.acquire()
+    code
+  finally:
+    l.release()
 
 template procName*(): string = strutils.split(getStacktrace())[^2]
 
@@ -402,15 +410,13 @@ proc find*(node: VNode, kind: VNodeKind, attr: (string, string)): VNode =
             return n
     return node
 
-proc initStyle*(path: string): VNode =
-    result = newVNode(VNodeKind.style)
-    result.add newVNode(VNodeKind.text)
-    result[0].text = readFile(path)
+proc initStyle*(path: static[string]): VNode =
+  {.cast(gcsafe).}:
+    let sty {.global.} = readFile(path)
+    result = tree(VNodeKind.style, verbatim(sty))
 
 proc initStyleStr*(s: sink string): VNode =
-    result = newVNode(VNodeKind.style)
-    result.add newVNode(VNodeKind.text)
-    result[0].text = s
+    result = tree(VNodeKind.style, verbatim(s))
 
 proc xmlHeader*(version: static[string] = "1.0", encoding: static[string] = "UTF-8"): string =
     fmt"""<?xml version="{version}" encoding="{encoding}" ?>"""

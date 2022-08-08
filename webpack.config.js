@@ -1,5 +1,6 @@
 const autoprefixer = require("autoprefixer");
 const path = require("path");
+const process = require("process")
 // const UnoCSS = require("unocss/webpack").default;
 const CriticalCssPlugin = require('critical-css-webpack-plugin')
 
@@ -36,7 +37,16 @@ module.exports = {
       ignore: {
         atrule: ['@font-face'],
         rule: [/\.i-mdi-.*/],
-        // decl: (node, value) => /flags\.png/.test(value),
+      },
+      rebase: asset => { // inlined sttyles requires specifing absolute assets path (since assets with name only use the path relative to style source link)
+        let devpath = "dev/"
+        let abspath = asset.absolutePath
+        let nametrail = `${process.env.CONFIG_NAME}/`
+        if (nametrail && nametrail != devpath && abspath.includes(devpath)) {
+          return `${abspath.replace(devpath, nametrail)}`
+        } else {
+          return `${abspath}`
+        }
       },
     }
   )

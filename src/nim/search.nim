@@ -13,6 +13,9 @@ import sonic,
 
 from unicode import runeSubStr, validateUtf8
 
+import threading/channels
+import std/isolation
+
 from sonic {.all.} import SonicServerError
 export SonicServerError
 
@@ -138,42 +141,47 @@ proc resumeSonic() {.async.} =
     await push(relpath)
   writeFile(SONIC_BACKLOG, "")
 
+import std/monotimes
+import locktplasync
+asyncLockedStore(Table)
 type
-  SonicQueryArgsTuple = tuple[topic: string, keywords: string, lang: string, limit: int ]
-  SonicMessageTuple = tuple[lock: AsyncLock, args: SonicQueryArgsTuple, resp: seq[string]]
+  SonicQueryArgsTuple = tuple[topic: string, keywords: string, lang: string, limit: int]
+  SonicMessageTuple = tuple[args: SonicQueryArgsTuple, resp: seq[string], done: bool, id: MonoTime]
   SonicMessage = ptr SonicMessageTuple
-  # SonicSuggestArgsTuple = tuple[topic: string, input: string, limit: int ]
-  # SonicSuggestTuple = tuple[lock: AsyncLock, args: SonicSuggestArgsTuple, resp: seq[string]]
-  # SonicSuggest = ptr SonicSuggestTuple
 
-proc querySonic(msg: SonicMessage): Future[void] {.async.} =
+proc querySonic(msg: SonicMessage) =
   ## translate the query to source language, because we only index
   ## content in source language
   ## the resulting entries are in the form {page}/{slug}
+  defer: msg.done = true
   let (topic, keywords, lang, limit) = msg.args
   let kws = if lang in TLangsTable:
-                  # echo "ok"
-                  let lp = (src: lang, trg: SLang.code)
-                  let translate = getTfun(lp)
-                  # echo "?? ", translate(keywords, lp)
-                  let tkw = await translate(keywords, lp)
-                  something tkw, keywords
-              else: keywords
+                # echo "ok"
+                let lp = (src: lang, trg: SLang.code)
+                let translate = getTfun(lp)
+                # echo "?? ", translate(keywords, lp)
+                var tkw: string
+                syncPyLock:
+                  tkw = waitFor translate(keywords, lp)
+                something tkw, keywords
+            else: keywords
   logall "query: kws -- {kws}, keys -- {keywords}"
   try:
-    let lang = await SLang.code.toISO3
-    msg.resp.add sncq.query(WEBSITE_DOMAIN, "default", kws, lang = lang, limit = limit)
+    let lang = waitFor SLang.code.toISO3
+    let res = sncq.query(WEBSITE_DOMAIN, "default", kws, lang = lang, limit = limit)
+    msg.resp.add res
   except:
     let e = getCurrentException()[]
     debug "query: failed {e} "
 
-proc suggestSonic(msg: SonicMessage): Future[void] {.async.} =
+proc suggestSonic(msg: SonicMessage) =
   # Partial inputs language can't be handled if we
   # only ingest the source language into sonic
+  defer: msg.done = true
   let (topic, input, _, limit) = msg.args
   logall "suggest: topic: {topic}, input: {input}"
-  msg.resp.add sncq.suggest(WEBSITE_DOMAIN, "default", input.split[^1], limit = limit)
-
+  let sug = sncq.suggest(WEBSITE_DOMAIN, "default", input.split[^1], limit = limit)
+  msg.resp.add sug
 
 proc deleteFromSonic*(capts: UriCaptures): int =
   ## Delete an article from sonic db
@@ -200,42 +208,49 @@ proc pushAllSonic*(clear = true) {.async.} =
           await push(capts, content)
   discard sncc.trigger("consolidate")
 
-var sonicIn*: ptr AsyncQueue[SonicMessage]
-var sonicSugIn*: ptr AsyncQueue[SonicMessage]
+var queryChan: Chan[SonicMessage]
+var sugChan: Chan[SonicMessage]
 var sonicQueryThread: Thread[void]
 var sonicSuggestThread: Thread[void]
+var sonicQueries: LockTable[MonoTime, ptr Isolated[SonicMessage]]
+from chronos/timer import seconds, Duration
+
+template sendAndWait(chan: untyped, maxtries=10) {.dirty.} =
+  var tries = 0
+  sonicQueries[msg.id] = create(Isolated[SonicMessage])
+  sonicQueries[msg.id][] = isolate(msg)
+  defer: sonicQueries.del(msg.id)
+  while tries < maxtries:
+    if chan.trySend(sonicQueries[msg.id][]):
+      break
+    await sleepAsync(10.milliseconds)
+    tries += 1
+  if tries < maxtries:
+    while true:
+      if msg.done:
+        result.add msg.resp
+        break
+      await sleepAsync(10.milliseconds)
 
 proc query*(topic: string, keywords: string, lang: string = SLang.code,
             limit = defaultLimit): Future[seq[string]] {.async.} =
   ## Thread safe sonic query
   let msg = create(SonicMessageTuple)
-  msg.lock = newAsyncLock()
   msg.args.topic = topic
   msg.args.keywords = keywords
   msg.args.lang=  lang
   msg.args.limit = limit
-  await sonicIn[].put(msg)
-  while true:
-    withAsyncLock(msg.lock):
-      if msg.resp.len > 0:
-        result.add msg.resp
-        break
-    await sleepAsync(10)
+  msg.id = getMonoTime()
+  sendAndWait(queryChan)
 
 proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[string]] {.async.} =
+  # let msg = create(SonicMessageTuple)
   let msg = create(SonicMessageTuple)
-  msg.lock = newAsyncLock()
   msg.args.topic = topic
   msg.args.keywords = input
   msg.args.limit = limit
-  await sonicSugIn[].put(msg)
-  while true:
-    withAsyncLock(msg.lock):
-      if msg.resp.len > 0:
-        result.add msg.resp
-        break
-    await sleepAsync(10)
-
+  msg.id = getMonoTime()
+  sendAndWait(sugChan)
 
 proc connectSonic() =
   if snc.isnil or not isopen():
@@ -257,54 +272,48 @@ template restartSonic() {.dirty.} =
     closeSonic()
     connectSonic()
 
-proc asyncSonicQueryHandler() {.async.} =
-  while true:
-    let msg = await sonicIn[].get()
-    await querySonic(msg)
-
 proc sonicQueryHandler() {.gcsafe.} =
   connectSonic()
+  var msg: SonicMessage
   while true:
     try:
-      waitFor asyncSonicQueryHandler()
+      queryChan.recv(msg)
+      querySonic(msg)
     except:
       restartSonic()
 
-proc asyncSonicSuggestHandler() {.async.} =
-  while true:
-    stdout.write "search.nim:275"
-    let msg = await sonicSugIn[].get()
-    stdout.write "search.nim:276"
-    await suggestSonic(msg)
-    stdout.write "search.nim:278"
-
 proc sonicSuggestHandler() {.gcsafe.} =
   connectSonic()
+  var msg: SonicMessage
   while true:
     try:
-      waitFor asyncSonicSuggestHandler()
+      # msg = waitfor sonicSugIn[].get()
+      sugChan.recv(msg)
+      suggestSonic(msg)
     except:
       restartSonic()
 
 
 proc initSonic*() {.gcsafe.} =
-  sonicIn = create(AsyncQueue[SonicMessage])
-  sonicIn[] = newAsyncQueue[SonicMessage](64)
-  sonicSugIn = create(AsyncQueue[SonicMessage])
-  sonicSugIn[] = newAsyncQueue[SonicMessage](64)
+  queryChan = newChan[SonicMessage](1000)
+  sugChan = newChan[SonicMessage](1000)
+  sonicQueries = initLockTable[MonoTime, ptr Isolated[SonicMessage]]()
   createThread(sonicQueryThread, sonicQueryHandler)
   createThread(sonicSuggestThread, sonicSuggestHandler)
-  connectSonic()
+  connectSonic() # push operations happen on main thread
 
 when isMainModule:
   initSonic()
   # pushAllSonic()
   debug "nice"
-  let q = waitFor query("mini", "crossword")
+  echo "search.nim:304"
+  let q = waitFor query("mini", "crossword", "it")
   echo q
-  debug "asd"
-  let qq = waitFor suggest("mini", "mini")
+  let qq = waitFor query("mini", "mini", "es")
   echo qq
+  # debug "asd"
+  # let qq = waitFor suggest("mini", "mini")
+  # echo qq
   # push(relpath)
   # discard sncc.trigger("consolidate")
   # echo suggest("web", "web host")

@@ -30,3 +30,4 @@ requires "zippy"
 requires "https://github.com/ringabout/Xio" # dep of fsnotify, but `xio` link in nimble index is broken
 requires "fsnotify"
 requires "zip"
+requires "threading"

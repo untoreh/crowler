@@ -69,7 +69,9 @@ proc getLastArticles*(topic: string): Future[seq[Article]] {.async.} =
 
 proc getArticlePy*(topic: string, page: string | int, slug: string): Future[PyObject] {.async.} =
 
-    let pg = string(page)
+    var pg: string
+    when not (page is string):
+      pg = page
 
     if (await topic.getState)[0] != -1:
         let donearts = await topicDonePages(topic)

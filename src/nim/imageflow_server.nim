@@ -66,23 +66,29 @@ proc handleImg*(relpath: string): Future[(string, string)] {.async.} =
           debug "ifl server: img processed"
   return (resp, mime)
 
+template submitImg(val: untyped = ("", "")) {.dirty.} =
+  imgOut[imgKey] = val
+  imgEvent[].fire; imgEvent[].clear
+
 proc processImgData(imgKey: (string, string, string)) {.async.} =
   # push img to imageflow context
   let (decodedUrl, width, height) = imgKey
   let data = (await decodedUrl.imgData)
+  if data.len == 0:
+    submitImg()
+    return
   try:
+
     await imgLock[].acquire
     if not addImg(data):
       return
     let query = fmt"width={width}&height={height}&mode=max&format=webp"
     logall "ifl server: serving image hash: {hash(await decodedUrl.imgData)}, size: {width}x{height}"
     # process and send back
-    imgOut[imgKey] = processImg(query)
-
-    imgEvent[].fire; imgEvent[].clear
+    submitImg:
+      processImg(query)
   except CatchableError:
-    imgOut[imgKey] = ("", "")
-    imgEvent[].fire; imgEvent[].clear
+    submitImg()
   finally:
     imgLock[].release
 

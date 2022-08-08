@@ -11,7 +11,6 @@ template withLock*(l: AsyncLock, code: untyped): untyped =
     finally:
         l.release()
 
-
 template asyncLockedStore*(name: untyped): untyped {.dirty.} =
     type
         `AsyncLock name Obj`[K, V] = object
@@ -53,8 +52,17 @@ template asyncLockedStore*(name: untyped): untyped {.dirty.} =
             for k in tbl.storage.keys():
                 yield k
 
+    iterator pairs*[K, V](tbl: `AsyncLock name`[K, V]): K =
+      try:
+        await tbl.lock.acquire
+        for k in tbl.storage.keys():
+          tbl.lock.release
+          yield k
+          await tbl.lock.acquire
+      finally:
+        tbl.lock.release
 
-    proc `[]=`*[K, V](tbl: `AsyncLock name`[K, V], k: K, v: V): Future[void] {.async.} =
+    proc `[]=`*[K, V](tbl: `AsyncLock name`[K, V], k: K, v: V) =
         withLock(tbl.lock):
             tbl.storage[k] = v
 

@@ -36,6 +36,13 @@ template withASyncLock*(l: AsyncLock, code) =
   finally:
     l.release()
 
+template withWaitLock*(l: AsyncLock, code) =
+  try:
+    waitFor l.acquire()
+    code
+  finally:
+    l.release()
+
 template procName*(): string = strutils.split(getStacktrace())[^2]
 
 template lgetOrPut*[T, K](c: T, k: K, v: untyped): untyped =

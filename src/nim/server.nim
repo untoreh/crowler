@@ -368,27 +368,25 @@ template handleCacheClear() =
           "s", "g"].toHashSet
       reqCtx.cached = false
       reqCtx.norm_capts = uriTuple(reqCtx.url.path)
-      {.cast(gcsafe).}:
-        try:
-          if reqCtx.norm_capts.art != "" and
-            not (reqCtx.norm_capts.topic in notTopics) and
-            not (reqCtx.norm_capts.page in notTopics):
-            debug "cache: deleting article cache {reqCtx.norm_capts.art:.40}"
-            await deleteArt(reqCtx.norm_capts, cacheOnly = true)
-          elif reqCtx.norm_capts.topic == "i":
-            let k = hash(reqCtx.url.path & reqCtx.url.query)
-            pageCache[].del(k)
-          elif reqCtx.norm_capts.topic in notTopics:
-            debug "cache: deleting key {reqCtx.key}"
-            pageCache[].del(reqCtx.key)
-          else:
-            debug "cache: deleting page {reqCtx.url.path}"
-            deletePage(reqCtx.url.path)
-        except:
-          warn "cache: deletion failed for {reqCtx.norm_capts:.120}"
+      try:
+        if reqCtx.norm_capts.art != "" and
+          not (reqCtx.norm_capts.topic in notTopics) and
+          not (reqCtx.norm_capts.page in notTopics):
+          debug "cache: deleting article cache {reqCtx.norm_capts.art:.40}"
+          await deleteArt(reqCtx.norm_capts, cacheOnly = true)
+        elif reqCtx.norm_capts.topic == "i":
+          let k = hash(reqCtx.url.path & reqCtx.url.query)
+          pageCache[].del(k)
+        elif reqCtx.norm_capts.topic in notTopics:
+          debug "cache: deleting key {reqCtx.key}"
+          pageCache[].del(reqCtx.key)
+        else:
+          debug "cache: deleting page {reqCtx.url.path}"
+          deletePage(reqCtx.url.path)
+      except:
+        warn "cache: deletion failed for {reqCtx.norm_capts:.120}"
     of '1':
-      {.cast(gcsafe).}:
-        pageCache[].clear()
+      pageCache[].clear()
       warn "cache: cleared all pages"
     else:
       discard

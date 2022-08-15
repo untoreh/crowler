@@ -29,7 +29,7 @@ let pyGlo* = pyGlobals()
 pygil.release()
 
 template withPyLock*(code): auto =
-    {.locks: [pyGilLock].}:
+    {.locks: [pyGil].}:
         try:
             # echo getThreadId(), " -- ", getCurrentProcessId(), " -- ", procName()
             await pygil.acquire()
@@ -41,7 +41,7 @@ template withPyLock*(code): auto =
             pygil.release()
 
 template syncPyLock*(code): auto =
-    {.locks: [pyGilLock].}:
+    {.locks: [pyGil].}:
         try:
             pygil.globalAcquire()
             code
@@ -49,6 +49,10 @@ template syncPyLock*(code): auto =
             raise getCurrentException()
         finally:
             pygil.release()
+
+template fPyLocked*(code) =
+    {.locks: [pyGil].}:
+      code
 
 # in release mode cwd is not src/nim
 pygil.globalAcquire()
@@ -80,7 +84,7 @@ proc relpyImport*(relpath: string, prefix = prefixPy): PyObject =
         raise newException(ValueError, fmt"Cannot import python module, pwd is {getCurrentDir()}, trying to load {abspath} {'\n'} {e}")
 
 # we have to load the config before utils, otherwise the module is "partially initialized"
-{.push guard: pyGilLock.}
+{.push guard: pyGil.}
 pygil.globalAcquire()
 import cfg
 block:
@@ -97,7 +101,7 @@ macro pyObjPtr*(defs: varargs[untyped]): untyped =
         name = d[0]
         def = d[1]
     result.add quote do:
-        let `name` = create(PyObject)
+        let `name` {.guard: pyGil.} = create(PyObject)
         `name`[] = `def`
 
 macro pyObjPtrExp*(defs: varargs[untyped]): untyped =
@@ -107,7 +111,7 @@ macro pyObjPtrExp*(defs: varargs[untyped]): untyped =
         name = d[0]
         def = d[1]
     result.add quote do:
-        let `name`* = create(PyObject)
+        let `name`* {.guard: pyGil} = create(PyObject)
         `name`[] = `def`
 
 # https://github.com/yglukhov/nimpy/issues/164
@@ -135,21 +139,22 @@ pyObjPtr(
     # PyDictClass = pybi[].getattr("dict")
     # PyZArray = pyza.getAttr("Array")
 pygil.release()
-{.pop guard:pyGilLock.}
+{.pop.}
 var PyNone* {.threadvar.}: PyObject
 
-proc pyhasAttr*(o: PyObject, a: string): bool = pybi[].hasattr(o, a).to(bool)
+from utils import withLocks
+proc pyhasAttr*(o: PyObject, a: string): bool {.withLocks: [pyGil].} = pybi[].hasattr(o, a).to(bool)
 
-proc pyclass(py: PyObject): PyObject {.inline.} =
+proc pyclass(py: PyObject): PyObject {.inline, withLocks: [pyGil].} =
     pybi[].type(py)
 
 proc pytype*(py: PyObject): string =
     py.pyclass.getattr("__name__").to(string)
 
-proc pyisbool*(py: PyObject): bool {.exportpy.} =
+proc pyisbool*(py: PyObject): bool {.withLocks: [pyGil].} =
     return pybi[].isinstance(py, PyBoolClass[]).to(bool)
 
-proc pyisnone*(py: PyObject): bool {.exportpy, gcsafe.} =
+proc pyisnone*(py: PyObject): bool {.gcsafe, withLocks: [pyGil].} =
     assert not pybi[].isnil, "pyn: pybi should not be nil"
     assert pyhasAttr(pybi[], "isinstance"), "pyn: pybi[].isinstance should not be nil"
     assert not PyNoneClass[].isnil, "pyn: PyNoneClass should not be nil"
@@ -157,18 +162,18 @@ proc pyisnone*(py: PyObject): bool {.exportpy, gcsafe.} =
     assert not check.isnil, "pyn: check should not be nil"
     return py.isnil or check.to(bool)
 
-proc pyisdatetime*(py: PyObject): bool {.exportpy.} =
+proc pyisdatetime*(py: PyObject): bool {.withLocks: [pyGil].} =
     return pybi[].isinstance(py, PyDateTimeClass[]).to(bool)
 
-proc pyisstr*(py: PyObject): bool {.exportpy.} =
+proc pyisstr*(py: PyObject): bool {.withLocks: [pyGil].} =
     return pybi[].isinstance(py, PyStrClass[]).to(bool)
 
-proc pyisint*(py: PyObject): bool {.exportpy.} =
+proc pyisint*(py: PyObject): bool {.withLocks: [pyGil].} =
     return pybi[].isinstance(py, pybi[].getattr("int")).to(bool)
 
-proc pyiszarray*(py: PyObject): bool {.exportpy.} =
-    return pybi[].isinstance(py, PyZArray[]).to(bool)
 
+proc pyiszarray*(py: PyObject): bool {.withLocks: [pyGil].} =
+    return pybi[].isinstance(py, PyZArray[]).to(bool)
 
 const ymdFormat* = "yyyy-MM-dd"
 const isoFormat* = "yyyy-MM-dd'T'HH:mm:ss"
@@ -282,10 +287,10 @@ proc pysome*(pys: varargs[PyObject], default = new(PyObject)): PyObject =
             return py
     raise e
 
-proc len*(py: PyObject): int =
+proc len*(py: PyObject): int {.withLocks: [pyGil].} =
     pybi[].len(py).to(int)
 
-proc isa*(py: PyObject, tp: PyObject): bool =
+proc isa*(py: PyObject, tp: PyObject): bool {.withLocks: [pyGil].} =
     pybi[].isinstance(py, tp).to(bool)
 
 import utils
@@ -304,6 +309,9 @@ proc pyget*[T](py: PyObject, k: string, def: T = ""): T =
         else:
             return py.to(T)
 
+converter pyToSeqStr*(py: PyObject): seq[string] =
+  for el in py:
+    result.add el.to(string)
 
 # Exported
 # proc cleanText*(text: string): string {.exportpy.} =

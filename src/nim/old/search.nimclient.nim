@@ -1,4 +1,6 @@
-import strutils,
+
+import sonic,
+       strutils,
        nimpy,
        std/exitprocs,
        os,
@@ -15,7 +17,11 @@ from unicode import runeSubStr, validateUtf8
 import threading/channels
 import std/isolation
 
+from sonic {.all.} import SonicServerError
+export SonicServerError
+
 import
+  sonic,
   types,
   server_types,
   utils,
@@ -28,20 +34,41 @@ import
   topics,
   articles
 
+var
+  snc {.threadvar.}: Sonic
+  sncc {.threadvar.}: Sonic
+  sncq {.threadvar.}: Sonic
+
 pygil.globalAcquire()
 pyObjPtr(
   (Language, pyImport("langcodes").Language),
-  (pySonic, pyImport("sonicsearch")),
   )
 # pyObjPtr((DetectLang, pyImport("translator").detect))
 pygil.release()
 
 const defaultLimit = 10
-const bufsize = 20000 - 256 # FIXME: ingestClient.bufsize returns 0...
+const bufsize = 20000 - 256 # FIXME: snc.bufsize returns 0...
 
-proc isopen(): bool {.withLocks: [pyGil].} =
-  try: pySonic[].isopen().to(bool)
+proc isopen(c=snc): bool =
+  try: c.ping()
   except CatchableError: false
+
+template doclose(c) =
+  if not c.isnil:
+    if c.isopen():
+      try: discard c.quit()
+      except CatchableError: discard
+    else:
+      reset(c)
+
+proc closeSonic() =
+  debug "sonic: closing"
+  # [snc, sncc, sncq]
+  doClose snc
+  doClose sncc
+  doClose sncq
+
+addExitProc(closeSonic)
 
 proc toISO3(lang: string): Future[string] {.async.} =
   withPyLock:
@@ -59,8 +86,6 @@ proc addToBackLog(capts: UriCaptures) =
   let l = join([capts.topic, capts.page, capts.art, capts.lang], ",")
   writeLine(f, l)
 
-var pushLock: ptr AsyncLock
-import std/locks
 proc push*(capts: UriCaptures, content: string) {.async.} =
   ## Push the contents of an article page to the search database
   ## NOTE: NOT thread safe
@@ -74,30 +99,21 @@ proc push*(capts: UriCaptures, content: string) {.async.} =
       break
     try:
       let lang = await capts.lang.toISO3
-      var pushed: bool
-      withPyLock:
-        pushed = pySonic[].push(WEBSITE_DOMAIN,
-                "default", # TODO: Should we restrict search to `capts.topic`?
-          key,
-          cnt,
-          lang = if capts.lang != "en": lang else: "").to(bool)
-      if not pushed:
+      if not snc.push(WEBSITE_DOMAIN,
+              "default", # TODO: Should we restrict search to `capts.topic`?
+        key,
+        cnt,
+        lang = if capts.lang != "en": lang else: ""):
         capts.addToBackLog()
         break
-    except CatchableError:
+    except:
       let e = getCurrentException()[]
       debug "sonic: couldn't push content, {e} \n {capts} \n {key} \n {cnt}"
       capts.addToBackLog()
       block:
-        var f: File
-        try:
-          await pushLock[].acquire
-          f = open("/tmp/sonic_debug.log", fmWrite)
-          write(f, cnt)
-        finally:
-          pushLock[].release
-          if not f.isnil:
-            f.close()
+        let f = open("/tmp/sonic_debug.log", fmWrite)
+        defer: f.close()
+        write(f, cnt)
       break
 
 proc push*(relpath: string) {.async.} =
@@ -122,8 +138,7 @@ proc push*(relpath: string) {.async.} =
 
 proc resumeSonic() {.async.} =
   ## Push all backlogged articles to search database
-  withPyLock:
-    assert isopen()
+  assert (not snc.isnil)
   for l in lines(SONIC_BACKLOG):
     let
       s = l.split(",")
@@ -143,53 +158,44 @@ type
   SonicMessageTuple = tuple[args: SonicQueryArgsTuple, resp: seq[string], done: bool, id: MonoTime]
   SonicMessage = ptr SonicMessageTuple
 
-proc querySonic(msg: SonicMessage) {.async.} =
+proc querySonic(msg: SonicMessage) =
   ## translate the query to source language, because we only index
   ## content in source language
   ## the resulting entries are in the form {page}/{slug}
   defer: msg.done = true
   let (topic, keywords, lang, limit) = msg.args
-  let kws = if lang in TLangsTable and lang != "en":
+  let kws = if lang in TLangsTable:
                 # echo "ok"
                 let lp = (src: lang, trg: SLang.code)
                 # echo "?? ", translate(keywords, lp)
                 var tkw: string
-                tkw = await callTranslator(keywords, lp)
+                syncPyLock:
+                  tkw = waitFor callTranslator(keywords, lp)
                 something tkw, keywords
             else: keywords
   logall "query: kws -- {kws}, keys -- {keywords}"
-  let lang3 = await SLang.code.toISO3
-  var res: PyObject
-  withPyLock:
-    res = pySonic[].query(WEBSITE_DOMAIN, "default", kws, lang = lang3, limit = limit)
-    echo "search.nim:165"
-    echo res
-    if not pyisnone(res):
-      msg.resp.add res.pyToSeqStr()
+  let lang3 = waitFor SLang.code.toISO3
+  let res = sncq.query(WEBSITE_DOMAIN, "default", kws, lang = lang3, limit = limit)
+  msg.resp.add res
 
-proc suggestSonic(msg: SonicMessage) {.async.} =
+proc suggestSonic(msg: SonicMessage) =
   # Partial inputs language can't be handled if we
-  # only ingestClient the source language into sonic
+  # only ingest the source language into sonic
   defer: msg.done = true
   let (topic, input, lang, limit) = msg.args
   logall "suggest: topic: {topic}, input: {input}"
-  var sug: PyObject
-  withPyLock:
-    sug = pySonic[].suggest(WEBSITE_DOMAIN, "default", input.split[^1], limit = limit)
-    if not pyisnone(sug):
-      msg.resp.add sug.pyToSeqStr()
+  let sug = sncq.suggest(WEBSITE_DOMAIN, "default", input.split[^1], limit = limit)
+  msg.resp.add sug
 
 proc deleteFromSonic*(capts: UriCaptures): int =
   ## Delete an article from sonic db
   let key = join([capts.topic, capts.page, capts.art], "/")
-  syncPyLock:
-    discard pySonic[].flush(WEBSITE_DOMAIN, object_name = key)
+  snc.flush(WEBSITE_DOMAIN, object_name = key)
 
 proc pushAllSonic*(clear = true) {.async.} =
   await syncTopics()
   if clear:
-    withPyLock:
-      discard pySonic[].flush(WEBSITE_DOMAIN)
+    discard snc.flush(WEBSITE_DOMAIN)
   for (topic, state) in topicsCache:
     let done = state.group[]["done"]
     for page in done:
@@ -204,8 +210,7 @@ proc pushAllSonic*(clear = true) {.async.} =
             content = ar.pyget("content").sanitize
           echo "pushing ", relpath
           await push(capts, content)
-  withPyLock:
-    discard pySonic[].trigger("consolidate")
+  discard sncc.trigger("consolidate")
 
 var queryChan: Chan[SonicMessage]
 var sugChan: Chan[SonicMessage]
@@ -256,61 +261,71 @@ proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[string]] {
   msg.id = getMonoTime()
   sendAndWait(sugChan)
 
-proc connectSonic(reconnect=false) =
-  var notConnected: bool
-  syncPyLock:
-    discard pySonic[].connect(SONIC_ADDR, SONIC_PORT, SONIC_PASS, reconnect=reconnect)
-  syncPyLock:
-    doassert pySonic[].is_connected.to(bool), "Is Sonic running?"
+proc connectSonic() =
+  if snc.isnil or not isopen():
+    try:
+      debug "sonic: init"
+      snc = open(SONIC_ADDR, SONIC_PORT, SONIC_PASS, SonicChannel.Ingest)
+      sncc = open(SONIC_ADDR, SONIC_PORT, SONIC_PASS, SonicChannel.Control)
+      sncq = open(SONIC_ADDR, SONIC_PORT, SONIC_PASS, SonicChannel.Search)
+      # addExitProc(closeSonic)
+    except CatchableError:
+      qdebug "Couldn't connect to sonic at {SONIC_ADDR}:{SONIC_PORT}."
+  doassert not snc.isnil, "Is Sonic running?"
 
-template restartSonic(what: string) {.dirty.} =
-  let e = getCurrentException()[]
+template restartSonic() {.dirty.} =
+  let ee = getCurrentException()[]
   let name = getCurrentException().name
-  debug what, ": {e}, {name}"
-  if e is OSError:
-    connectSonic(reconnect=true)
+  debug "suggest: {e}, {name}"
+  if ee is OSError:
+    closeSonic()
+    connectSonic()
 
 proc sonicQueryHandler() {.gcsafe.} =
+  connectSonic()
   var msg: SonicMessage
   while true:
     queryChan.recv(msg)
     try:
-      # NOTE: Can't use `asyncSpawn` here, `sleepAsync` will deadlock!
-      waitFor querySonic(msg)
+      querySonic(msg)
     except CatchableError:
-      restartSonic("query")
+      let e = getCurrentException()[]
+      debug "query: failed {e} "
+      restartSonic()
 
 proc sonicSuggestHandler() {.gcsafe.} =
+  connectSonic()
   var msg: SonicMessage
   while true:
     sugChan.recv(msg)
     try:
-      # NOTE: Can't use `asyncSpawn` here, `sleepAsync` will deadlock!
-      waitFor suggestSonic(msg)
+      suggestSonic(msg)
     except CatchableError:
-      restartSonic("suggest")
+      let e = getCurrentException()[]
+      debug "suggest: failed {e} "
+      restartSonic()
+
 
 proc initSonic*() {.gcsafe.} =
   queryChan = newChan[SonicMessage](1000)
   sugChan = newChan[SonicMessage](1000)
   sonicQueries = initLockTable[MonoTime, ptr Isolated[SonicMessage]]()
-  pushLock = create(AsyncLock)
-  pushLock[] = newAsyncLock()
-  connectSonic()
   createThread(sonicQueryThread, sonicQueryHandler)
   createThread(sonicSuggestThread, sonicSuggestHandler)
+  connectSonic() # push operations happen on main thread
 
 when isMainModule:
   initSonic()
   # pushAllSonic()
   debug "nice"
+  echo "search.nim:304"
   let q = waitFor query("mini", "crossword", "it")
   echo q
   let qq = waitFor query("mini", "mini", "es")
   echo qq
-  debug "done"
+  # debug "asd"
   # let qq = waitFor suggest("mini", "mini")
   # echo qq
   # push(relpath)
-  # discard controlClient.trigger("consolidate")
+  # discard sncc.trigger("consolidate")
   # echo suggest("web", "web host")

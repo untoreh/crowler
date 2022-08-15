@@ -73,7 +73,7 @@ macro defIfDom*(kind: static[FcKind]): untyped =
         of dom:
             quote do:
                 var
-                    xq {.inject.} = getTfun(fc.pair).getQueue(xml, fc.pair)
+                    xq {.inject.} = getQueue(xml, fc.pair)
                     xtformsTags {.inject.} = collect(for k in getTForms(xml).keys: k).toHashSet()
         else:
             quote do:
@@ -90,7 +90,7 @@ template translateEnv*(kind: static[FcKind] = xml) {.dirty.} =
         srv = slator.name
     var
         otree = deepcopy(fc.getHtml(kind))
-        q = getTfun(fc.pair).getQueue(kind, fc.pair)
+        q = getQueue(kind, fc.pair)
 
     defIfDom(kind)
 
@@ -301,7 +301,6 @@ proc initThread*() =
     initPunctRgx()
     if vbtmcache.isnil:
         vbtmcache = newLRUCache[array[5, byte], XmlNode](32)
-    initSentsRgx()
     initGlues()
     initQueueCache()
     initSlations()
@@ -347,3 +346,6 @@ when defined(weaveRuntime):
 #     # withWeave:
 #     #     echo timeGo do:
 #     #         discard translateHtml(html, file_path, url_path, pair, slator)
+
+when isMainModule:
+  initThread()

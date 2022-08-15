@@ -45,7 +45,7 @@ proc setLangLinks*(url: string) {.gcsafe.} =
         link.setAttr("href", langUrl(code, url))
 
 proc langLinksNodes*(path: string, rel: static bool = false): seq[VNode] {.gcsafe.} =
-    let srcUrl = if rel: path
+    let srcUrl = when rel: path
                  else: $(WEBSITE_URL / path)
     setLangLinks(srcUrl)
     langLinks
@@ -59,11 +59,10 @@ proc langLinksHtml*(path: string, rel: static bool = false): string =
 
 proc ldjLanguages*(): seq[string] = collect(for (lang, _) in TLangs: lang)
 
-var sortedLanguages = (
-    collect(for lang in TLangs: lang),
-    SLang.code
-)
-sortedLanguages[0].sort
+const sortedLanguages = block:
+                          var s = (collect(for lang in TLangs: lang), SLang.code)
+                          s[0].sort
+                          s
 
 const countryLangs = {
     "ar": "sa",
@@ -87,15 +86,14 @@ const countryLangs = {
 proc langToCountry(lang: string): string {.inline.} = countryLangs.getOrDefault(lang, lang)
 
 const langCssClasses = "flag flag-"
-proc langsList*(path: string): VNode =
-    {.cast(gcsafe).}:
-        buildHtml(ul(class = "lang-list")):
-            for (name, code) in sortedLanguages[0]:
-                let pathCode = if code == sortedLanguages[1]: ""
-                            else: code
-                a(class = "lang-link lang-"&code, href = pathLink(path, pathcode)):
-                    span(class = langCssClasses & langToCountry(code))
-                    text name
+proc langsList*(path: string): VNode {.gcsafe.} =
+    buildHtml(ul(class = "lang-list")):
+        for (name, code) in sortedLanguages[0]:
+            let pathCode = if code == sortedLanguages[1]: ""
+                        else: code
+            a(class = "lang-link lang-"&code, href = pathLink(path, pathcode)):
+                span(class = langCssClasses & langToCountry(code))
+                text name
 
 proc ldjTrans*(relpath, srcurl, trgurl: string, lang: langPair, a: Article): VNode =
     ldj.translation(srcurl, trgurl, lang.srcLangName,

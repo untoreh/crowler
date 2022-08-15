@@ -6,7 +6,8 @@ import locks,
        karax/vdom,
        macros,
        uri,
-       strutils
+       strutils,
+       nre
 
 import
     cfg,
@@ -55,6 +56,8 @@ proc head_tform(el: VNode, basedir: string, relpath: string, pair: langPair) {.g
                         if (not el.hasAttr("hreflang")):
                             rewriteUrl(el, pair.trg)
                     of $amphtml:
+                        let href = el.getattr("href")
+                        el.setAttr("href", href.replace(sre "amp/?", ""))
                         rewriteUrl(el, ("amp/" & pair.trg))
                         stack -= 1
                     else: discard

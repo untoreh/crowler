@@ -45,12 +45,12 @@ proc initStatsDB*(): StatsDB =
   openDB(db, kt = StringKeys)
   result = cast[StatsDB](db)
 
-proc initStats*() {.raises: [].} =
+proc initStats*()  =
   try:
     if statsDB.isnil:
       let sdb {.global.} = initStatsDB()
       statsDB = sdb.unsafeAddr
-  except:
+  except CatchableError:
     let e = getCurrentException()[]
     qdebug "{e}"
 
@@ -60,14 +60,16 @@ proc `[]=`*[K, V](c: ptr StatsDB, k: K, v: V) {.inline.} =
 proc `[]`*(c: ptr StatsDB, k: string): int32 {.inline.} =
   max(0, c[].getImpl(k, false))
 
-proc del*[K](c: ptr StatsDB, k: K) =
+proc del*[K](c: ptr StatsDB, k: K) {.gcsafe.} =
   withLock(tLock):
     cast[LRUTrans](c[]).coll.inTransaction do (ct: CollectionTransaction):
-      ct.del(k.asData)
-      ct.commit()
+        {.cast(gcsafe).}:
+          discard ct.del(k.asData)
+        ct.commit()
 
-proc del*(c: ptr StatsDB, capts: UriCaptures) =
-  c.del(join([capts.topic, capts.art]))
+proc del*(c: ptr StatsDB, capts: UriCaptures) {.gcsafe.} =
+  {.cast(gcsafe).}:
+    c.del(join([capts.topic, capts.art]))
 
 proc updateHits*(capts: UriCaptures) =
   let ak = join([capts.topic, capts.art])

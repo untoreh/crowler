@@ -199,14 +199,12 @@ proc articleTree*(capts: auto): Future[VNode] {.async.} =
     if not pyisnone(py):
       debug "article: building post"
       a = initArticle(py, parseInt(capts.page))
-  assert not a.isnil
-  let post = await buildPost(a)
-  if not post.isnil:
-    debug "article: processing"
-    return await processPage(capts.lang, capts.amp, post, relpath = capts.art)
-  else:
-    assert not py.isnil
-    debug "article: could not fetch python article, {py}"
+  if not a.isnil:
+    let post = await buildPost(a)
+    if not post.isnil:
+      debug "article: processing"
+      return await processPage(capts.lang, capts.amp, post, relpath = capts.art)
+  debug "article: could not fetch python article."
 
 proc articleHtml*(capts: auto): Future[string] {.gcsafe, async.} =
   let t = await articleTree(capts)

@@ -90,9 +90,8 @@ proc fetchSiteMap*(topic: string): Future[string] {.async.} =
         doassert sizeof(sm) * sm.len < maxSize
         sm
 
-proc clearSiteMap*(topic: string) =
-    {.cast(gcsafe)}:
-        pageCache[].del(topic.sitemapKey)
+proc clearSiteMap*(topic: string) {.gcsafe.} =
+    pageCache[].del(topic.sitemapKey)
 
 {.pop gcsafe.}
 

@@ -18,28 +18,26 @@ import
   shorturls
 
 var
-  facebookUrlStr: string
-  twitterUrlStr: string
   facebookUrl*: ptr string
   twitterUrl*: ptr string
 
 proc initSocial*() {.gcsafe.} =
   syncPyLock:
-    {.cast(gcsafe).}:
-      facebookUrlStr = site[].fb_page_url.to(string)
-      twitterUrlStr = site[].twitter_url.to(string)
-      facebookUrl = facebookUrlStr.unsafeAddr
-      twitterUrl = twitterUrlStr.unsafeAddr
+    facebookUrl = create(string)
+    facebookUrl[] = site[].fb_page_url.to(string)
+    twitterUrl = create(string)
+    twitterUrl[] = site[].twitter_url.to(string)
 
 proc pathLink*(path: string, code = "", rel = true,
     amp = false): string {.gcsafe.} =
   let (dir, name, _) = path.splitFile
+  let name_cleaned = name.replace(sre "(index|404)$", "")
   $(
       (if rel: baseUri else: WEBSITE_URL) /
       (if amp: "amp/" else: "") /
       code /
       dir /
-      (name.replace(sre("(index|404)$"), ""))
+      name_cleaned
       )
 
 proc buildImgUrl*(ar: Article; cls = "image-link"): VNode =

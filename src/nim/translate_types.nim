@@ -24,9 +24,12 @@ type
         name: string
         code: string
     langPair* = tuple[src: string, trg: string]
+    TFunc* = proc(src: string, lang: langPair): Future[string] {.gcsafe.} ## interface for translation function
     ServiceTable* = Table[langPair, PyObject] ## Maps the api of the wrapped service
     TranslatorObj = object ## An instance of a translation service
-        py*: PyObject
+        pymod*: PyObject # module
+        pycls*: PyObject # instance of class inside module
+        pytranslate*: PyObject # the function that should implement TFunc
         tr*: ServiceTable
         apis*: HashSet[string]
         provider*: string # must belong in `apis`
@@ -38,12 +41,10 @@ type
         bufsize*: int
         glues*: seq[(string, Regex)]
         sz*: int
-        call*: TFunc
     QueueXml* = object of Queue
         bucket*: seq[XmlNode]
     QueueDom* = object of Queue
         bucket*: seq[VNode]
-    TFunc* = proc(src: string, lang: langPair): Future[string] {.gcsafe.} ## the proc that wraps a translation service call
     FileContextBase = object of RootObj
         file_path*: string
         url_path*: string
@@ -175,10 +176,9 @@ proc initGlues*() =
         collect(for (sep, _) in glues: sep.len)
     gluePadding *= 2
 
-proc initQueue*[T](f: TFunc, pair: langPair): T =
+proc initQueue*[T](pair: langPair): T =
     result.glues = glues
     result.bufsize = 5000
-    result.call = f
     result.pair = pair
 
 import hashes
@@ -200,17 +200,17 @@ macro getCachedQueue(k: Hash, kind: static[int]): untyped =
 proc setCachedQueue(k: Hash, v: QueueXml) = queueXmlCache[k] = v
 proc setCachedQueue(k: Hash, v: QueueDom) = queueDomCache[k] = v
 
-macro getQueue*(f: TFunc, kind: static[FcKind], pair: langPair): untyped =
+macro getQueue*(kind: static[FcKind], pair: langPair): untyped =
     let tp = case kind:
         of xml: QueueXml
         else: QueueDom
     quote do:
-        let k = hash((`f`, `kind`, `pair`))
+        let k = hash((`kind`, `pair`))
         var q: `tp`
         try:
             q = getCachedQueue(k, static(`kind`))
         except KeyError:
-            q = initQueue[`tp`](`f`, `pair`)
+            q = initQueue[`tp`](`pair`)
             setCachedQueue(k, q)
         q.bucket.setLen 0
         q.sz = 0

@@ -109,21 +109,20 @@ proc getAuthor*(a: Article): string {.inline.} =
         else: a.url.parseuri().hostname
     else: a.author
 
-proc deleteArt*(capts: UriCaptures, cacheOnly=false) {.async.} =
+proc deleteArt*(capts: UriCaptures, cacheOnly=false) {.async, gcsafe.} =
     let
         artPath = getArticlePath(capts)
         fpath = SITE_PATH / artPath
     doassert capts.topic != ""
     doassert capts.art != ""
     doassert capts.page != ""
-    {.cast(gcsafe).}:
-        pageCache[].del(fpath)
-        pageCache[].del(SITE_PATH / "amp" / artPath)
-        # remove statistics about article
-        statsDB.del(capts)
-        for lang in TLangsCodes:
-            pageCache[].del(SITE_PATH / "amp" / lang / artPath)
-            pageCache[].del(SITE_PATH / lang / artPath)
+    pageCache[].del(fpath)
+    pageCache[].del(SITE_PATH / "amp" / artPath)
+    # remove statistics about article
+    statsDB.del(capts)
+    for lang in TLangsCodes:
+        pageCache[].del(SITE_PATH / "amp" / lang / artPath)
+        pageCache[].del(SITE_PATH / lang / artPath)
     if not cacheOnly:
         let tg = (await topicsCache.fetch(capts.topic)).group[]
         let pageArts = tg[$topicData.done][capts.page]

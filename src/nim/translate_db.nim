@@ -144,7 +144,7 @@ proc contains*(t: LRUTrans, k: int64): bool =
 
 proc contains*[K: not int64](t: LRUTrans, k: K): bool = hash(k).int64 in t
 
-proc clear*(t: LRUTrans) =
+proc clear*(t: LRUTrans) {.gcsafe.} =
     withLock(tLock):
         var ks: seq[int64]
         t.coll.inSnapshot do (cs: CollectionSnapshot):
@@ -153,7 +153,8 @@ proc clear*(t: LRUTrans) =
             ks = collect(for (k, _) in curs.pairs: k.asInt64)
         t.coll.inTransaction do (ct: CollectionTransaction):
             for k in ks:
-                ct.del(k)
+              {.cast(gcsafe).}:
+                discard ct.del(k)
             ct.commit
 
 proc delete*(t: LRUTrans) = removeDir(t.db.path)
@@ -232,14 +233,17 @@ iterator items*(c: Collection not nil, td = string): auto =
                  cast[td](decompress(trans.zstd_d,
                                          curs.value.asByteSeq))))
 
-proc del*(c: CollectionNotNil, k: int64) =
-    withLock(tLock):
-        c.inTransaction do (ct: CollectionTransaction):
-            ct.del(k.asData)
-            ct.commit()
+proc del*(c: CollectionNotNil, k: int64) {.gcsafe.} =
+  withLock(tLock):
+    c.inTransaction do (ct: CollectionTransaction):
+        {.cast(gcsafe).}:
+          discard ct.del(k.asData)
+        ct.commit()
 
-proc del*[T: not int64](c: CollectionNotNil, k: T) = c.del(hash(k).int64)
-proc del*[T](t: LRUTrans, k: T) = t.coll.del(k)
+proc del*[T: not int64](c: CollectionNotNil, k: T) {.gcsafe.} =
+  c.del(hash(k).int64)
+proc del*[T](t: LRUTrans, k: T) {.gcsafe.} =
+  t.coll.del(k)
 
 when isMainModule:
     import strutils, sequtils, sugar

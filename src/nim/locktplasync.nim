@@ -96,6 +96,7 @@ template asyncLockedStore*(name: untyped): untyped {.dirty.} =
 
     proc del*[K](tbl: `AsyncLock name`, k: K): Future[void] {.async.} =
         withLock(tbl.lock):
+          {.cast(gcsafe).}:
             tbl.storage.del(k)
 
     proc pop*[K, V](tbl: var `AsyncLock name`, k: K, v: var V): Future[bool] {.async.} =

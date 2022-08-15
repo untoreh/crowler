@@ -29,6 +29,16 @@ const baseUri* = initUri()
 var loggingLock: Lock
 initLock(loggingLock)
 
+macro withLocks*(l: untyped, def: untyped): untyped =
+  ## Locks for definitions with a `body`
+  let body = def.body
+  let lockedBody = newNimNode(nnkStmtList)
+  lockedBody.add quote do:
+    {.locks: `l`}:
+      `body`
+  def.body = lockedBody
+  return def
+
 template withASyncLock*(l: AsyncLock, code) =
   try:
     await l.acquire()
@@ -98,11 +108,11 @@ macro logall*(code: untyped): untyped =
 
 template sdebug*(code) =
     try: debug code
-    except: discard
+    except CatchableError: discard
 
 template qdebug*(code) =
     try: debug code
-    except: quit()
+    except CatchableError: quit()
 
 macro warn*(code: untyped): untyped =
     if logLevelMacro >= lvlWarn:
@@ -115,7 +125,7 @@ macro warn*(code: untyped): untyped =
 
 template swarn*(code) =
     try: warn code
-    except: discard
+    except CatchableError: discard
 
 macro info*(code: untyped): untyped =
     if logLevelMacro <= lvlInfo:
@@ -389,8 +399,8 @@ iterator filter*(tree: var XmlNode, tag = "", kind = xnElement): XmlNode {.gcsaf
 iterator vflatorder*(tree: VNode): VNode {.closure.} =
     for el in items(tree):
         if len(el) > 0:
+            let po = vflatorder
             {.cast(gcsafe).}:
-                let po = vflatorder
                 for e in po(el):
                     yield e
         yield el
@@ -417,10 +427,11 @@ proc find*(node: VNode, kind: VNodeKind, attr: (string, string)): VNode =
             return n
     return node
 
-proc initStyle*(path: static[string]): VNode =
-  {.cast(gcsafe).}:
-    let sty {.global.} = readFile(path)
-    result = tree(VNodeKind.style, verbatim(sty))
+proc initStyle*(path: static[string]): VNode {.gcsafe.} =
+  let sty {.global.} = create(string)
+  if unlikely(len(sty[]) == 0):
+    sty[] = readFile(path)
+  result = tree(VNodeKind.style, verbatim(sty[]))
 
 proc initStyleStr*(s: sink string): VNode =
     result = tree(VNodeKind.style, verbatim(s))
@@ -475,7 +486,7 @@ proc setText*(el: VNode, v: auto) =
 
 proc hasAttr*(el: XmlNode, k: string): bool = (not el.attrs.isnil) and el.attrs.haskey k
 proc getAttr*(el: XmlNode, k: string): lent string = el.attrs[k]
-proc getAttr*(el: XmlNode, k: string, v: string): string =
+proc getAttr*(el: XmlNode, k: string, v: string): auto =
     if el.hasAttr(k):
         el.getAttr(k)
     else:
@@ -543,131 +554,130 @@ pragmaVars(Regex, threadvar, sentsRgx1, sentsRgx2, sentsRgx3, sentsRgx4, sentsRg
         sentsRgx43, sentsRgx44, sentsRgx45, sentsRgx46, sentsRgx47, sentsRgx48, sentsRgx49,
         sentsRgx50, sentsRgx51, sentsRgx52, sentsRgx53, sentsRgx54)
 
-proc initSentsRgx*() =
-    if sentsRgx1.isnil:
-        sentsRgx1 = re"([?!.])\s"
-        sentsRgx2 = re"\r"
-        sentsRgx3 = re"\b([a-z]+\?) ([A-Z][a-z]+)\b"
-        sentsRgx4 = re"\b([a-z]+ \.) ([A-Z][a-z]+)\b"
-        sentsRgx5 = re"\n([.!?]+)\n"
-        sentsRgx6 = re"\[([^\[\]\(\)]*)\n([^\[\]\(\)]*)\]"
-        sentsRgx7 = re"\(([^\[\]\(\)]*)\n([^\[\]\(\)]*)\)"
-        sentsRgx8 = re"\[([^\[\]]{0,250})\n([^\[\]]{0,250})\]"
-        sentsRgx9 = re"\(([^\(\)]{0,250})\n([^\(\)]{0,250})\)"
-        sentsRgx10 = re"\[((?:[^\[\]]|\[[^\[\]]*\]){0,250})\n((?:[^\[\]]|\[[^\[\]]*\]){0,250})\]"
-        sentsRgx11 = re"\(((?:[^\(\)]|\([^\(\)]*\)){0,250})\n((?:[^\(\)]|\([^\(\)]*\)){0,250})\)"
-        sentsRgx12 = re"\.\n([a-z]{3}[a-z-]{0,}[ \.\:\,])"
-        sentsRgx13 = re"(\b[A-HJ-Z]\.)\n"
-        sentsRgx14 = re"\n(and )"
-        sentsRgx15 = re"\n(or )"
-        sentsRgx16 = re"\n(but )"
-        sentsRgx17 = re"\n(nor )"
-        sentsRgx18 = re"\n(yet )"
-        sentsRgx19 = re"\n(of )"
-        sentsRgx20 = re"\n(in )"
-        sentsRgx21 = re"\n(by )"
-        sentsRgx22 = re"\n(as )"
-        sentsRgx23 = re"\n(on )"
-        sentsRgx24 = re"\n(at )"
-        sentsRgx25 = re"\n(to )"
-        sentsRgx26 = re"\n(via )"
-        sentsRgx27 = re"\n(for )"
-        sentsRgx28 = re"\n(with )"
-        sentsRgx29 = re"\n(that )"
-        sentsRgx30 = re"\n(than )"
-        sentsRgx31 = re"\n(from )"
-        sentsRgx32 = re"\n(into )"
-        sentsRgx33 = re"\n(upon )"
-        sentsRgx34 = re"\n(after )"
-        sentsRgx35 = re"\n(while )"
-        sentsRgx36 = re"\n(during )"
-        sentsRgx37 = re"\n(within )"
-        sentsRgx38 = re"\n(through )"
-        sentsRgx39 = re"\n(between )"
-        sentsRgx40 = re"\n(whereas )"
-        sentsRgx41 = re"\n(whether )"
-        sentsRgx42 = re"(\be\.)\n(g\.)"
-        sentsRgx43 = re"(\bi\.)\n(e\.)"
-        sentsRgx44 = re"(\bi\.)\n(v\.)"
-        sentsRgx45 = re"(\be\. ?g\.)\n"
-        sentsRgx46 = re"(\bi\. ?e\.)\n"
-        sentsRgx47 = re"(\bi\. ?v\.)\n"
-        sentsRgx48 = re"(\bvs\.)\n"
-        sentsRgx49 = re"(\bcf\.)\n"
-        sentsRgx50 = re"(\bDr\.)\n"
-        sentsRgx51 = re"(\bMr\.)\n"
-        sentsRgx52 = re"(\bMs\.)\n"
-        sentsRgx53 = re"(\bMrs\.)\n"
-        sentsRgx54 = re"\n"
+# proc initSentsRgx*() =
+#     if sentsRgx1.isnil:
+#         sentsRgx1 = re"([?!.])\s"
+#         sentsRgx2 = re"\r"
+#         sentsRgx3 = re"\b([a-z]+\?) ([A-Z][a-z]+)\b"
+#         sentsRgx4 = re"\b([a-z]+ \.) ([A-Z][a-z]+)\b"
+#         sentsRgx5 = re"\n([.!?]+)\n"
+#         sentsRgx6 = re"\[([^\[\]\(\)]*)\n([^\[\]\(\)]*)\]"
+#         sentsRgx7 = re"\(([^\[\]\(\)]*)\n([^\[\]\(\)]*)\)"
+#         sentsRgx8 = re"\[([^\[\]]{0,250})\n([^\[\]]{0,250})\]"
+#         sentsRgx9 = re"\(([^\(\)]{0,250})\n([^\(\)]{0,250})\)"
+#         sentsRgx10 = re"\[((?:[^\[\]]|\[[^\[\]]*\]){0,250})\n((?:[^\[\]]|\[[^\[\]]*\]){0,250})\]"
+#         sentsRgx11 = re"\(((?:[^\(\)]|\([^\(\)]*\)){0,250})\n((?:[^\(\)]|\([^\(\)]*\)){0,250})\)"
+#         sentsRgx12 = re"\.\n([a-z]{3}[a-z-]{0,}[ \.\:\,])"
+#         sentsRgx13 = re"(\b[A-HJ-Z]\.)\n"
+#         sentsRgx14 = re"\n(and )"
+#         sentsRgx15 = re"\n(or )"
+#         sentsRgx16 = re"\n(but )"
+#         sentsRgx17 = re"\n(nor )"
+#         sentsRgx18 = re"\n(yet )"
+#         sentsRgx19 = re"\n(of )"
+#         sentsRgx20 = re"\n(in )"
+#         sentsRgx21 = re"\n(by )"
+#         sentsRgx22 = re"\n(as )"
+#         sentsRgx23 = re"\n(on )"
+#         sentsRgx24 = re"\n(at )"
+#         sentsRgx25 = re"\n(to )"
+#         sentsRgx26 = re"\n(via )"
+#         sentsRgx27 = re"\n(for )"
+#         sentsRgx28 = re"\n(with )"
+#         sentsRgx29 = re"\n(that )"
+#         sentsRgx30 = re"\n(than )"
+#         sentsRgx31 = re"\n(from )"
+#         sentsRgx32 = re"\n(into )"
+#         sentsRgx33 = re"\n(upon )"
+#         sentsRgx34 = re"\n(after )"
+#         sentsRgx35 = re"\n(while )"
+#         sentsRgx36 = re"\n(during )"
+#         sentsRgx37 = re"\n(within )"
+#         sentsRgx38 = re"\n(through )"
+#         sentsRgx39 = re"\n(between )"
+#         sentsRgx40 = re"\n(whereas )"
+#         sentsRgx41 = re"\n(whether )"
+#         sentsRgx42 = re"(\be\.)\n(g\.)"
+#         sentsRgx43 = re"(\bi\.)\n(e\.)"
+#         sentsRgx44 = re"(\bi\.)\n(v\.)"
+#         sentsRgx45 = re"(\be\. ?g\.)\n"
+#         sentsRgx46 = re"(\bi\. ?e\.)\n"
+#         sentsRgx47 = re"(\bi\. ?v\.)\n"
+#         sentsRgx48 = re"(\bvs\.)\n"
+#         sentsRgx49 = re"(\bcf\.)\n"
+#         sentsRgx50 = re"(\bDr\.)\n"
+#         sentsRgx51 = re"(\bMr\.)\n"
+#         sentsRgx52 = re"(\bMs\.)\n"
+#         sentsRgx53 = re"(\bMrs\.)\n"
+#         sentsRgx54 = re"\n"
 
 proc splitSentences*(text: string): seq[string] =
-    {.cast(gcsafe).}:
-        var sents = text.replace(sentsRgx1, "$1\n")
-        sents = sents.replace(sentsRgx2, "")
-        sents = sents.replace(sentsRgx3, "$1\n$2")
-        sents = sents.replace(sentsRgx4, "$1\n$2")
-        sents = sents.replace(sentsRgx5, "$1\n")
+    var sents = text.replace(sre"([?!.])\s", "$1\n")
+    sents = sents.replace(sre"\r", "")
+    sents = sents.replace(sre"\b([a-z]+\?) ([A-Z][a-z]+)\b", "$1\n$2")
+    sents = sents.replace(sre"\b([a-z]+ \.) ([A-Z][a-z]+)\b", "$1\n$2")
+    sents = sents.replace(sre"\n([.!?]+)\n", "$1\n")
 
-        sents = replaceTilNoChange(sents, sentsRgx6, "[$1 $2]")
-        sents = replaceTilNoChange(sents, sentsRgx7, "[$1 $2]")
+    sents = replaceTilNoChange(sents, sre"\[([^\[\]\(\)]*)\n([^\[\]\(\)]*)\]", "[$1 $2]")
+    sents = replaceTilNoChange(sents, sre"\(([^\[\]\(\)]*)\n([^\[\]\(\)]*)\)", "[$1 $2]")
 
-        sents = replaceTilNoChange(sents, sentsRgx8, "[$1 $2]")
-        sents = replaceTilNoChange(sents, sentsRgx9, "($1 $2)")
+    sents = replaceTilNoChange(sents, sre"\[([^\[\]]{0,250})\n([^\[\]]{0,250})\]", "[$1 $2]")
+    sents = replaceTilNoChange(sents, sre"\(([^\(\)]{0,250})\n([^\(\)]{0,250})\)", "($1 $2)")
 
-        sents = replaceTilNoChange(sents, sentsRgx10, "[$1 $2]")
-        sents = replaceTilNoChange(sents, sentsRgx11, "($1 $2)")
+    sents = replaceTilNoChange(sents, sre"\[((?:[^\[\]]|\[[^\[\]]*\]){0,250})\n((?:[^\[\]]|\[[^\[\]]*\]){0,250})\]", "[$1 $2]")
+    sents = replaceTilNoChange(sents, sre"\(((?:[^\(\)]|\([^\(\)]*\)){0,250})\n((?:[^\(\)]|\([^\(\)]*\)){0,250})\)", "($1 $2)")
 
-        sents = replace(sents, sentsRgx12, ". $1")
+    sents = replace(sents, sre"\.\n([a-z]{3}[a-z-]{0,}[ \.\:\,])", ". $1")
 
-        sents = replace(sents, sentsRgx13, "$1 ")
+    sents = replace(sents, sre"(\b[A-HJ-Z]\.)\n", "$1 ")
 
-        sents = replace(sents, sentsRgx14, " $1")
-        sents = replace(sents, sentsRgx15, " $1")
-        sents = replace(sents, sentsRgx16, " $1")
-        sents = replace(sents, sentsRgx17, " $1")
-        sents = replace(sents, sentsRgx18, " $1")
-        # or IN. (this is nothing like a "complete" list...)
-        sents = replace(sents, sentsRgx19, " $1")
-        sents = replace(sents, sentsRgx20, " $1")
-        sents = replace(sents, sentsRgx21, " $1")
-        sents = replace(sents, sentsRgx22, " $1")
-        sents = replace(sents, sentsRgx23, " $1")
-        sents = replace(sents, sentsRgx24, " $1")
-        sents = replace(sents, sentsRgx25, " $1")
-        sents = replace(sents, sentsRgx26, " $1")
-        sents = replace(sents, sentsRgx27, " $1")
-        sents = replace(sents, sentsRgx28, " $1")
-        sents = replace(sents, sentsRgx29, " $1")
-        sents = replace(sents, sentsRgx30, " $1")
-        sents = replace(sents, sentsRgx31, " $1")
-        sents = replace(sents, sentsRgx32, " $1")
-        sents = replace(sents, sentsRgx33, " $1")
-        sents = replace(sents, sentsRgx34, " $1")
-        sents = replace(sents, sentsRgx35, " $1")
-        sents = replace(sents, sentsRgx36, " $1")
-        sents = replace(sents, sentsRgx37, " $1")
-        sents = replace(sents, sentsRgx38, " $1")
-        sents = replace(sents, sentsRgx39, " $1")
-        sents = replace(sents, sentsRgx40, " $1")
-        sents = replace(sents, sentsRgx41, " $1")
+    sents = replace(sents, sre"\n(and )", " $1")
+    sents = replace(sents, sre"\n(or )", " $1")
+    sents = replace(sents, sre"\n(but )", " $1")
+    sents = replace(sents, sre"\n(nor )", " $1")
+    sents = replace(sents, sre"\n(yet )", " $1")
+    # or IN. (this is nothing like a "complete" list...)
+    sents = replace(sents, sre"\n(of )", " $1")
+    sents = replace(sents, sre"\n(in )", " $1")
+    sents = replace(sents, sre"\n(by )", " $1")
+    sents = replace(sents, sre"\n(as )", " $1")
+    sents = replace(sents, sre"\n(on )", " $1")
+    sents = replace(sents, sre"\n(at )", " $1")
+    sents = replace(sents, sre"\n(to )", " $1")
+    sents = replace(sents, sre"\n(via )", " $1")
+    sents = replace(sents, sre"\n(for )", " $1")
+    sents = replace(sents, sre"\n(with )", " $1")
+    sents = replace(sents, sre"\n(that )", " $1")
+    sents = replace(sents, sre"\n(than )", " $1")
+    sents = replace(sents, sre"\n(from )", " $1")
+    sents = replace(sents, sre"\n(into )", " $1")
+    sents = replace(sents, sre"\n(upon )", " $1")
+    sents = replace(sents, sre"\n(after )", " $1")
+    sents = replace(sents, sre"\n(while )", " $1")
+    sents = replace(sents, sre"\n(during )", " $1")
+    sents = replace(sents, sre"\n(within )", " $1")
+    sents = replace(sents, sre"\n(through )", " $1")
+    sents = replace(sents, sre"\n(between )", " $1")
+    sents = replace(sents, sre"\n(whereas )", " $1")
+    sents = replace(sents, sre"\n(whether )", " $1")
 
-        # no sentence breaks in the middle of specific abbreviations
-        sents = replace(sents, sentsRgx42, "$1 $2")
-        sents = replace(sents, sentsRgx43, "$1 $2")
-        sents = replace(sents, sentsRgx44, "$1 $2")
+    # no sentence breaks in the middle of specific abbreviations
+    sents = replace(sents, sre"(\be\.)\n(g\.)", "$1 $2")
+    sents = replace(sents, sre"(\bi\.)\n(e\.)", "$1 $2")
+    sents = replace(sents, sre"(\bi\.)\n(v\.)", "$1 $2")
 
-        # no sentence break after specific abbreviations
-        sents = replace(sents, sentsRgx45, "$1 ")
-        sents = replace(sents, sentsRgx46, "$1 ")
-        sents = replace(sents, sentsRgx47, "$1 ")
-        sents = replace(sents, sentsRgx48, "$1 ")
-        sents = replace(sents, sentsRgx49, "$1 ")
-        sents = replace(sents, sentsRgx50, "$1 ")
-        sents = replace(sents, sentsRgx51, "$1 ")
-        sents = replace(sents, sentsRgx52, "$1 ")
-        sents = replace(sents, sentsRgx53, "$1 ")
+    # no sentence break after specific abbreviations
+    sents = replace(sents, sre"(\be\. ?g\.)\n", "$1 ")
+    sents = replace(sents, sre"(\bi\. ?e\.)\n", "$1 ")
+    sents = replace(sents, sre"(\bi\. ?v\.)\n", "$1 ")
+    sents = replace(sents, sre"(\bvs\.)\n", "$1 ")
+    sents = replace(sents, sre"(\bcf\.)\n", "$1 ")
+    sents = replace(sents, sre"(\bDr\.)\n", "$1 ")
+    sents = replace(sents, sre"(\bMr\.)\n", "$1 ")
+    sents = replace(sents, sre"(\bMs\.)\n", "$1 ")
+    sents = replace(sents, sre"(\bMrs\.)\n", "$1 ")
 
-        sents.split(sentsRgx54)
+    sents.split(sre"\n")
 
 proc readBytes*(f: string): seq[uint8] =
     let s = open(f)

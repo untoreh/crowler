@@ -19,7 +19,7 @@ proc initPageCache*(): PageCache =
     result = initLRUTrans()
     openDB(result)
 
-proc initCache*() {.raises: []} =
+proc initCache*() =
     try:
         if pageCache.isnil:
             let hc {.global.} = initPageCache()

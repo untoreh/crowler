@@ -10,12 +10,11 @@ proc deletePage*(relpath: string) {.gcsafe.} =
         sfx = relpath.suffixPath()
         fpath = SITE_PATH / sfx
         fkey = fpath.hash
-    {.cast(gcsafe).}:
-        pageCache[].del(fkey)
-        pageCache[].del(hash(SITE_PATH / "amp" / sfx))
-        for lang in TLangsCodes:
-            pageCache[].del(hash(SITE_PATH / "amp" / lang / sfx))
-            pageCache[].del(hash(SITE_PATH / lang / sfx))
+    pageCache[].del(fkey)
+    pageCache[].del(hash(SITE_PATH / "amp" / sfx))
+    for lang in TLangsCodes:
+        pageCache[].del(hash(SITE_PATH / "amp" / lang / sfx))
+        pageCache[].del(hash(SITE_PATH / lang / sfx))
 
 proc pubTask*(): Future[void] {.gcsafe, async.} =
     await syncTopics()
@@ -88,8 +87,7 @@ proc deleteLowTrafficArts*(topic: string): Future[void] {.gcsafe, async.} =
             let hits = topic.getHits(capts.art)
             # article has low hit count
             if hits < cfg.CLEANUP_HITS:
-                {.cast(gcsafe).}:
-                    await deleteArt(capts)
+                await deleteArt(capts)
     for n in pagesToReset:
         withPyLock:
             discard site[].update_pubtime(topic, n)

@@ -1,2 +1,4 @@
+- add restart sonic logs, try to fix it
+- check AMP pages redirection
 - PWA manifest
 - research ads

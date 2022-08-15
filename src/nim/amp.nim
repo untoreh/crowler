@@ -305,8 +305,8 @@ proc initAmp*() =
 initAmp()
 
 proc ampLink*(path: string): VNode {.gcsafe.} =
-    ampLinkEl.setAttr("href", pathLink(path, amp = (not path.startsWith("/amp")), rel = false))
-    deepCopy(ampLinkEl)
+  ampLinkEl.setAttr("href", pathLink(path, amp = (not path.startsWith("/amp")), rel = false))
+  deepCopy(ampLinkEl)
 
 # when isMainModule:
 #     let file = SITE_PATH / "vps" / "index.html"

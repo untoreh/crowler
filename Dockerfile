@@ -54,6 +54,7 @@ VOLUME ["/site/data"]
 
 FROM siteenv AS sitedeps1
 # install nimterop separately
+ARG CLEARCACHE=1
 RUN cd /; nimble install -y nimterop -d
 RUN cd /
 RUN cd /site; \

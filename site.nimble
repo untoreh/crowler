@@ -12,7 +12,7 @@ bin           = @["cli"]
 echo "building... "
 requires "nim >= 1.6.0"
 requires "karax#master"
-requires "https://github.com/untoreh/nim-sonic-client#master"
+# requires "https://github.com/untoreh/nim-sonic-client#master"
 requires "taskpools"
 requires "https://github.com/untoreh/nimpy#master" # required for destructors fix
 requires "cligen >= 1.5.23"

@@ -6,6 +6,9 @@ git+https://github.com/nidhaloff/deep-translator@master
 # proxy-checker
 git+https://github.com/orehunt/proxybroker2@master
 
+# nim
+git+https://github.com/xmonader/python-sonic-client@master
+
 # sources
 git+https://github.com/searxng/searxng
 

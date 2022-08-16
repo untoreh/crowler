@@ -36,7 +36,7 @@ module.exports = {
       // extract: true,
       ignore: {
         atrule: ['@font-face'],
-        rule: [/\.i-mdi-.*/],
+        rule: [/\.i-mdi-.*/, /\.flag/],
       },
       rebase: asset => { // inlined sttyles requires specifing absolute assets path (since assets with name only use the path relative to style source link)
         let devpath = "dev/"

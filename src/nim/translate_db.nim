@@ -123,13 +123,14 @@ proc `[]`*[T](t: LRUTrans, k: T): auto = t.getImpl(k, false)
 proc `get`*[K](t: LRUTrans, k: K): auto = t.getImpl(k, true)
 
 proc `[]=`*(t: LRUTrans, k: int64, v: string) {.gcsafe.} =
+    var o: seq[byte]
+    if likely(v.len != 0):
+      o = compress(t.zstd_c, v, cfg.ZSTD_COMPRESSION_LEVEL)
     withLock(tLock):
-        # FIXME: Compress out of scope of the closure otherwise zstd has problems...
-        let v = compress(t.zstd_c, v, cfg.ZSTD_COMPRESSION_LEVEL)
         logall "nimdbx: saving key {k}"
         t.coll.inTransaction do (ct: CollectionTransaction):
             {.cast(gcsafe).}:
-                ct[k] = v
+                ct[k] = o
             ct.commit()
         logall "nimdbx: commited key {k}"
 

@@ -152,8 +152,9 @@ template topicPage*(topic: string, pagenum: string, istop = false) {.dirty.} =
     pagefooter = footer,
     topic = topic)
 
+{.experimental: "strictnotnil".}
 {.push gcsafe.}
-proc processPage*(lang, amp: string, tree: VNode, relpath = "index"): Future[
+proc processPage*(lang, amp: string, tree: VNode not nil, relpath = "index"): Future[
     VNode] {.async.} =
   if lang in TLangsCodes:
     let
@@ -166,10 +167,11 @@ proc processPage*(lang, amp: string, tree: VNode, relpath = "index"): Future[
       result = await translateLang(fc)
     except:
       let e = getCurrentException()[]
-      debug "{e}"
+      debug "page: {e} \n Translation failed."
   else:
     result = tree
-  doassert not result.isnil
+  if result.isnil:
+    error("page: tree cannot be nil")
   if amp != "":
     debug "page: amping"
     result = await result.ampPage
@@ -187,9 +189,10 @@ proc pageFromTemplate*(tpl, lang, amp: string): Future[string] {.async.} =
   let
     slug = slugify(title)
     page = await buildPage(title = title, content = txt, wrap=true)
-    processed = await processPage(lang, amp, page, relpath = tpl)
-  doassert not processed.isnil, fmt"failed to processed template {tpl}, {lang}, {amp}"
-  return processed.asHtml(minify_css = (amp == ""))
+  if not page.isnil:
+    let processed = await processPage(lang, amp, page, relpath = tpl)
+    doassert not processed.isnil, fmt"failed to processed template {tpl}, {lang}, {amp}"
+    return processed.asHtml(minify_css = (amp == ""))
 
 proc articleTree*(capts: auto): Future[VNode] {.async.} =
   # every article is under a page number
@@ -240,7 +243,8 @@ proc buildHomePage*(lang, amp: string): Future[(VNode, VNode)] {.async.} =
                        slug = "",
                        topic = "",
                        desc = WEBSITE_DESCRIPTION)
-  return (pagetree, await processPage(lang, amp, pagetree))
+  if not pagetree.isnil:
+    return (pagetree, await processPage(lang, amp, pagetree))
 
 proc buildSearchPage*(topic: string, kws: string, lang: string): Future[
     string] {.async.} =
@@ -277,7 +281,8 @@ proc buildSearchPage*(topic: string, kws: string, lang: string): Future[
                       slug = "/s/" & kws,
                       pagefooter = footer,
                       topic = topic)
-  return (await processPage(lang, "", tree)).asHtml(minify_css = true)
+  if not tree.isnil:
+    return (await processPage(lang, "", tree)).asHtml(minify_css = true)
 
 proc buildSuggestList*(topic, input: string, prefix = ""): Future[
     string] {.async.} =

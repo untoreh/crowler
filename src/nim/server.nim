@@ -272,9 +272,13 @@ template handleTopic(capts: auto, ctx: Request) =
       assert not pagetree.isnil, "topic: pagetree couldn't be generated."
       let pageReqKey = (capts.topic / capts.page).fp.hash
       pageCache[pageReqKey] = pagetree.asHtml
-      let processed = await processPage(capts.lang, capts.amp, pagetree)
-      assert not processed.isnil, "topic: pagetree couldn't be processed."
-      processed.asHtml(minify_css = (capts.amp == ""))
+      doassert not pagetree.isnil
+      var ppage: string
+      checkNil(pagetree):
+        let processed = await processPage(capts.lang, capts.amp, pagetree)
+        checkNil(processed):
+          ppage = processed.asHtml(minify_css = (capts.amp == ""))
+      ppage
     updateHits(capts)
     await reqCtx.doReply(page, rqid, )
   elif capts.topic in customPages:

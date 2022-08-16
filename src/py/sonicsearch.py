@@ -2,7 +2,9 @@ from sonic import IngestClient, SearchClient, ControlClient
 import log
 
 is_connected = False
-querycl = ingestcl = controlcl = None
+querycl: SearchClient
+ingestcl: IngestClient
+controlcl: ControlClient
 
 def connect(addr, port, psw, reconnect=False):
     import warnings

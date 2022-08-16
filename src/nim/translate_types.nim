@@ -88,7 +88,7 @@ const
     default_service* = base_translator
     skip_nodes* = static(["code", "style", "script", "address", "applet", "audio", "canvas",
             "embed", "time", "video", "svg"])
-    skip_vnodes* = static([VNodeKind.code, style, script, VNodeKind.address, audio, canvas, embed, time, video, svg])
+    skip_vnodes* = static([VNodeKind.code, script, VNodeKind.address, audio, canvas, embed, time, video, svg])
     skip_class* = ["menu-lang-btn", "material-icons", "rss", "sitemap"].static
 
 pygil.globalAcquire()

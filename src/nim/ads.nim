@@ -211,7 +211,8 @@ proc replaceLinks*(str: string, chunksize = 250): Future[string] {.async.} =
             else:
               result.add w
             if positions.len == 0:
-              result.add txt[txtpos..^1]
+              if txtpos <= txt.len:
+                result.add txt[txtpos..^1]
               break
           else:
             result.add w

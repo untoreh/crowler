@@ -20,6 +20,7 @@ import cfg,
        html_misc,
        ads
 
+const CSS_MAX_SIZE = 75000
 const skipNodes = [VNodeKind.iframe, audio, canvas, embed, video, img, button, form, VNodeKind.head, svg]
 const skipNodesXml = ["iframe", "audio", "canvas", "embed", "video", "img", "button", "form",
         "head", "svg", "document"]
@@ -34,12 +35,13 @@ threadVars(
 threadVars(
     (styleStr, string),
     (filesCache, Table[string, string]),
-    (styleScript, seq[string]),
     (ampLinkEl, VNode)
 )
 
 var ampLock: ptr AsyncLock
 const skipFiles = ["bundle.css"]
+import std/sets
+var dupStyles: ptr HashSet[string] ## Don't duplicate styles that appear more than once in the html
 
 proc asLocalUrl(path: string): string {.inline.} =
     $(WEBSITE_URL / path.replace(SITE_PATH, ""))
@@ -90,27 +92,42 @@ proc ampTemplate(): (VNode, VNode, VNode) =
         ampBody.add verbatim(ADSENSE_AMP_BODY)
     (tree, ampHead, ampBody)
 
-proc fetchStyle(el: VNode) {.async.} =
-    let src = cast[string](el.getAttr("href"))
-    if src.startsWith("/"):
-        let path = rootDir / src.strip(leading = true, chars = {'/'})
-        styleScript.add await getFile(path)
+proc maybeStyle(data: string) =
+  if not (data in dupStyles[]):
+    if data.len + styleStr.len < CSS_MAX_SIZE:
+      dupStyles[].incl data
+      styleStr.add data
     else:
-        styleScript.add await getFile(src)
+      warn "amp: skipping style {data.len:.10}..."
 
-proc processHead(inHead: VNode, outHead: VNode) {.async.} =
-    var
-        canonicalUnset = true
+proc fetchStyle(el: VNode) {.async.} =
+  var data: string
+  let src = cast[string](el.getAttr("href"))
+  data.add if src.startsWith("/"):
+      let path = rootDir / src.strip(leading = true, chars = {'/'})
+      await getFile(path)
+  else:
+      await getFile(src)
+  data.maybeStyle
+
+import htmlparser
+proc processHead(inHead: VNode, outHead: VNode, level=0) {.async.} =
+    var canonicalUnset = level == 0
     debug "iterating over {inHead.kind}"
-    for el in inHead.preorder:
+    for el in inHead.preorder(withStyles=true):
         case el.kind:
             of VNodeKind.text, skipNodes:
-                continue
+              continue
+            of VNodeKind.style:
+              if el.len > 0:
+                el[0].text.maybeStyle
             of VNodeKind.link:
                 if canonicalUnset and el.isLink(canonical):
                     outHead.add el
                     canonicalUnset = false
                 elif el.isLink(stylesheet) and (not ("flags-sprite" in el.getattr("href"))):
+                    await el.fetchStyle()
+                elif el.isLink(preload) and el.getattr("as") == "style":
                     await el.fetchStyle()
                 else:
                     outHead.add el
@@ -123,10 +140,20 @@ proc processHead(inHead: VNode, outHead: VNode) {.async.} =
                 else:
                     outHead.add el
             of VNodeKind.verbatim:
-                if ($el).startsWith("<script"):
+                let data = ($el).parseHtml
+                if data.kind == xnElement:
+                  if data.tag == "script":
                     continue
-                else:
+                  elif data.tag == "style":
+                    if data.len > 0:
+                      data[0].text.maybeStyle
+                  else:
                     outHead.add el
+            of VNodekind.noscript:
+              if level == 0:
+                let elNoScript = newVNode(VNodeKind.noscript)
+                await processHead(el, elNoScript, level=1)
+                outHead.add elNoScript
             else:
                 debug "amphead: adding element {el.kind} to outHead."
                 outHead.add el
@@ -195,7 +222,8 @@ proc processBody(inEl, outBody, outHead: VNode, lv = false) {.async.} =
                 inEl.delete(n)
                 l -= 1
             of VNodeKind.style:
-                styleScript.add el[0].text
+                if el.len > 0:
+                  el[0].text.maybeStyle
                 inEl.delete(n)
                 l -= 1
             of VNodeKind.script:
@@ -221,7 +249,10 @@ proc pre(pattern: static string): Regex {.gcsafe.} =
 proc ampPage*(tree: VNode): Future[VNode] {.gcsafe, async.} =
   ## Amp processing uses global vars and requires lock.
   assert not tree.isnil
+  # since using globals we have to lock throughout the page generation
   await ampLock[].acquire()
+  styleStr = ""
+  dupStyles[].clear()
   defer: ampLock[].release()
   let
       inBody = tree.find(VNodeKind.body).deepcopy
@@ -231,15 +262,13 @@ proc ampPage*(tree: VNode): Future[VNode] {.gcsafe, async.} =
   for (a, v) in tree.find(html).attrs:
       outHtml.setattr(a, v)
 
-  styleScript.setLen 0
-  styleStr = ""
 
   await processHead(inHead, outHead)
   await processBody(inBody, outBody, outHead)
 
   # add remaining styles to head
-  styleStr.add styleScript
-      .join("\n")
+  styleStr = styleStr
+      # .join("\n")
       # NOTE: the replacement should be ordered from most frequent to rarest
       # # remove troublesome animations
       .replace(pre"""\s*?@(\-[a-zA-Z]+-)?keyframes\s+?.+?{\s*?.+?({.+?})+?\s*?}""", "")
@@ -248,10 +277,9 @@ proc ampPage*(tree: VNode): Future[VNode] {.gcsafe, async.} =
       # remove charset since not allowed
       .replace(pre"""@charset\s+\"utf-8\"\s*;?/i""", "")
 
-  if styleStr.len > 75000:
-      raise newException(ValueError, "Style size above limit for amp pages.")
+  if unlikely(styleStr.len > CSS_MAX_SIZE):
+      raise newException(ValueError, fmt"Style size above limit for amp pages. {styleStr.len}")
 
-  styleScript.setLen 0
   styleElCustom.delete(0)
   styleElCustom.add verbatim(styleStr)
   return ampDoc
@@ -265,6 +293,8 @@ proc initAmp*() =
   ampLock = create(AsyncLock)
   ampLock[] = newAsyncLock()
   vbtmcache = newLruCache[array[5, byte], XmlNode](32)
+  dupStyles = create(HashSet[string])
+  dupStyles[] = initHashSet[string]()
   rootDir = SITE_PATH
 
   ampDoc = newVNode(VNodeKind.html)
@@ -279,7 +309,6 @@ proc initAmp*() =
   styleElCustom = newVNode(VNodeKind.style)
 
   filesCache = initTable[string, string]()
-  styleScript = newSeq[string]()
 
   ampLinkEl = newVNode(VNodeKind.link)
   ampLinkEl.setAttr("rel", "amphtml")

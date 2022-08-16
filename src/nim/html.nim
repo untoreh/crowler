@@ -127,14 +127,15 @@ proc buildHead*(path: string; description = ""; topic = "";
     breadcrumbs(crumbsNode(ar)).asVNode
 
     # styles
+    initStyle(CSS_CRIT_PATH)
     link(rel = "preconnect", href = "https://fonts.googleapis.com")
     link(rel = "preconnect", href = "https://fonts.gstatic.com", crossorigin = "")
     for s in styleLink(NOTO_FONT_URL): s
-    initStyle(CSS_CRIT_PATH)
     for s in styleLink(CSS_BUN_URL): s
+    let titleText = something(ar.title, WEBSITE_TITLE)
     title:
-      text something(ar.title, WEBSITE_TITLE)
-    meta(name = "title", content = ar.title)
+      text titleText
+    meta(name = "title", content = titleText)
     meta(name = "keywords", content = ar.tags.join(","))
     meta(name = "description", content = something(description, ar.desc))
     meta(name = "image", content = ar.imageUrl)
@@ -427,13 +428,15 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): Future[
 const pageContent* = postContent
 
 template asHtml*(data: VNode, minify: static[bool] = true; minify_css: bool = true): string =
-  assert not data.isnil, "Data cannot be nil"
-  asHtml($data, minify, minify_css)
+  if data.isnil:
+    error "Data cannot be nil"
+    ""
+  else:
+    asHtml($data, minify, minify_css)
 
 # NOTE: disable css minification since it breaks inline css
 # https://github.com/wilsonzlin/minify-html/issues/89
-proc asHtml*(data: string ; minify: static[bool] = true;
-    minify_css: bool = true): string =
+proc asHtml*(data: string ; minify: static[bool] = true; minify_css: bool = true): string =
   let html = "<!DOCTYPE html>" & "\n" & data
   sdebug "html: raw size {len(html)}"
   result = when minify:

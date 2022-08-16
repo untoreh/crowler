@@ -45,7 +45,7 @@ proc isopen(): bool {.withLocks: [pyGil].} =
 
 proc toISO3(lang: string): Future[string] {.async.} =
   withPyLock:
-    return Language[].get(if lang == "": SLang.code
+    result = Language[].get(if lang == "": SLang.code
                       else: lang).to_alpha3().to(string)
 
 proc sanitize*(s: string): string =
@@ -140,14 +140,13 @@ import locktplasync
 asyncLockedStore(Table)
 type
   SonicQueryArgsTuple = tuple[topic: string, keywords: string, lang: string, limit: int]
-  SonicMessageTuple = tuple[args: SonicQueryArgsTuple, resp: seq[string], done: bool, id: MonoTime]
+  SonicMessageTuple = tuple[args: SonicQueryArgsTuple, id: MonoTime]
   SonicMessage = ptr SonicMessageTuple
 
-proc querySonic(msg: SonicMessage) {.async.} =
+proc querySonic(msg: SonicMessage): Future[seq[string]] {.async.} =
   ## translate the query to source language, because we only index
   ## content in source language
   ## the resulting entries are in the form {page}/{slug}
-  defer: msg.done = true
   let (topic, keywords, lang, limit) = msg.args
   let kws = if lang in TLangsTable and lang != "en":
                 # echo "ok"
@@ -159,25 +158,22 @@ proc querySonic(msg: SonicMessage) {.async.} =
             else: keywords
   logall "query: kws -- {kws}, keys -- {keywords}"
   let lang3 = await SLang.code.toISO3
-  var res: PyObject
   withPyLock:
-    res = pySonic[].query(WEBSITE_DOMAIN, "default", kws, lang = lang3, limit = limit)
-    echo "search.nim:165"
-    echo res
+    let res = pySonic[].query(WEBSITE_DOMAIN, "default", kws, lang = lang3, limit = limit)
     if not pyisnone(res):
-      msg.resp.add res.pyToSeqStr()
+      let s = res.pyToSeqStr()
+      return s
 
-proc suggestSonic(msg: SonicMessage) {.async.} =
+proc suggestSonic(msg: SonicMessage): Future[seq[string]] {.async.} =
   # Partial inputs language can't be handled if we
   # only ingestClient the source language into sonic
-  defer: msg.done = true
   let (topic, input, lang, limit) = msg.args
   logall "suggest: topic: {topic}, input: {input}"
-  var sug: PyObject
   withPyLock:
-    sug = pySonic[].suggest(WEBSITE_DOMAIN, "default", input.split[^1], limit = limit)
+    let sug = pySonic[].suggest(WEBSITE_DOMAIN, "default", input.split[^1], limit = limit)
     if not pyisnone(sug):
-      msg.resp.add sug.pyToSeqStr()
+      let s = sug.pyToSeqStr()
+      return s
 
 proc deleteFromSonic*(capts: UriCaptures): int =
   ## Delete an article from sonic db
@@ -207,44 +203,25 @@ proc pushAllSonic*(clear = true) {.async.} =
   withPyLock:
     discard pySonic[].trigger("consolidate")
 
-var queryChan: Chan[SonicMessage]
-var sugChan: Chan[SonicMessage]
-var sonicQueryThread: Thread[void]
-var sonicSuggestThread: Thread[void]
-var sonicQueries: LockTable[MonoTime, ptr Isolated[SonicMessage]]
 from chronos/timer import seconds, Duration
-
-template sendAndWait(chan: untyped, maxtries=10) {.dirty.} =
-  var tries = 0
-  sonicQueries[msg.id] = create(Isolated[SonicMessage])
-  sonicQueries[msg.id][] = isolate(msg)
-  defer: sonicQueries.del(msg.id)
-  while tries < maxtries:
-    if chan.trySend(sonicQueries[msg.id][]):
-      break
-    await sleepAsync(10.milliseconds)
-    tries += 1
-  if tries < maxtries:
-    while true:
-      if msg.done:
-        result.add msg.resp
-        break
-      await sleepAsync(10.milliseconds)
 
 proc query*(topic: string, keywords: string, lang: string = SLang.code,
             limit = defaultLimit): Future[seq[string]] {.async.} =
   ## Thread safe sonic query
+  if unlikely(keywords.len == 0):
+    return
   let msg = create(SonicMessageTuple)
   msg.args.topic = topic
   msg.args.keywords = keywords
   msg.args.lang=  lang
   msg.args.limit = limit
   msg.id = getMonoTime()
-  sendAndWait(queryChan)
+  return await querySonic(msg)
 
 # import quirks # required by py DetectLang
 proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[string]] {.async.} =
-  # let msg = create(SonicMessageTuple)
+  if unlikely(input.len == 0):
+    return
   let msg = create(SonicMessageTuple)
   msg.args.topic = topic
   msg.args.keywords = input
@@ -254,7 +231,7 @@ proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[string]] {
   # msg.args.lang = await toISO3(dlang)
   msg.args.limit = limit
   msg.id = getMonoTime()
-  sendAndWait(sugChan)
+  return await suggestSonic(msg)
 
 proc connectSonic(reconnect=false) =
   var notConnected: bool
@@ -270,35 +247,10 @@ template restartSonic(what: string) {.dirty.} =
   if e is OSError:
     connectSonic(reconnect=true)
 
-proc sonicQueryHandler() {.gcsafe.} =
-  var msg: SonicMessage
-  while true:
-    queryChan.recv(msg)
-    try:
-      # NOTE: Can't use `asyncSpawn` here, `sleepAsync` will deadlock!
-      waitFor querySonic(msg)
-    except CatchableError:
-      restartSonic("query")
-
-proc sonicSuggestHandler() {.gcsafe.} =
-  var msg: SonicMessage
-  while true:
-    sugChan.recv(msg)
-    try:
-      # NOTE: Can't use `asyncSpawn` here, `sleepAsync` will deadlock!
-      waitFor suggestSonic(msg)
-    except CatchableError:
-      restartSonic("suggest")
-
 proc initSonic*() {.gcsafe.} =
-  queryChan = newChan[SonicMessage](1000)
-  sugChan = newChan[SonicMessage](1000)
-  sonicQueries = initLockTable[MonoTime, ptr Isolated[SonicMessage]]()
   pushLock = create(AsyncLock)
   pushLock[] = newAsyncLock()
   connectSonic()
-  createThread(sonicQueryThread, sonicQueryHandler)
-  createThread(sonicSuggestThread, sonicSuggestHandler)
 
 when isMainModule:
   initSonic()

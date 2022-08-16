@@ -136,6 +136,17 @@ macro info*(code: untyped): untyped =
         quote do:
             discard
 
+macro checkNil*(v, code; msg: static[string] = "cannot be nil") =
+  let name = $v
+  let message = fmt"{`name`} {`msg`}"
+  quote do:
+    if `v`.isnil:
+        debug `message`
+        raise newException(ValueError, `message`)
+    else:
+        `code`
+
+
 macro toggle*(flag: static[bool], code: untyped): untyped =
     if flag == true:
         quote do:
@@ -316,7 +327,7 @@ proc `==`*(a: XmlNode, b: string): bool {.inline.} = b == a
 
 proc `add`*(n: XmlNode, s: string) = n.add newText(s)
 
-iterator preorder*(tree: VNode): VNode =
+iterator preorder*(tree: VNode, withStyles: static[bool] = false): VNode =
     ## Iterator, skipping tags in `skip_nodes`
     ## also skipping comments, entities, CDATA and zero-length text nodes
     var stack = @[tree]
@@ -331,6 +342,13 @@ iterator preorder*(tree: VNode): VNode =
             of skip_vnodes:
                 continue
             else:
+                when withStyles:
+                  if node.kind == VNodeKind.style:
+                    yield node
+                else:
+                  if node.kind == VNodeKind.style:
+                    continue
+
                 var cls = false
                 for class in skip_class:
                     if class in node.class:
@@ -528,7 +546,7 @@ proc sre*(pattern: static string): Regex {.gcsafe.} =
     return rx
 
 
-type Link* = enum canonical, stylesheet, amphtml, jscript = "script", alternate
+type Link* = enum canonical, stylesheet, amphtml, jscript = "script", alternate, preload
 type LDjson* = enum ldjson = "application/ld+json"
 
 proc isLink*(el: VNode, tp: Link): bool {.inline.} = el.getAttr("rel") == $tp

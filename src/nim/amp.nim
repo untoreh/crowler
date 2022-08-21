@@ -18,11 +18,12 @@ import tables,
 import cfg,
        utils,
        html_misc,
+       html_entities,
        ads
 
 const CSS_MAX_SIZE = 75000
-const skipNodes = [VNodeKind.iframe, audio, canvas, embed, video, img, button, form, VNodeKind.head, svg]
-const skipNodesXml = ["iframe", "audio", "canvas", "embed", "video", "img", "button", "form",
+const skipNodes = [VNodeKind.iframe, audio, canvas, embed, video, img, VNodeKind.head, svg]
+const skipNodesXml = ["iframe", "audio", "canvas", "embed", "video", "img",
         "head", "svg", "document"]
 
 threadVars(
@@ -44,53 +45,54 @@ import std/sets
 var dupStyles: ptr HashSet[string] ## Don't duplicate styles that appear more than once in the html
 
 proc asLocalUrl(path: string): string {.inline.} =
-    $(WEBSITE_URL / path.replace(SITE_PATH, ""))
+  $(WEBSITE_URL / path.replace(SITE_PATH, ""))
 
 var fileUri {.threadvar.}: Uri
 var url {.threadvar.}: string
 proc getFile(path: string): Future[string] {.async.} =
-    ## This does not actually read or save contents to storage, just holds an in memory cache
-    ## and fetches from remove urls
-    debug "amp: getting style file from path {path}"
-    try:
-        result = filesCache[path]
-    except KeyError:
-        let filePath = DATA_PATH / "cache" / $hash(path) & splitFile(path).ext
-        parseUri(path, fileUri)
-        if fileUri.scheme.isEmptyOrWhitespace:
-            url = path.asLocalUrl
-        else:
-            shallowCopy url, path
-        debug "getfile: getting file content from {url}"
-        filesCache[path] = (await fetch(HttpSessionRef.new(), parseUri(url))).data.bytesToString
-        result = filesCache[path]
+  ## This does not actually read or save contents to storage, just holds an in memory cache
+  ## and fetches from remove urls
+  debug "amp: getting style file from path {path}"
+  try:
+    result = filesCache[path]
+  except KeyError:
+    let filePath = DATA_PATH / "cache" / $hash(path) & splitFile(path).ext
+    parseUri(path, fileUri)
+    if fileUri.scheme.isEmptyOrWhitespace:
+      url = path.asLocalUrl
+    else:
+      shallowCopy url, path
+    debug "getfile: getting file content from {url}"
+    filesCache[path] = (await fetch(HttpSessionRef.new(), parseUri(
+        url))).data.bytesToString
+    result = filesCache[path]
 
 
 proc ampTemplate(): (VNode, VNode, VNode) =
-    ##
-    let tree = ampDoc.find(html)
-    for node in [tree, ampHead, ampBody]:
-        node.clear()
+  ##
+  let tree = ampDoc.find(html)
+  for node in [tree, ampHead, ampBody]:
+    node.clear()
 
-    tree.setAttr("amp", "")
-    with tree:
-        add ampHead
-        add ampBody
+  tree.setAttr("amp", "")
+  with tree:
+    add ampHead
+    add ampBody
 
-    with ampHead:
-        add ampjs
-        add charset
-        add viewport
-        # amp styles
-        # amp-custom goes before boilerplate
-        add styleElCustom
-        add styleEl1
-        add styleEl2Wrapper
-    ## ads
-    when declared(ADSENSE_AMP_HEAD):
-        ampHead.add verbatim(ADSENSE_AMP_HEAD)
-        ampBody.add verbatim(ADSENSE_AMP_BODY)
-    (tree, ampHead, ampBody)
+  with ampHead:
+    add ampjs
+    add charset
+    add viewport
+    # amp styles
+    # amp-custom goes before boilerplate
+    add styleElCustom
+    add styleEl1
+    add styleEl2Wrapper
+  ## ads
+  when declared(ADSENSE_AMP_HEAD):
+    ampHead.add verbatim(ADSENSE_AMP_HEAD)
+    ampBody.add verbatim(ADSENSE_AMP_BODY)
+  (tree, ampHead, ampBody)
 
 proc maybeStyle(data: string) =
   if not (data in dupStyles[]):
@@ -111,140 +113,178 @@ proc fetchStyle(el: VNode) {.async.} =
   data.maybeStyle
 
 import htmlparser
-proc processHead(inHead: VNode, outHead: VNode, level=0) {.async.} =
-    var canonicalUnset = level == 0
-    debug "iterating over {inHead.kind}"
-    for el in inHead.preorder(withStyles=true):
-        case el.kind:
-            of VNodeKind.text, skipNodes:
-              continue
-            of VNodeKind.style:
-              if el.len > 0:
-                el[0].text.maybeStyle
-            of VNodeKind.link:
-                if canonicalUnset and el.isLink(canonical):
-                    outHead.add el
-                    canonicalUnset = false
-                elif el.isLink(stylesheet) and (not ("flags-sprite" in el.getattr("href"))):
-                    await el.fetchStyle()
-                elif el.isLink(preload) and el.getattr("as") == "style":
-                    await el.fetchStyle()
-                else:
-                    outHead.add el
-            of VNodeKind.script:
-                if el.getAttr("type") == $ldjson:
-                    outHead.add el
-            of VNodeKind.meta:
-                if (el.getAttr("name") == "viewport") or (el.getAttr("charset") != ""):
-                    continue
-                else:
-                    outHead.add el
-            of VNodeKind.verbatim:
-                let data = ($el).parseHtml
-                if data.kind == xnElement:
-                  if data.tag == "script":
-                    continue
-                  elif data.tag == "style":
-                    if data.len > 0:
-                      data[0].text.maybeStyle
-                  else:
-                    outHead.add el
-            of VNodekind.noscript:
-              if level == 0:
-                let elNoScript = newVNode(VNodeKind.noscript)
-                await processHead(el, elNoScript, level=1)
-                outHead.add elNoScript
-            else:
-                debug "amphead: adding element {el.kind} to outHead."
-                outHead.add el
+proc processHead(inHead: VNode, outHead: VNode, level = 0) {.async.} =
+  var canonicalUnset = level == 0
+  debug "iterating over {inHead.kind}"
+  for el in inHead.preorder(withStyles = true):
+    case el.kind:
+      of VNodeKind.text, skipNodes:
+        continue
+      of VNodeKind.style:
+        if el.len > 0:
+          el[0].text.maybeStyle
+      of VNodeKind.link:
+        if canonicalUnset and el.isLink(canonical):
+          outHead.add el
+          canonicalUnset = false
+        elif el.isLink(stylesheet) and (not ("flags-sprite" in el.getattr("href"))):
+          await el.fetchStyle()
+        elif el.isLink(preload) and el.getattr("as") == "style":
+          await el.fetchStyle()
+        else:
+          outHead.add el
+      of VNodeKind.script:
+        if el.getAttr("type") == $ldjson:
+          outHead.add el
+      of VNodeKind.meta:
+        if (el.getAttr("name") == "viewport") or (el.getAttr("charset") != ""):
+          continue
+        else:
+          outHead.add el
+      of VNodeKind.verbatim:
+        let data = ($el).parseHtml
+        if data.kind == xnElement:
+          if data.tag == "script" or data.tag == "noscript":
+            continue
+          elif data.tag == "style":
+            if data.len > 0:
+              data[0].text.maybeStyle
+          else:
+            outHead.add el
+      of VNodekind.noscript:
+        if level == 0:
+          let elNoScript = newVNode(VNodeKind.noscript)
+          await processHead(el, elNoScript, level = 1)
+          if len(elNoscript) > 0:
+            outHead.add elNoScript
+      else:
+        debug "amphead: adding element {el.kind} to outHead."
+        outHead.add el
 
 proc parseNode(node: VNode): XmlNode =
-    let
-        s = node.text
-        tree = try:
-                   vbtmcache[s.key]
-               except:
-                   vbtmcache[s.key] = parseHtml(s)
-                   vbtmcache[s.key]
-    return deepcopy(tree)
+  let
+    s = node.text
+    tree = try:
+             vbtmcache[s.key]
+           except:
+             vbtmcache[s.key] = parseHtml(s)
+             vbtmcache[s.key]
+  return deepcopy(tree)
 
-proc removeNodes(el: XmlNode) =
-    ## parses an XmlNode removing tags defined by `skipNodesXml`
-    var
-        l = el.len
-        n = 0
-    while n < l:
-        let el = el[n]
-        case el.kind:
-            of xnElement:
-                case el.tag:
-                    of skipNodesXml:
-                        el.delete(n)
-                        l -= 1
-                    else: n += 1
-            else:
-                if el.len > 0:
-                    removeNodes(el)
-                n += 1
-    debug "amprem: el now is {$el}"
+# proc removeNodes(el: XmlNode) =
+#   ## parses an XmlNode removing tags defined by `skipNodesXml`
+#   var
+#     l = el.len
+#     n = 0
+#   while n < l:
+#     let el = el[n]
+#     case el.kind:
+#       of xnElement:
+#         case el.tag:
+#           of skipNodesXml:
+#             el.delete(n)
+#             l -= 1
+#           else: n += 1
+#       else:
+#         if el.len > 0:
+#           removeNodes(el)
+#         n += 1
+#   debug "amprem: el now is {$el}"
 
 
+template processAttrs(el: VNode): untyped {.dirty.} =
+  el.delAttr("onclick")
+  case el.kind:
+    of VNodeKind.a:
+      if el.hasAttr("target"): # `target` attr can only be _blank
+        el.setAttr("target", "_blank")
+      if el.hasAttr("alt"): # Can't have `alt` attributes
+        el.delAttr("alt")
+    else: discard
 
-template maybeProcess(): untyped {.dirty.} =
+template processAttrs(el: XmlNode): untyped {.dirty.} =
+  if el.kind == xnElement:
     el.delAttr("onclick")
-    if el.len != 0:
-        await el.processBody(outBody, outHead, true)
-    elif el.kind == VNodeKind.verbatim:
-        let xEl = el.parseNode
-        case xEl.tag:
-            of skipNodesXml:
-                el.text.setLen 0
-            else:
-                removeNodes(xEl)
-                el.text = $xEl
+    case el.tag:
+      of "a":
+        if el.hasAttr("target"): # `target` attr can only be _blank
+          el.setAttr("target", "_blank")
+        el.delAttr("alt") # Can't have `alt` attributes
+      else: discard
+
+template process(el: VNode, after: untyped): bool =
+  var isprocessed = true
+  case el.kind:
+    of skipNodes: discard
+    of VNodeKind.link:
+      if el.isLink(stylesheet):
+        await el.fetchStyle()
+      else:
+        outBody.add el
+    of VNodeKind.style:
+      el.text.maybeStyle
+      el.text = ""
+    of VNodeKind.script:
+      if el.getAttr("type") == $ldjson:
+        outHead.add el
+      el.text = ""
+    of VNodeKind.form:
+      el.setAttr("amp-form", "")
+    else:
+      isprocessed = false
+  if isprocessed:
+    after
+  isprocessed
+
+template process(el: VNode): bool =
+  el.process:
+    discard
 
 proc processBody(inEl, outBody, outHead: VNode, lv = false) {.async.} =
-    var
-        l = inEl.len
-        n = 0
-    while n < l:
-        let el = inEl[n]
-        case el.kind:
-            of skipNodes:
-                inEl.delete(n)
-                l -= 1
-                continue
-            of VNodeKind.link:
-                if el.isLink(stylesheet):
-                    await el.fetchStyle()
-                else:
-                    outBody.add el
-                inEl.delete(n)
-                l -= 1
-            of VNodeKind.style:
-                if el.len > 0:
-                  el[0].text.maybeStyle
-                inEl.delete(n)
-                l -= 1
-            of VNodeKind.script:
-                if el.getAttr("type") == $ldjson:
-                    outHead.add el
-                inEl.delete(n)
-                l -= 1
-            else:
-                case el.kind:
-                    of VNodeKind.text, VNodeKind.verbatim: discard
-                    else:
-                        debug "ampbody: maybe processing {el.kind}"
-                        maybeProcess
-                if lv: discard
-                else: outBody.add el
-                n += 1
+  var
+    l = inEl.len
+    n = 0
+  while n < l:
+    let el = inEl[n]
+    let isprocessed = el.process:
+      inEl.delete(n)
+      l -= 1
+    if not isprocessed:
+      if el.kind == VNodeKind.verbatim:
+        var processed: string
+        let xEl = parseHtml($el)
+        if xEl.kind == xnElement and xEl.tag == "document": # verbatim included a list of tags, process each one singularly
+          for k in xEl:
+            processAttrs(k)
+            let vnK = k.toVNode
+            if (not process(vnK)):
+              await vnK.processBody(outBody, outHead, true)
+            processed.add vnK.raw
+        elif xEl.kind != xnText:
+          processAttrs(xEl)
+          let vnEl = xEl.toVNode
+          if (not process(vnEl)):
+            echo "amp.nim:265"
+            await vnEl.processBody(outBody, outHead, true)
+          echo vnEl.kind
+          processed.add vnEl.raw
+        else:
+          processed.add xEl.text
+        el.text = processed
+      else:
+        processAttrs(el)
+        logall "ampbody: recursing {el.kind}"
+        await el.processBody(outBody, outHead, true)
+      if lv:
+        discard
+      else:
+        outBody.add el
+      n += 1
 
 proc pre(pattern: static string): Regex {.gcsafe.} =
-    var res {.threadvar.}: Regex
-    res = re(pattern)
-    res
+  var res {.threadvar.}: Regex
+  res = re(pattern)
+  res
 
 proc ampPage*(tree: VNode): Future[VNode] {.gcsafe, async.} =
   ## Amp processing uses global vars and requires lock.
@@ -255,12 +295,12 @@ proc ampPage*(tree: VNode): Future[VNode] {.gcsafe, async.} =
   dupStyles[].clear()
   defer: ampLock[].release()
   let
-      inBody = tree.find(VNodeKind.body).deepcopy
-      inHead = tree.find(VNodeKind.head).deepcopy
+    inBody = tree.find(VNodeKind.body).deepcopy
+    inHead = tree.find(VNodeKind.head).deepcopy
   let (outHtml, outHead, outBody) = ampTemplate()
   outHtml.setAttr("amp", "")
   for (a, v) in tree.find(html).attrs:
-      outHtml.setattr(a, v)
+    outHtml.setattr(a, v)
 
 
   await processHead(inHead, outHead)
@@ -268,17 +308,17 @@ proc ampPage*(tree: VNode): Future[VNode] {.gcsafe, async.} =
 
   # add remaining styles to head
   styleStr = styleStr
-      # .join("\n")
-      # NOTE: the replacement should be ordered from most frequent to rarest
-      # # remove troublesome animations
-      .replace(pre"""\s*?@(\-[a-zA-Z]+-)?keyframes\s+?.+?{\s*?.+?({.+?})+?\s*?}""", "")
-      # # remove !important hints
-      .replace(pre"""!important""", "")
-      # remove charset since not allowed
-      .replace(pre"""@charset\s+\"utf-8\"\s*;?/i""", "")
+    # .join("\n")
+    # NOTE: the replacement should be ordered from most frequent to rarest
+    # # remove troublesome animations
+    .replace(pre"""\s*?@(\-[a-zA-Z]+-)?keyframes\s+?.+?{\s*?.+?({.+?})+?\s*?}""", "")
+    # # remove !important hints
+    .replace(pre"""!important""", "")
+    # remove charset since not allowed
+    .replace(pre"""@charset\s+\"utf-8\"\s*;?/i""", "")
 
   if unlikely(styleStr.len > CSS_MAX_SIZE):
-      raise newException(ValueError, fmt"Style size above limit for amp pages. {styleStr.len}")
+    raise newException(ValueError, fmt"Style size above limit for amp pages. {styleStr.len}")
 
   styleElCustom.delete(0)
   styleElCustom.add verbatim(styleStr)
@@ -286,7 +326,7 @@ proc ampPage*(tree: VNode): Future[VNode] {.gcsafe, async.} =
 
 proc ampDir(target: string) {.error: "not implemented".} =
   if not dirExists(target):
-      raise newException(OSError, fmt"Supplied target directory {target} does not exists.")
+    raise newException(OSError, fmt"Supplied target directory {target} does not exists.")
 
 
 proc initAmp*() =

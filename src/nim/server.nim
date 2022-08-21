@@ -570,7 +570,7 @@ proc startServer*(doclear = false, port = 0, loglevel = "info") =
       srv = waitFor doServe(address, callback)
     except:
       let e = getCurrentException()[]
-      debug "server: {e} \n restarting server..."
+      warn "server: {e} \n restarting server..."
       sleep 500
   # httpbeast
   # var settings = initSettings(port = Port(serverPort), bindAddr = "0.0.0.0")

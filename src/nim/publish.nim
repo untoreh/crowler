@@ -286,8 +286,9 @@ try:
         assert pyhasAttr(site[], "created"), "site does not have creation date"
         siteCreated[] = parse(site[].created.to(string), "yyyy-MM-dd").toTime
 except:
-    warn getCurrentException()[]
-    siteCreated[] = fromUnix(0)
+  let e = getCurrentException()[]
+  warn "{e}"
+  siteCreated[] = fromUnix(0)
 proc pubTimeInterval(): int =
     ## This formula gradually reduces the interval between publications
     max(cfg.CRON_TOPIC_FREQ_MIN, cfg.CRON_TOPIC_FREQ_MAX - ((getTime() - siteCreated[]).inMinutes.int.div (3600 * 24) * 26))

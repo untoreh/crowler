@@ -157,14 +157,11 @@ template adLink*(kind): auto =
 
 proc insertAd*(name: ptr XmlNode): seq[VNode] {.gcsafe.} =
   result = newSeq[VNode]()
-  when declared(name):
-    if not name[].isnil:
-      for el in name[].filter():
-        result.add verbatim(el.withClosingHtmlTag)
-    else:
-      warn("{name} is nil.")
+  if not name.isnil and not name[].isnil:
+    for el in name[].filter():
+      result.add verbatim(el.withClosingHtmlTag)
   else:
-    warn("{name} not defined, ignoring ads.")
+    warn "xmlnode is nil."
 
 proc replaceLinks*(str: string, chunksize = 250): Future[string] {.async.} =
   ## chunksize is the number of chars between links

@@ -87,23 +87,15 @@ template logstring(code: untyped): untyped =
     else:
         fmt"{getThreadId()} - " & fmt code
 
-macro debug*(code: untyped): untyped =
-    if not defined(release) and logLevelMacro != lvlNone:
-        quote do:
-            withLock(loggingLock):
-                logger[].log lvlDebug, logstring(`code`)
-    else:
-        quote do:
-            discard
+template debug*(code: untyped): untyped =
+  when not defined(release) and logLevelMacro < lvlNone:
+    withLock(loggingLock):
+      logger[].log lvlDebug, logstring(`code`)
 
-macro logall*(code: untyped): untyped =
-    if not defined(release) and logLevelMacro != lvlNone:
-        quote do:
-            withLock(loggingLock):
-                logger[].log lvlAll, logstring(`code`)
-    else:
-        quote do:
-            discard
+template logall*(code: untyped): untyped =
+  when defined(release) and logLevelMacro < lvlNone:
+    withLock(loggingLock):
+      logger[].log lvlAll, logstring(`code`)
 
 
 template sdebug*(code) =
@@ -114,27 +106,19 @@ template qdebug*(code) =
     try: debug code
     except CatchableError: quit()
 
-macro warn*(code: untyped): untyped =
-    if logLevelMacro >= lvlWarn:
-        quote do:
-            withLock(loggingLock):
-                logger[].log lvlWarn, fmt logstring(`code`)
-    else:
-        quote do:
-            discard
+template warn*(code: untyped): untyped =
+    when logLevelMacro <= lvlWarn:
+        withLock(loggingLock):
+          logger[].log lvlWarn, logstring(`code`)
 
 template swarn*(code) =
     try: warn code
     except CatchableError: discard
 
-macro info*(code: untyped): untyped =
-    if logLevelMacro <= lvlInfo:
-        quote do:
-            withLock(loggingLock):
-                logger[].log lvlInfo, logstring(`code`)
-    else:
-        quote do:
-            discard
+template info*(code: untyped): untyped =
+  when logLevelMacro <= lvlInfo:
+    withLock(loggingLock):
+      logger[].log lvlInfo, logstring(`code`)
 
 macro checkNil*(v, code; msg: static[string] = "cannot be nil") =
   let name = $v
@@ -383,11 +367,17 @@ proc clear*(node: XmlNode) {.inline.} =
     node.s.setLen 0
 
 proc delAttr*(n: VNode, k: auto) =
-    privateAccess(VNode)
-    for i in countup(0, n.attrs.len-2, 2):
-        if n.attrs[i] == k:
-            n.attrs.del(i)
-            n.attrs.del(i+1)
+  privateAccess(VNode)
+  for i in countup(0, n.attrs.len-2, 2):
+    if n.attrs[i] == k:
+      # NOTE: the order is important here, because of how deletion happen
+      n.attrs.del(i+1) # delete the key
+      n.attrs.del(i) # delete the key
+      break # NOTE: we assume there is only ONE instance of the attribute
+
+proc delAttr*(n: XmlNode, k: auto) =
+  if n.hasAttr(k):
+    n.attrs.del(k)
 
 proc lenAttr*(n: VNode): int =
     privateAccess(VNode)
@@ -743,3 +733,84 @@ proc readFileAsync*(file: string): Future[string] {.async.} =
     discard Async(handler).readInto(data)
     return data.toString
 
+proc innerText*(n: VNode): string =
+  if result.len > 0: result.add '\L'
+  if n.kind == VNodeKind.text:
+    result.add n.text
+  else:
+    if n.text.len > 0:
+      result.add n.text
+    for child in items(n):
+      result.add innerText(child)
+
+# import std/[xmltree, strtabs, strutils]
+import std/htmlparser
+converter toXmlNode*(el: VNode): XmlNode =
+  case el.kind:
+    of VNodeKind.verbatim:
+      parseHtml(el.text)
+    of VNodeKind.text:
+      newText(el.text)
+    else:
+      let xAttrs = @[].toXmlAttributes
+      for k, v in el.attrs:
+        xAttrs[k] = v
+      var kids: seq[XmlNode]
+      if el.len > 0:
+        for k in el:
+          kids.add k.toXmlNode
+      newXmlTree($el.kind, kids, attributes = xAttrs)
+
+import std/unidecode
+converter toVNode*(el: XmlNode): VNode =
+  privateAccess(VNode)
+  try:
+    case el.kind:
+      of xnElement:
+        let kind = parseEnum[VNodeKind](el.tag)
+        var vnAttrs: seq[(string, string)]
+        if not el.attrs.isnil:
+          for k, v in el.attrs:
+            vnAttrs.add (k, v)
+        case kind:
+          of VNodeKind.script, VNodeKind.style:
+            let node = tree(kind, vnAttrs)
+            node.value = el.innerText
+            node
+          else:
+            var kids: seq[VNode]
+            if el.len > 0:
+              for k in el:
+                kids.add k.toVNode
+            tree(kind, vnAttrs, kids)
+      of xnText:
+        vn(el.text)
+      else:
+        verbatim($el)
+  except ValueError: # karax doesn't support the node tag
+    verbatim($el)
+
+from karax/vdom {.all.} import toStringAttr
+proc raw*(n: VNode, indent = 0): string =
+  ## Get the wrapped and un-escaped content of node as string.
+  case n.kind:
+    of VNodeKind.text, VNodeKind.verbatim:
+      result.add n.text
+    else:
+      if n.kind in {VNodeKind.style, VNodeKind.script}:
+        if n.text.len == 0:
+          return
+      for i in 1..indent: result.add ' '
+      if result.len > 0: result.add '\L'
+      result.add "<" & $n.kind
+      toStringAttr(id)
+      toStringAttr(class)
+      for k, v in attrs(n):
+        result.add " " & $k & " = " & $v
+      result.add ">\L"
+      if n.text.len > 0:
+        result.add n.text
+      for child in items(n):
+        result.add raw(child, indent+2)
+      for i in 1..indent: result.add ' '
+      result.add "\L</" & $n.kind & ">"

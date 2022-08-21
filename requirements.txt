@@ -34,6 +34,7 @@ bloom_filter2
 # for nim
 unidecode
 langcodes
+pysonic-channel
 
 # sources/articles
 trafilatura # for python 3.10 install `python-tzlocal` from distro packages

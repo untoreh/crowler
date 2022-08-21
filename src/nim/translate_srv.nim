@@ -50,7 +50,8 @@ template pySafeCall(code: untyped): untyped =
         await pygil.acquire()
         logall "pysafe: lock acquired"
         code
-    except CatchableError as e:
+    except CatchableError:
+        let e {.inject.} = getCurrentException()[]
         warn "pysafe: Failed with exception...{e}"
     finally:
         logall "pysafe: releasing lock"

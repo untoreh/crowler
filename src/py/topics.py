@@ -66,7 +66,7 @@ def get_category(site: Site, force=False):
     last_topic = get_last_topic(site)
     # if the last topic processing ended correctly the topic should be indexed
     tpslug = ut.slugify(last_topic["name"])
-    if (not force) and (tpslug and not site.is_topic(tpslug)):
+    if (not force) and (last_topic["name"] and tpslug and not site.is_topic(tpslug)):
         return last_topic["name"]
     if CATEGORIES is None:
         load_categories()
@@ -104,6 +104,7 @@ def gen_topic(site: Site, check_sentiment=True, max_cat_tries=3):
         return tpslug
     else:
         log.warn(f"topic: generation skipped for {cat}, sentiment low {sentiment} < {MIN_SENTIMENT}")
+        set_last_topic(site, {"name": "", "time": 0})
         return None
 
 def new_topic(site: Site, max_tries=3):

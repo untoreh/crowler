@@ -209,25 +209,43 @@ def site_loop(site: Site, target_delay=3600 * 8):
             topics = list(site.topics_dict.keys())
             # print(h.heap())
             loop_start = time.time()
-            for topic in topics:
-                run_parse1_job(site, topic)
-            if random.randrange(3) == 0:
+            try:
                 for topic in topics:
-                    run_parse2_job(site, topic)
-            if site.new_topics_enabled:
-                new_topic(site)
-            if site.has_reddit:
-                site.reddit_submit()
-            if site.has_twitter:
-                site.tweet()
-            if site.has_facebook:
-                site.facebook_post()
+                    run_parse1_job(site, topic)
+            except Exception as e:
+                logger.warn("parse1_job failed. \n %s", e)
+            try:
+                if random.randrange(3) == 0:
+                    for topic in topics:
+                        run_parse2_job(site, topic)
+            except Exception as e:
+                logger.warn("parse2_job failed. \n %s", e)
+            try:
+                if site.new_topics_enabled:
+                    new_topic(site)
+            except Exception as e:
+                logger.warn("new topics  failed. \n %s", e)
+            try:
+                if site.has_reddit:
+                    site.reddit_submit()
+            except Exception as e:
+                logger.warn("reddit failed. \n %s", e)
+            try:
+                if site.has_twitter:
+                    site.tweet()
+            except Exception as e:
+                logger.warn("twitter failed. \n %s", e)
+            try:
+                if site.has_facebook:
+                    site.facebook_post()
+            except Exception as e:
+                logger.warn("facebook failed. \n %s", e)
             time.sleep(target_delay - (time.time() - loop_start))
             random.shuffle(
                 topics
             )  # in case of crashes helps to distribute queryies more uniformly
         except Exception as e:
-            logger.warning(e, f" (site: {site.name})", )
+            logger.warning(f"{e} (site: {site.name})")
             backoff += 1
             time.sleep(backoff)
 

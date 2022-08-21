@@ -264,9 +264,7 @@ proc processBody(inEl, outBody, outHead: VNode, lv = false) {.async.} =
           processAttrs(xEl)
           let vnEl = xEl.toVNode
           if (not process(vnEl)):
-            echo "amp.nim:265"
             await vnEl.processBody(outBody, outHead, true)
-          echo vnEl.kind
           processed.add vnEl.raw
         else:
           processed.add xEl.text

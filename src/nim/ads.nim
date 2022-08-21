@@ -191,9 +191,11 @@ proc replaceLinks*(str: string, chunksize = 250): Future[string] {.async.} =
           txt = x.charData
           txtStop = txt.len
         prevstrpos = strpos
-        strpos = x.offsetBase + x.bufpos + 2 - txtStop
+        strpos = x.offsetBase + x.bufpos - txtStop
         # add processed non text data starting from previous point
         result.add str[prevstrpos..<strpos]
+        strpos += txtStop # add the current text to the current string position
+
         if unlikely(positions.len == 0):
           result.add txt
           continue

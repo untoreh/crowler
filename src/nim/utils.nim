@@ -87,10 +87,10 @@ template logstring(code: untyped): untyped =
     else:
         fmt"{getThreadId()} - " & fmt code
 
-template debug*(code: untyped): untyped =
+template debug*(dofmt = false; code: untyped): untyped =
   when not defined(release) and logLevelMacro < lvlNone:
     withLock(loggingLock):
-      logger[].log lvlDebug, logstring(`code`)
+      logger[].log lvlDebug, when dofmt: logstring(`code`) else: `code`
 
 template logall*(code: untyped): untyped =
   when defined(release) and logLevelMacro < lvlNone:
@@ -120,16 +120,37 @@ template info*(code: untyped): untyped =
     withLock(loggingLock):
       logger[].log lvlInfo, logstring(`code`)
 
-macro checkNil*(v, code; msg: static[string] = "cannot be nil") =
+macro checkNil*(v; code: untyped) =
   let name = $v
-  let message = fmt"{`name`} {`msg`}"
+  let message = fmt"{`name`} cannot be nil"
   quote do:
     if `v`.isnil:
         debug `message`
         raise newException(ValueError, `message`)
     else:
-        `code`
+      `code`
 
+template checkNil*(v) = checkNil(v): discard
+
+template checkNil*(v; msg: string) = checkNil(v, msg): discard
+
+macro checkNil*(v; msg: string, code: untyped) =
+  quote do:
+    if `v`.isnil:
+        debug `msg`
+        raise newException(ValueError, `msg`)
+    else:
+      `code`
+
+template checkTrue*(stmt: untyped, msg: string) =
+    if not (stmt):
+        raise newException(ValueError, msg)
+
+proc `!!`*(stmt: bool) {.inline.} =
+  const loc = fmt"{instantiationInfo().filename}:{instantiationInfo().line}"
+  const message = fmt"Statement at {loc} was false!"
+  if not stmt:
+    raise newException(ValueError, message)
 
 macro toggle*(flag: static[bool], code: untyped): untyped =
     if flag == true:

@@ -177,7 +177,7 @@ proc processPage*(lang, amp: string, tree: VNode not nil, relpath = "index"): Fu
     result = await result.ampPage
 
 proc pageFromTemplate*(tpl, lang, amp: string): Future[string] {.async.} =
-  var txt = readfile(ASSETS_PATH / "templates" / tpl & ".html")
+  var txt = await readfileAsync(ASSETS_PATH / "templates" / tpl & ".html")
   let (vars, title, desc) = case tpl:
     of "dmca": (tplRep, "DMCA", fmt"dmca compliance for {WEBSITE_DOMAIN}")
     of "tos": (ppRep, "Terms of Service",
@@ -189,10 +189,10 @@ proc pageFromTemplate*(tpl, lang, amp: string): Future[string] {.async.} =
   let
     slug = slugify(title)
     page = await buildPage(title = title, content = txt, wrap=true)
-  if not page.isnil:
+  checkNil(page):
     let processed = await processPage(lang, amp, page, relpath = tpl)
-    doassert not processed.isnil, fmt"failed to processed template {tpl}, {lang}, {amp}"
-    return processed.asHtml(minify_css = (amp == ""))
+    checkNil(processed, fmt"failed to process template {tpl}, {lang}, {amp}"):
+      return processed.asHtml(minify_css = (amp == ""))
 
 proc articleTree*(capts: auto): Future[VNode] {.async.} =
   # every article is under a page number

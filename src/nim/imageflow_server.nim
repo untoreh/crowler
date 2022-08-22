@@ -103,7 +103,7 @@ proc asyncImgHandler() {.async.} =
 
 proc imgHandler*() = waitFor asyncImgHandler()
 
-proc startImgFlow*() {.raises: [].} =
+proc startImgFlow*() =
   try:
     initImageFlow()
     # start img handler thread
@@ -115,8 +115,8 @@ proc startImgFlow*() {.raises: [].} =
     imgLock = create(AsyncLock)
     imgLock[] = newAsyncLock()
     createThread(iflThread, imgHandler)
-  except:
-    quit "Could not init imageflow!"
+  except CatchableError as e:
+    warn "Could not init imageflow! \n {e[]}"
 
 # import chronos
 # var iflThread: Thread[(string, string)]

@@ -51,7 +51,7 @@ proc buildImgUrl*(ar: Article; cls = "image-link"): VNode =
       srcsetstr.add " " & view & ","
   buildHtml(a(class = cls, href = ar.imageOrigin, target = "_blank",
             alt = "Post image source.")):
-    img(class = "", src = bsrc, srcset = srcsetstr, alt = something(ar.imageTitle, "Image unavailable"),
+    img(class = "", src = bsrc, srcset = srcsetstr,
         loading = "lazy")
 
 proc fromSearchResult*(pslug: string): Future[Article] {.async.} =

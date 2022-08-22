@@ -2,6 +2,8 @@
 
 set -e
 
+[ -z "$CONFIG_NAME" ] && { echo "\$CONFIG_NAME not set"; exit 1; }
+
 if [ "$1" = "-s" ]; then
     COPY_ONLY=1
 else

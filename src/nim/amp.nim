@@ -286,7 +286,7 @@ proc pre(pattern: static string): Regex {.gcsafe.} =
 
 proc ampPage*(tree: VNode): Future[VNode] {.gcsafe, async.} =
   ## Amp processing uses global vars and requires lock.
-  assert not tree.isnil
+  checkNil tree
   # since using globals we have to lock throughout the page generation
   await ampLock[].acquire()
   styleStr = ""

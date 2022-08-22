@@ -34,7 +34,7 @@ proc getArticleUrl*(a: Article, lang: string): string {.inline.} = $(WEBSITE_URL
 proc getArticles*(topic: string, n = 3, pagenum: int = -1): Future[seq[Article]] {.async.} =
     let arts = await topicArticles(topic)
     withPyLock:
-        doassert pyiszarray(arts)
+        !! pyiszarray(arts)
         var data: PyObject
         let
             total = arts.shape[0].to(int)

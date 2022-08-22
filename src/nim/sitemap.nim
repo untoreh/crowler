@@ -33,24 +33,25 @@ const
     xmlNamespace = "http://www.sitemaps.org/schemas/sitemap/0.9"
     xhtmlNamespace = "http://www.w3.org/1999/xhtml"
 
-proc buildSiteSitemap*(topics: seq[string]): XmlNode =
-    const xmlNamespace = "http://www.sitemaps.org/schemas/sitemap/0.9"
-    result = newElement("sitemapindex")
-    result.attrs = {"xmlns": xmlNamespace}.toXmlAttributes
-    # result.setAttr("xmlns", )
-    for t in topics:
-        let
-            topicSitemap = newElement("sitemap")
-            sitemapLoc = newElement("loc")
-            url = ($(WEBSITE_URL / t / "sitemap.xml")).escape()
-        topicSitemap.add sitemapLoc
-        sitemapLoc.add newText(url)
-        result.add topicSitemap
+proc buildSiteSitemap*(topics: seq[string]): Future[XmlNode] {.async.} =
+  const xmlNamespace = "http://www.sitemaps.org/schemas/sitemap/0.9"
+  result = newElement("sitemapindex")
+  result.attrs = {"xmlns": xmlNamespace}.toXmlAttributes
+  # result.setAttr("xmlns", )
+  for t in topics:
+    if (await t.hasArticles):
+      let
+        topicSitemap = newElement("sitemap")
+        sitemapLoc = newElement("loc")
+        url = ($(WEBSITE_URL / t / "sitemap.xml")).escape()
+      topicSitemap.add sitemapLoc
+      sitemapLoc.add newText(url)
+      result.add topicSitemap
 
 proc buildSiteSitemap*(): Future[XmlNode] {.async.} =
     await syncTopics()
     let topics = collect(for (k, _) in topicsCache: k)
-    return buildSiteSitemap(topics)
+    return await buildSiteSitemap(topics)
 
 proc buildTopicSitemap(topic: string): Future[XmlNode] {.async.} =
     await syncTopics()

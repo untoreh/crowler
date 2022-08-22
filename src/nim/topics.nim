@@ -38,7 +38,7 @@ proc loadTopicsIndex*(): PyObject =
     try:
         syncPyLock:
             result = site[].load_topics()[0]
-            doassert not result.isnil
+            checkNil(result)
     except:
         let m = getCurrentExceptionMsg()
         if "shape is None" in m:
@@ -162,7 +162,7 @@ proc fetch*(t: Topics, k: string): Future[TopicState] {.async.} =
 
 proc getState*(topic: string): Future[(int, int)] {.async.} =
     ## Get the number of the top page, and the number of `done` pages.
-    doassert topic != "", "gs: topic should not be empty"
+    checkTrue topic != "", "gs: topic should not be empty"
     let cache = await topicsCache.fetch(topic)
     var grp: PyObject
     withPyLock:
@@ -180,6 +180,12 @@ proc getState*(topic: string): Future[(int, int)] {.async.} =
             topdir = -1
     assert topdir != -1 and topdir == (await lastPageNum(topic))
     return (topdir, numdone)
+
+proc hasArticles*(topic: string): Future[bool] {.async.} =
+    let cache = await topicsCache.fetch(topic)
+    withPyLock:
+        var grp {.inject.} = cache.group[]
+        return grp[$topicData.done].len > 0 and grp[$topicData.done][0].len > 0
 
 var topicsCount {.threadvar.}: int # Used to check if topics are in sync, but it is not perfect (in case topics deletions happen)
 topicsCount = -1

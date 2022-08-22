@@ -269,10 +269,9 @@ template handleTopic(capts: auto, ctx: Request) =
       let pagenum = if capts.page == "": $(await topic.lastPageNum()) else: capts.page
       debug "topic: page: ", capts.page
       topicPage(topic, pagenum, false)
-      assert not pagetree.isnil, "topic: pagetree couldn't be generated."
+      checkNil pagetree, "topic: pagetree couldn't be generated."
       let pageReqKey = (capts.topic / capts.page).fp.hash
       pageCache[pageReqKey] = pagetree.asHtml
-      doassert not pagetree.isnil
       var ppage: string
       checkNil(pagetree):
         let processed = await processPage(capts.lang, capts.amp, pagetree)

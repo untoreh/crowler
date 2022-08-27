@@ -241,16 +241,16 @@ proc topicsList*(ucls: string; icls: string; small: static[
     result.add liNode
     await pygil.acquire()
 
-proc buildMenuSmall*(crumbs: string; topic_uri: Uri; path: string): Future[
+proc buildMenuSmall*(crumbs: string; topicUri: Uri; path: string): Future[
     VNode] {.gcsafe, async.} =
-  let relpath = $(topic_uri / path)
+  let relpath = $(topicUri / path)
   return buildHtml():
     section(class = "menu-list mdc-top-app-bar--fixed-adjust"):
     # ul(class = "menu-list mdc-top-app-bar--fixed-adjust"):
       buildButton("i-mdi-brightness-4", "dk-toggle", aria_label = "toggle dark theme",
                   title = "Switch website color between dark and light theme.")
       when TRENDS:
-        a(class = "trending", href = ($(topic_uri / "trending"))):
+        a(class = "trending", href = ($(topicUri / "trending"))):
           buildButton("trending_up", aria_label = "Trending",
                   title = "Recent articles that have been trending up.")
       # lang
@@ -258,9 +258,9 @@ proc buildMenuSmall*(crumbs: string; topic_uri: Uri; path: string): Future[
       # Topics
       await topicsList(ucls = "menu-list-topics", icls = "menu-topic-item")
 
-proc buildMenuSmall*(crumbs: string; topic_uri: Uri; a = emptyArt): Future[
+proc buildMenuSmall*(crumbs: string; topicUri: Uri; a = emptyArt): Future[
     VNode] {.async.} =
-  return await buildMenuSmall(crumbs, topic_uri, a.getArticlePath)
+  return await buildMenuSmall(crumbs, topicUri, a.getArticlePath)
 
 proc buildLogo(pos: string): VNode =
   buildHtml():
@@ -273,7 +273,7 @@ proc buildLogo(pos: string): VNode =
         img(src = LOGO_URL, loading = "lazy", alt="logo-light")
 
 
-proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): Future[
+proc buildMenu*(crumbs: string; topicUri: Uri; path: string): Future[
     VNode] {.async.} =
   return buildHtml(header(class = "mdc-top-app-bar menu", id = "app-bar")):
     tdiv(class = "mdc-top-app-bar__row"):
@@ -297,9 +297,9 @@ proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): Future[
         await topicsList(ucls = "app-bar-topics", icls = "topic-item", small = false)
       section(class = "mdc-top-app-bar__section mdc-top-app-bar__section--align-end",
               role = "toolbar"):
-        buildSearch(topic_uri, true)
+        buildSearch(topicUri, true)
         when TRENDS:
-          a(class = "trending", href = ($(topic_uri / "trending"))):
+          a(class = "trending", href = ($(topicUri / "trending"))):
             buildButton("trending_up", aria_label = "Trending",
                     title = "Recent articles that have been trending up.")
         # lang
@@ -307,14 +307,14 @@ proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): Future[
         # logo
         buildLogo("right")
 
-template buildMenu*(crumbs: string; topic_uri: Uri; a: Article): untyped =
-  buildMenu(crumbs, topic_uri, a.getArticlePath)
+template buildMenu*(crumbs: string; topicUri: Uri; a: Article): untyped =
+  buildMenu(crumbs, topicUri, a.getArticlePath)
 
 proc buildFooter*(topic = "", pagenum = ""): Future[VNode] {.async.} =
   return buildHtml(tdiv(class = "site-footer container max border medium no-padding")):
     footer(class = "padding absolute blue white-text primary left bottom"):
       tdiv(class = "footer-links"):
-        a(href = (sitemapUrl(topic, pagenum)),
+        a(href = sitemapUrl(topic, pagenum),
                 class = "sitemap"):
           tdiv(class = "icon i-mdi-sitemap")
           text("Sitemap")
@@ -369,7 +369,7 @@ proc postContent(article: string; withlinks = true): Future[VNode] {.async.} =
   return buildHtml(article(class = "post-wrapper")):
     # NOTE: use `code` tag to avoid minification to collapse whitespace
     pre(class = HTML_POST_SELECTOR, style = break_style):
-      verbatim(if withlinks: (await article.replaceLinks) else: article)
+      verbatim(if likely(withlinks): (await article.replaceLinks) else: article)
 
 proc postFooter(pubdate: Time): VNode =
   let dt = inZone(pubdate, utc())
@@ -383,11 +383,11 @@ proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): Future[
     VNode] {.async.} =
   assert not a.isnil
   let crumbs = toUpper(&"/ {a.topic} / Page-{a.page} /")
-  let topic_uri = parseUri("/" & a.topic)
+  let topicUri = parseUri("/" & a.topic)
   let related = await buildRelated(a)
   return buildHtml(body(class = "", topic = (a.topic), style = preline_style)):
-    await buildMenu(crumbs, topic_uri, a)
-    await buildMenuSmall(crumbs, topic_uri, a)
+    await buildMenu(crumbs, topicUri, a)
+    await buildMenuSmall(crumbs, topicUri, a)
     for ad in insertAd(ADS_HEADER): ad
     main(class = "mdc-top-app-bar--fixed-adjust"):
       await postTitle(a)
@@ -523,7 +523,7 @@ proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode =
   let
     crumbs = if topic != "": fmt"/ {topic.toUpper} /"
              else: "/ "
-    topic_uri = parseUri("/" & topic)
+    topicUri = parseUri("/" & topic)
     path = topic / slug
   result = buildHtml(html(lang = DEFAULT_LANG_CODE,
                           prefix = opgPrefix(@[Opg.article, Opg.website]))):
@@ -531,8 +531,8 @@ proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode =
     # NOTE: we use the topic attr for the body such that
     # from browser JS we know which topic is the page about
     body(class = "", topic = topic, style = preline_style):
-      await buildMenu(crumbs, topic_uri, path)
-      await buildMenuSmall(crumbs, topic_uri, path)
+      await buildMenu(crumbs, topicUri, path)
+      await buildMenuSmall(crumbs, topicUri, path)
       main(class = "mdc-top-app-bar--fixed-adjust"):
         if title != "":
           pageTitle(title, slug)

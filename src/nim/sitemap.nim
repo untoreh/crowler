@@ -43,7 +43,7 @@ proc sitemapUrl*(): string =
 
 proc sitemapUrl*(topic: string): string =
   ## topic sitemap
-  assert topic != ""
+  checkTrue topic != "", "Topic is empty."
   $(WEBSITE_URL / topic / "sitemap.xml")
 
 proc sitemapUrl*(topic: string, pagenum: int): string =
@@ -51,8 +51,10 @@ proc sitemapUrl*(topic: string, pagenum: int): string =
   $(WEBSITE_URL / topic / $pagenum / "sitemap.xml")
 
 proc sitemapUrl*(topic: string, pagenum: string): string =
-  if topic == "" and pagenum == "":
+  if topic == "":
     sitemapUrl()
+  elif pagenum == "":
+    sitemapUrl(topic)
   else:
     var pn: int
     checkTrue topic != "" and pagenum.parseInt(pn) == pagenum.len, "Invalid topic or page number."
@@ -60,7 +62,7 @@ proc sitemapUrl*(topic: string, pagenum: string): string =
 
 proc sitemapUrl*(topic: string, _: bool): string =
   ## page sitemap
-  assert topic != ""
+  checkTrue topic != "", "Topic is empty."
   $(WEBSITE_URL / topic / "index.xml")
 
 {.pop.}

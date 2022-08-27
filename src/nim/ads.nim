@@ -198,7 +198,7 @@ proc replaceLinks*(str: string, chunksize = 250): Future[string] {.async.} =
         prevstrpos = strpos
         strpos = x.offsetBase + x.bufpos - txtStop
         # add processed non text data starting from previous point
-        result.add str[prevstrpos..<strpos]
+        result.add str[prevstrpos..strpos]
         strpos += txtStop # add the current text to the current string position
 
         if unlikely(positions.len == 0):
@@ -226,7 +226,7 @@ proc replaceLinks*(str: string, chunksize = 250): Future[string] {.async.} =
         if filled:
           break
     next(x)
-
+  # echo result
 
 import std/os
 import fsnotify

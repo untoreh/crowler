@@ -26,25 +26,23 @@ TYPES = [
 PROXIES_SET = set()
 N_PROXIES = 200
 PROXIES = deque(maxlen=N_PROXIES)
-PROXIES.extendleft([cfg.STATIC_PROXY_EP for _ in range(N_PROXIES)])
+PROXIES.extendleft([cfg.STATIC_PROXY_EP])
 PB: Union[Broker, None] = None
 
 def next_proxy():
     i = 0
     while True:
-        yield PROXIES[i]
-        i += 1
-        if i >= N_PROXIES:
-            i = 0
+        if len(PROXIES) > 0:
+            if i >= len(PROXIES):
+                i = 0
+            yield PROXIES[i]
+            i += 1
+        else:
+            yield cfg.STATIC_PROXY_EP
 
 PROXY_ITER = iter(next_proxy())
-PROXY_CHOICE = (lambda: cfg.STATIC_PROXY_EP, lambda: next(PROXY_ITER), lambda: next(PROXY_ITER))
-
-
 
 import config as cfg
-import random
-from itertools import cycle
 import json
 
 typemap = {
@@ -67,7 +65,7 @@ def sync_from_file(wait_time=10):
             proxies = proxies.rstrip(",\n")
             proxies += "]" # proxybroker keeps the json file unclosed open
             proxies = json.loads(proxies)
-        PROXIES_SET.clear()
+        PROXIES_SET = set(PROXIES)
         for p in proxies:
             host = p["host"]
             port = p["port"]
@@ -75,7 +73,9 @@ def sync_from_file(wait_time=10):
             for t in types:
                 tp = t["type"]
                 tpm = typemap[tp]
-                PROXIES_SET.add(f"{tpm}://{host}:{port}")
+                if tpm:
+                    PROXIES_SET.add(f"{tpm}://{host}:{port}")
+        PROXIES.clear()
         PROXIES.extendleft(PROXIES_SET)
     except:
         log.logger.debug("Could't sync proxies, was the file being written?")
@@ -85,14 +85,11 @@ def proxy_sync_forever(interval=60):
         sync_from_file()
         time.sleep(interval)
 
-def get_proxy():
+def get_proxy(static=True) -> str:
     try:
-        i = random.randrange(3)
-        return PROXY_CHOICE[i]()
-    except Exception as e:
-        # this should never fail
-        print(e)
-        exit()
+        return cfg.STATIC_PROXY_EP if static else next(PROXY_ITER)
+    except Exception:
+        return cfg.STATIC_PROXY_EP
 
 sched.initPool()
 sched.apply(proxy_sync_forever)

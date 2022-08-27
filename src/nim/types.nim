@@ -88,7 +88,7 @@ type
         done = "done"
         pages = "pages"
 
-proc initArticle*(data: PyObject, pagenum: int): Article =
+proc initArticle*(data: PyObject, pagenum = -1): Article =
     try:
         let a = new(Article)
         a.title = pyget(data, "title")
@@ -112,7 +112,7 @@ proc initArticle*(data: PyObject, pagenum: int): Article =
     except ValueError as e:
         raise newException(ValueError, fmt"Couldn't create Article from {data}, {e.msg}")
 
-proc default*(_: typedesc[Article]): Article = initArticle(PyNone, 0)
+proc default*(_: typedesc[Article]): Article = initArticle(PyNone)
 
 proc initTypes*() =
     try:
@@ -132,7 +132,7 @@ import
     tables
 
 
-proc get*[K, V](t: Table[K, V], k: K): V = t[k] # the table module doesn't have this
+proc get*[K, V](t: OrderedTable[K, V] | Table[K, V], k: K): V = t[k] # the table module doesn't have this
 
 lockedStore(Table)
 lockedStore(LruCache)

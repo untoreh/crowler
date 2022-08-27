@@ -87,13 +87,13 @@ template logstring(code: untyped): untyped =
     else:
         fmt"{getThreadId()} - " & fmt code
 
-template debug*(dofmt = false; code: untyped): untyped =
-  when not defined(release) and logLevelMacro < lvlNone:
+template debug*(code: untyped; dofmt = true): untyped =
+  when not defined(release) and logLevelMacro <= lvlDebug:
     withLock(loggingLock):
       logger[].log lvlDebug, when dofmt: logstring(`code`) else: `code`
 
 template logall*(code: untyped): untyped =
-  when defined(release) and logLevelMacro < lvlNone:
+  when not defined(release) and logLevelMacro < lvlNone:
     withLock(loggingLock):
       logger[].log lvlAll, logstring(`code`)
 
@@ -137,7 +137,7 @@ template checkNil*(v; msg: string) = checkNil(v, msg): discard
 macro checkNil*(v; msg: string, code: untyped) =
   quote do:
     if `v`.isnil:
-        debug `msg`
+        debug `msg`, false
         raise newException(ValueError, `msg`)
     else:
       `code`
@@ -734,16 +734,33 @@ proc slugify*(value: string): string =
     result = result.replace(sre("[^\\w\\s-]"), "")
     result = result.replace(sre("[-\\s]+"), "-").strip(runes = stripchars)
 
+proc hasScheme*(url: string): bool {.inline.} =
+  ## Check if url string has scheme (eg. "http://") in it
+  url.contains sre "^(?:(?://)|(?:https?://))"
+
+proc withScheme*(url: string): string {.inline.} =
+  ## Ensures `url` has a scheme in it
+  if url.hasScheme: url
+  else: "//" & url
+
 var uriVar {.threadVar.}: URI
 proc rewriteUrl*(el, rewrite_path: auto, hostname = WEBSITE_DOMAIN) =
-    parseURI(string(el.getAttr("href")), uriVar)
-    # remove initial dots from links
-    uriVar.path = uriVar.path.replace(sre("^\\.?\\.?"), "")
-    if uriVar.hostname == "" or (uriVar.hostname == hostname and
-        uriVar.path.startsWith("/")):
-        uriVar.path = joinpath(rewrite_path, uriVar.path)
-    el.setAttr("href", $uriVar)
-    # debug "old: {prev} new: {$uriVar}, {rewrite_path}"
+  let url = el.getAttr("href").string
+  url.parseUri(uriVar)
+  # remove initial dots from links
+  uriVar.path = uriVar.path.replace(sre("^\\.?\\.?"), "")
+  if uriVar.hostname == "" or (uriVar.hostname == hostname and
+      uriVar.path.startsWith("/")):
+      uriVar.path = joinpath(rewrite_path, uriVar.path)
+  el.setAttr("href",
+             # `parseUri` doesn't keep the scheme, if it is relative ("//")
+             # so we have to add it back
+             if uriVar.scheme == "" and url.hasScheme:
+               "//" & $uriVar
+             else:
+               $uriVar)
+  # debug "old: {prev} new: {$uriVar}, {rewrite_path}"
+
 
 import chronos
 import faststreams/inputs
@@ -766,7 +783,7 @@ proc innerText*(n: VNode): string =
 
 # import std/[xmltree, strtabs, strutils]
 import std/htmlparser
-converter toXmlNode*(el: VNode): XmlNode =
+proc toXmlNode*(el: VNode): XmlNode =
   case el.kind:
     of VNodeKind.verbatim:
       parseHtml(el.text)
@@ -783,7 +800,7 @@ converter toXmlNode*(el: VNode): XmlNode =
       newXmlTree($el.kind, kids, attributes = xAttrs)
 
 import std/unidecode
-converter toVNode*(el: XmlNode): VNode =
+proc toVNode*(el: XmlNode): VNode =
   privateAccess(VNode)
   try:
     case el.kind:

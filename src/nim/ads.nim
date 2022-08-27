@@ -55,7 +55,9 @@ macro initLocks(syms: varargs[untyped]) =
 template initLinks(name, data) =
   if fileExists(`name File`):
     let links = readFile(`name File`)
-    data[] = links.split()
+    data[] = collect:
+      for link in links.split():
+        link.withScheme
     `name Idx` = 0
     `name Count` = data[].len
     if `name Count` == 0:
@@ -105,13 +107,15 @@ proc readAdsConfig*() =
       ADS_SEPARATOR[] = loadHtml(adsSeparatorFile)
 
 template nextLink(name, data) =
-  withASyncLock(`name Lock`[]):
-    if unlikely(`name Idx` == 0):
-      result = data[][0]
-      `name Idx` += 1
-    else:
-      result = data[][`name Count`.mod(`name Idx`)]
-      `name Idx` = if `name Idx` >= `name Count`: 0 else: `name Idx` + 1
+  checkNil(data):
+    checkNil `name Lock`
+    withASyncLock(`name Lock`[]):
+      if unlikely(`name Idx` == 0):
+        result = data[][0]
+        `name Idx` += 1
+      else:
+        result = data[][`name Count`.mod(`name Idx`)]
+        `name Idx` = if `name Idx` >= `name Count`: 0 else: `name Idx` + 1
 
 proc nextAdsLink*(): Future[string] {.async.} =
   nextLink adsLinks, ADS_LINKS
@@ -158,8 +162,9 @@ template adLink*(kind): auto =
 proc insertAd*(name: ptr XmlNode): seq[VNode] {.gcsafe.} =
   result = newSeq[VNode]()
   if not name.isnil and not name[].isnil:
-    for el in name[].filter():
-      result.add verbatim(el.withClosingHtmlTag)
+    for el in name[]:
+      if el.kind == xnElement:
+        result.add verbatim(el.withClosingHtmlTag)
   else:
     warn "xmlnode is nil."
 
@@ -239,7 +244,9 @@ proc updateAds(event: seq[PathEvent]) =
 var assetsFileLock: Lock
 initLock(assetsFileLock)
 let assetsFiles* = create(HashSet[string])
-proc loadAssets() =
+proc loadAssets*() =
+  if not dirExists(DATA_ASSETS_PATH):
+    createDir(DATA_ASSETS_PATH)
   assetsFiles[].clear()
   for (kind, file) in walkDir(DATA_ASSETS_PATH):
     assetsFiles[].incl file.extractFilename()
@@ -272,8 +279,6 @@ proc runAdsWatcher*() =
   createThread(thr, pollWatcher, (DATA_ADS_PATH, WatchKind.ads))
 
 proc runAssetsWatcher*() =
-  if not dirExists(DATA_ASSETS_PATH):
-    createDir(DATA_ASSETS_PATH)
   loadAssets()
   assetsFirstRead = true
   var thr {.global.}: Thread[(string, WatchKind)]

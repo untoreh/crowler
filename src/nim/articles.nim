@@ -30,25 +30,25 @@ proc getArticleUrl*(a: Article): string = $(WEBSITE_URL / getArticlePath(a))
 proc getArticleUrl*(a: Article, lang: string): string {.inline.} = $(WEBSITE_URL / lang /
         getArticlePath(a))
 
+proc isValidArticlePy*(py: PyObject): bool = ut.is_valid_article(py).to(bool)
 
-proc getArticles*(topic: string, n = 3, pagenum: int = -1): Future[seq[Article]] {.async.} =
+proc getArticles*(topic: string, n = 3, pagenum: int = -1): Future[(int, seq[Article])] {.async.} =
     let arts = await topicArticles(topic)
     withPyLock:
         !! pyiszarray(arts)
         var data: PyObject
-        let
-            total = arts.shape[0].to(int)
-            count = min(n, total)
-            start = total - count
+        let total = arts.shape[0].to(int)
 
-        info "Fetching {count}(total:{total}) unpublished articles for {topic}/page:{pagenum}"
-        for i in start..total - 1:
-            # FIXME: some articles entries are _zeroed_ somehow
+        info "Fetching {n}(total:{total}) unpublished articles for {topic}/page:{pagenum}"
+        for i in countDown(total - 1, 0):
+            result[0] += 1
             data = arts[i]
-            if pyisint(data):
-                warn "articles: topic {topic} has _zeroed_ articles in storage."
+            if not data.isValidArticlePy():
+                warn "articles: topic {topic} has _empty_ articles in storage."
                 continue
-            result.add(initArticle(data, pagenum))
+            result[1].add(initArticle(data, pagenum))
+            if result[1].len >= n: # got the requested number of articles
+              break
 
 proc getDoneArticles*(topic: string, pagenum: int): Future[seq[Article]] {.async.} =
     withPyLock:
@@ -101,7 +101,8 @@ proc getArticle*(topic, page, slug: auto): Future[Article] {.async.} =
         else:
             emptyArt
 
-proc isEmpty*(a: Article): bool = a.isnil or a.title == ""
+
+proc isEmpty*(a: Article): bool = a.isnil or a.title == "" or a.content == ""
 
 proc getAuthor*(a: Article): string {.inline.} =
     if a.author.isEmptyOrWhitespace:

@@ -42,7 +42,7 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
             # if new topics have been added clear homepage/sitemap
             if n != prev_size:
                 prev_size = n
-                clearSitemap("")
+                clearSitemap()
                 deletePage("")
         let topic = (await nextTopic())
         if topic != "":

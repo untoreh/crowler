@@ -179,14 +179,13 @@ proc doTrans*() {.async.} =
 
 proc translate*[T](q: ptr[QueueXml | QueueDom], el: T, srv: service) =
     if q.isnil:
-        return
+      warn "translate: queue can't be nil"
+      return
     let (success, length) = setFromDB(q[].pair, el)
     if not success:
         if length > q[].bufsize:
             debug "Translating element singularly since it is big"
             elUpdate(q[], el, srv)
-            let n = slations[].len
-            debug "Saving translations! {n}"
         else:
             if reachedBufSize(length, q[]):
                 q[].push()

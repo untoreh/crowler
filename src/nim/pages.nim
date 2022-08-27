@@ -241,7 +241,6 @@ proc buildHomePage*(lang, amp: string): Future[(VNode, VNode)] {.async.} =
   let pagetree = await buildPage(title = "",
                        content = verbatim(content),
                        slug = "",
-                       topic = "",
                        desc = WEBSITE_DESCRIPTION)
   if not pagetree.isnil:
     return (pagetree, await processPage(lang, amp, pagetree))
@@ -300,3 +299,7 @@ proc buildSuggestList*(topic, input: string, prefix = ""): Future[
 
 
 {.pop gcsafe.}
+
+when isMainModule:
+  import cfg
+  echo buildHomePage("en", "")

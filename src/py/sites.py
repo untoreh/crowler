@@ -371,6 +371,19 @@ class Site:
         done = self.load_done(topic)
         return len(done) == 0 or len(done[0]) == 0
 
+    def clear_invalid(self):
+        for topic, _, _ in self.load_topics()[0]:
+            done = self.load_done(topic)
+            tosave = []
+            for page in done:
+                arts = done[page]
+                assert isinstance(arts, za.Array)
+                for a in arts:
+                    if ut.is_valid_article(a):
+                        tosave.append(a)
+                arts.resize(len(tosave))
+                arts[:] = tosave
+
     def add_topics_idx(self, tp: List[Tuple[str, str, int]]):
         assert isinstance(tp, list), "ati: list instance error"
         (topics, tpset) = self.load_topics()

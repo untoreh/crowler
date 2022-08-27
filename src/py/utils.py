@@ -168,6 +168,7 @@ class ZarrKey(Enum):
     # stores the topics list and the last update timestamp for each one
     topics = "topics"
 
+def is_valid_article(a): return isinstance(a, dict) and a.get("content", "") != ""
 
 def _wrap_path(root):
     return os.path.normpath(os.path.sep + str(root) + os.path.sep)

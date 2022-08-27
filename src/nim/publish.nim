@@ -167,7 +167,7 @@ proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
                       posts: ptr seq[(VNode, Article)],
                       donePy: ptr seq[PyObject],
                       doneArts: ptr seq[Article]): Future[bool] {.gcsafe, async.} =
-    var arts = await getArticles(topic, pagenum = pagenum)
+    var (nProcessed, arts) = await getArticles(topic, pagenum = pagenum)
     let pubtime = getTime().toUnix
     if arts.len == 0:
         return false
@@ -201,7 +201,7 @@ proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
             doneArts[].add a
     await updateTopicPubdate()
     withPyLock:
-        discard site[].save_done(topic, len(arts), donePy[], pagenum)
+        discard site[].save_done(topic, nProcessed, donePy[], pagenum)
     return true
 
 proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
@@ -269,6 +269,7 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
             var relpath = topic / $pagenum / ar.slug
             await search.push(relpath)
     clearSiteMap(topic)
+    clearSiteMap(topic, pagenum)
     # update ydx turbo items
     when cfg.YDX:
         writeFeed()
@@ -306,7 +307,7 @@ proc resetTopic(topic: string) =
     syncPyLock():
         discard site[].reset_topic_data(topic)
     pageCache[].del(topic.feedKey)
-    clearSiteMap(topic)
+    clearSiteMap(topic, all=true)
     saveLS(topic, initLS())
 
 proc pubAllPages(topic: string, clear = true) {.async.} =

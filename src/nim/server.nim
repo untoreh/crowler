@@ -42,6 +42,7 @@ import
   translate_db,
   rss,
   amp,
+  pwa,
   ads,
   opg,
   ldj,
@@ -116,6 +117,8 @@ proc initThread*() {.gcsafe.} =
   reqEventQK = create(EventQueueKey)
   reqEventQK[] = reqCompleteEQ[].register()
   waitFor syncTopics()
+  loadAssets()
+  readAdsConfig()
 
   threadInitialized = true
 
@@ -343,21 +346,26 @@ template handleSuggest(relpath: string, ctx: Request) =
   page = await buildSuggestList(capts.topic, searchq, prefix)
   await reqCtx.doReply(page, rqid, )
 
-template handleFeed() =
-  page = await fetchFeedString(capts.topic)
+template handlePwa() =
+  page = pageCache[].lcheckOrPut(reqCtx.key):
+    siteManifest()
   await reqCtx.doReply(page, rqid, )
 
-template handleSiteFeed() =
-  page = await fetchFeedString()
+type feedKind = enum fSite, fTopic
+template handleFeed(kind) =
+  page = case kind:
+           of fSite: await fetchFeedString()
+           of fTopic: await fetchFeedString(capts.topic)
   await reqCtx.doReply(page, rqid, )
 
-template handleTopicSitemap() =
-  page = await fetchSiteMap(capts.topic)
-  await reqCtx.doReply(page, rqid, )
-
-template handleSitemap() =
-  page = await fetchSiteMap("")
-  await reqCtx.doReply(page, rqid, )
+type smKind = enum smSite, smTopic, smPage, smPageIdx
+template handleSiteMap(kind) =
+  page = case kind:
+    of smSite: await fetchSiteMap()
+    of smTopic: await fetchSiteMap(capts.topic)
+    of smPage: await fetchSiteMap(capts.topic, capts.page)
+    of smPageIdx: await fetchSiteMap(capts.topic, on)
+  await reqCtx.doReply(page, rqid )
 
 template handleRobots() =
   page = pageCache[].lcheckOrPut(reqCtx.key):
@@ -418,9 +426,9 @@ proc handleGet(ctx: Request): Future[bool] {.gcsafe, async.} =
   var url = urlCache.lcheckOrPut(relpath):
     let u = new(Uri)
     parseUri(relpath, u[]); u
-  let cache_param = url.query.getParam("cache")
-  if cache_param.len > 0:
-    nocache = cache_param[0]
+  let cacheParam = url.query.getParam("cache")
+  if cacheParam.len > 0:
+    nocache = cacheParam[0]
   if nocache != '\0':
     url.query = url.query.replace(sre "&?cache=[0-9]&?", "")
 
@@ -466,10 +474,13 @@ proc handleGet(ctx: Request): Future[bool] {.gcsafe, async.} =
         handleRobots()
       of (topic: "feed.xml"):
         info "router: serving site feed"
-        handleSiteFeed()
+        handleFeed(fSite)
       of (topic: "sitemap.xml"):
         info "router: serving sitemap"
-        handleSitemap()
+        handleSitemap(smSite)
+      of (topic: "manifest.json"):
+        info "router: servinge pwa manifest"
+        handlePwa()
       of (topic: "s"):
         info "router: serving search {relpath:.20}"
         handleSearch(relpath, ctx)
@@ -484,10 +495,16 @@ proc handleGet(ctx: Request): Future[bool] {.gcsafe, async.} =
         handleSuggest(relpath, ctx)
       of (page: "feed.xml"):
         info "router: serving feed for topic {capts.topic:.20}"
-        handleFeed()
+        handleFeed(fTopic)
       of (page: "sitemap.xml"):
         info "router: serving sitemap for topic {capts.topic:.20}"
-        handleTopicSitemap()
+        handleSitemap(smTopic)
+      of (art: "sitemap.xml"):
+        info "router: serving sitemap for topic page {capts.topic:.20}/{capts.page}"
+        handleSitemap(smPage)
+      of (art: "index.xml"):
+        info "router: serving sitemapindex for topic page {capts.topic:.20}"
+        handleSitemap(smPageIdx)
       of (art: ""):
         info "router: serving topic {relpath:.20}, {reqCtx.key}"
         # topic page

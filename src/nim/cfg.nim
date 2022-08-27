@@ -18,7 +18,7 @@ elif configName == "wsl":
   export wsl
 
 const
-  BASE_URL = Uri()
+  BASE_URL* = Uri()
   SITE_PATH* = PROJECT_PATH / "site"
   SITE_ASSETS_PATH* = BASE_URL / "assets" / WEBSITE_NAME
   SITE_ASSETS_DIR* = SITE_PATH / "assets" / WEBSITE_NAME

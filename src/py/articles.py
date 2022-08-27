@@ -229,14 +229,18 @@ rgx_4 = re.compile(r"\!\[.*?\].*?\(.*?\)")
 
 def clean_content(content: str):
     """"""
-    # double new lines for better formatting
-    content = re.sub(rgx_1, "\n\n", content)
-    # clean repeated charaters
-    content = re.sub(rgx_2, "", content)
-    # compact whitespace
-    content = re.sub(rgx_3, "", content)
-    # some weird broken md links
-    content = re.sub(rgx_4, "", content)
+    try:
+        # double new lines for better formatting
+        content = re.sub(rgx_1, "\n\n", content)
+        # clean repeated charaters
+        content = re.sub(rgx_2, "", content)
+        # compact whitespace
+        content = re.sub(rgx_3, "", content)
+        # some weird broken md links
+        content = re.sub(rgx_4, "", content)
+        return content
+    except:
+        return content
 
 
 def fillarticle(url, data, topic, site: Site):
@@ -280,6 +284,8 @@ def fillarticle(url, data, topic, site: Site):
             return {}
 
         final["content"] = clean_content(final["content"])
+        if not final["content"]:
+            return {}
 
         final["slug"] = ut.slugify(final["title"])
         final["desc"] = tra["description"] or goo.get("meta", {}).get("description")

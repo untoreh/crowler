@@ -23,6 +23,7 @@ import cfg,
        html_misc,
        html_minify_c,
        amp,
+       pwa,
        opg,
        rss,
        ldj,
@@ -34,7 +35,8 @@ import cfg,
   pyutils,
   ads,
   server_types,
-  html_entities
+  html_entities,
+  sitemap
 
 static: echo "loading html..."
 
@@ -117,7 +119,9 @@ proc buildHead*(path: string; description = ""; topic = "";
     meta(name = "viewport", content = "width=device-width, initial-scale=1")
     link(rel = "canonical", href = canon)
     feedLink(topic, path / topic)
+    for l in sitemapLinks(topic, ar): l
     ampLink(path)
+    pwaLink()
     for t in opgPage(ar): t
     for n in langLinksNodes(canon, rel=true): n
 
@@ -306,11 +310,11 @@ proc buildMenu*(crumbs: string; topic_uri: Uri; path: string): Future[
 template buildMenu*(crumbs: string; topic_uri: Uri; a: Article): untyped =
   buildMenu(crumbs, topic_uri, a.getArticlePath)
 
-proc buildFooter*(topic: string = ""): Future[VNode] {.async.} =
+proc buildFooter*(topic = "", pagenum = ""): Future[VNode] {.async.} =
   return buildHtml(tdiv(class = "site-footer container max border medium no-padding")):
     footer(class = "padding absolute blue white-text primary left bottom"):
       tdiv(class = "footer-links"):
-        a(href = ((if topic != "": "/" & topic else: "") & "/sitemap.xml"),
+        a(href = (sitemapUrl(topic, pagenum)),
                 class = "sitemap"):
           tdiv(class = "icon i-mdi-sitemap")
           text("Sitemap")
@@ -392,7 +396,7 @@ proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): Future[
       hr()
       related
       for ad in insertAd(ADS_SIDEBAR): ad
-    await buildFooter(a.topic)
+    await buildFooter(a.topic, a.page.intToStr)
 
 proc pageTitle*(title: string; slug: string): VNode =
   buildHtml(tdiv(class = "title-wrap")):
@@ -514,8 +518,8 @@ proc buildPost*(a: Article): Future[VNode] {.async.} =
     buildHead(getArticlePath(a), a.desc, a.topic, ar = a)
     bbody
 
-proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode = nil; topic = "";
-        desc: string = ""): Future[VNode] {.gcsafe, async.} =
+proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode = nil;
+                topic = ""; desc: string = "", ar = emptyArt): Future[VNode] {.gcsafe, async.} =
   let
     crumbs = if topic != "": fmt"/ {topic.toUpper} /"
              else: "/ "
@@ -523,7 +527,7 @@ proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode =
     path = topic / slug
   result = buildHtml(html(lang = DEFAULT_LANG_CODE,
                           prefix = opgPrefix(@[Opg.article, Opg.website]))):
-    buildHead(path, desc)
+    buildHead(path, desc, topic, ar)
     # NOTE: we use the topic attr for the body such that
     # from browser JS we know which topic is the page about
     body(class = "", topic = topic, style = preline_style):
@@ -535,7 +539,7 @@ proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode =
         content
         if not pagefooter.isNil():
           pageFooter
-      await buildFooter(topic)
+      await buildFooter(topic, slug)
 
 import macros
 macro wrapContent(content: string, wrap: static[bool]): untyped =

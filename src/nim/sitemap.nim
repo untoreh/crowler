@@ -207,6 +207,7 @@ proc clearSiteMap*() =
 
 proc clearSiteMap*(topic: string, all=false) =
     pageCache[].del(topic.sitemapKey)
+    pageCache[].del(sitemapKey(topic, on))
     if all:
       for p in 0..<(waitfor lastPageNum(topic)):
         pageCache[].del(sitemapKey(topic, $p))

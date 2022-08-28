@@ -124,7 +124,7 @@ class Translator:
         for (_, code) in TLangs:
             self._translate[(self._sl, code)] = self._tr(source=self._sl, target=code)
         sched.initPool()
-        pb.sync_from_file()
+        sched.apply(pb.proxy_sync_forever, cfg.PROXIES_FILE)
 
     def parse_data(self, data: str):
         queries = []
@@ -134,11 +134,6 @@ class Translator:
             queries.append(data)
         assert all(len(q) < self._max_query_len for q in queries)
         return queries
-
-    def proxy_sync_task(self, seconds=60):
-        while True:
-            pb.sync_from_file()
-            time.sleep(seconds)
 
     def translate(self, data: str, target: str, source=SLang.code, max_tries=5):
         lp = (source, target)

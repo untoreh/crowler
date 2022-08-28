@@ -59,6 +59,7 @@ DATA_DIR = Path(
 assert DATA_DIR is not None  # and isdir(Path(dirname(DATA_DIR)) / ".venv")
 
 PROXIES_DIR = DATA_DIR / "proxies"
+PROXIES_FILE = PROXIES_DIR / "pbproxies.json"
 # how many keywords to try for extracting source links from search engines
 KW_SAMPLE_SIZE = 10
 # How much should a source job take

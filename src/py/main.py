@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 
+import argparse
 import json
 import os
-import shutil
-import argparse
-import time
 import random
+import shutil
+import time
 
-
-import config as cfg
-from sites import Site
-import contents as cnt
-import topics as tpm
-import sources  # NOTE: searx has some namespace conflicts with google.ads, initialize after the `adwords_keywords` module
-import utils as ut
-import scheduler
 import blacklist
+import config as cfg
+import contents as cnt
+import proxies_pb as pb
+import scheduler
+import scheduler as sched
+import sources  # NOTE: searx has some namespace conflicts with google.ads, initialize after the `adwords_keywords` module
+import topics as tpm
+import utils as ut
 from log import logger
+from sites import Site
 
 
 def get_kw_batch(site: Site, topic):
@@ -203,6 +204,8 @@ def new_topic(site: Site, force=False):
 
 def site_loop(site: Site, target_delay=3600 * 8):
     site.load_topics()
+    sched.initPool()
+    sched.apply(pb.proxy_sync_forever, cfg.PROXIES_FILE)
     backoff = 0
     while True:
         try:

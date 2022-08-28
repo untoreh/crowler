@@ -1,4 +1,5 @@
 import asyncio as aio
+from pathlib import Path
 import copy
 import os
 import socket
@@ -16,7 +17,6 @@ from trafilatura import downloads as tradl
 from trafilatura import settings as traset
 from user_agent import generate_user_agent
 
-import config as cfg
 import log
 import scheduler as sched
 
@@ -131,8 +131,6 @@ PROXY_ITER = iter(next_proxy())
 
 import json
 
-import config as cfg
-
 typemap = {
     "CONNECT:80": "http",
     "CONNECT:25": "http",
@@ -143,9 +141,9 @@ typemap = {
 
 
 @retry(tries=3, delay=1, backoff=3.0)
-def sync_from_file():
+def sync_from_file(file_path: Path):
     try:
-        with open(cfg.PROXIES_DIR / "pbproxies.json", "r") as f:
+        with open(file_path, "r") as f:
             proxies = f.read()
         try:
             proxies = json.loads(proxies)
@@ -169,11 +167,15 @@ def sync_from_file():
     except:
         log.logger.debug("Could't sync proxies, was the file being written?")
 
+PROXY_SYNC_RUNNING = False
 
-def proxy_sync_forever(interval=60):
-    while True:
-        sync_from_file()
-        time.sleep(interval)
+def proxy_sync_forever(file_path: Path, interval=60):
+    global PROXY_SYNC_RUNNING
+    if not PROXY_SYNC_RUNNING:
+        PROXY_SYNC_RUNNING = True
+        while True:
+            sync_from_file(file_path)
+            time.sleep(interval)
 
 
 def get_proxy(static=True) -> str:
@@ -184,8 +186,6 @@ def get_proxy(static=True) -> str:
 
 
 sched.initPool()
-sched.apply(proxy_sync_forever)
-
 
 async def fetch_proxies(limit: int, proxies, out: Queue):
     try:

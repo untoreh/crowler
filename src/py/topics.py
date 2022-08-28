@@ -1,12 +1,17 @@
+import json
+import os
+import random
+import time
+
 from pytrends.request import TrendReq
-import os, json, random, time
 from textblob import TextBlob
 
 import adwords_keywords as adk
 import config as cfg
+import log
+import proxies_pb as pb
 import utils as ut
 from sites import Site
-import log
 
 CATEGORIES = None
 _CAT_FILE = cfg.DATA_DIR / "google" / "categories.json"
@@ -18,6 +23,7 @@ else:
     BLACKLIST = set()
 MIN_SENTIMENT = 0.17
 
+
 def load_categories(reset=False):
     global CATEGORIES, DONE
     if CATEGORIES == None:
@@ -25,14 +31,15 @@ def load_categories(reset=False):
             with open(_CAT_FILE, "r") as f:
                 CATEGORIES = json.load(f)
         else:
-            pytrends = TrendReq(
-                hl="en",
-                tz=360,
-                # proxies=pb.PROXIES,
-                retries=2,
-                backoff_factor=0.1,
-                timeout=cfg.REQ_TIMEOUT,
-            )
+            with pb.http_opts():
+                pytrends = TrendReq(
+                    hl="en",
+                    tz=360,
+                    # proxies=pb.PROXIES,
+                    retries=2,
+                    backoff_factor=0.1,
+                    timeout=20,
+                )
             cats = pytrends.categories()
             os.makedirs(os.path.dirname(_CAT_FILE))
             CATEGORIES = flatten_categories(cats=cats)
@@ -62,6 +69,7 @@ def set_last_topic(site: Site, data):
     with open(site.last_topic_file, "w") as lt:
         json.dump(data, lt)
 
+
 def get_category(site: Site, force=False):
     last_topic = get_last_topic(site)
     # if the last topic processing ended correctly the topic should be indexed
@@ -77,6 +85,7 @@ def get_category(site: Site, force=False):
     with open(_CAT_FILE, "w") as f:
         json.dump(CATEGORIES, f)
     return v
+
 
 def gen_topic(site: Site, check_sentiment=True, max_cat_tries=3):
     global _KEYWORDS
@@ -103,9 +112,12 @@ def gen_topic(site: Site, check_sentiment=True, max_cat_tries=3):
         # clear last topic since we saved
         return tpslug
     else:
-        log.warn(f"topic: generation skipped for {cat}, sentiment low {sentiment} < {MIN_SENTIMENT}")
+        log.warn(
+            f"topic: generation skipped for {cat}, sentiment low {sentiment} < {MIN_SENTIMENT}"
+        )
         set_last_topic(site, {"name": "", "time": 0})
         return None
+
 
 def new_topic(site: Site, max_tries=3):
     tries = 0
@@ -115,20 +127,21 @@ def new_topic(site: Site, max_tries=3):
             return tpslug
         tries += 1
 
+
 def suggest(topic: str):
     assert topic
     global _KEYWORDS
-    cfg.setproxies(None)
-    if _KEYWORDS is None:
-        _KEYWORDS = adk.Keywords()
-    sugs = []
-    kws = [topic]
-    while len(sugs) < 20:
-        s = _KEYWORDS.suggest(kws[:20], langloc=None)
-        sugs.extend(s)
-        kws = s
-    cfg.setproxies()
+    with pb.http_opts():
+        if _KEYWORDS is None:
+            _KEYWORDS = adk.Keywords()
+        sugs = []
+        kws = [topic]
+        while len(sugs) < 20:
+            s = _KEYWORDS.suggest(kws[:20], langloc=None)
+            sugs.extend(s)
+            kws = s
     return list(dict.fromkeys(sugs))  ## dedup
+
 
 def save_kws(site: Site, topic: str, kws: list):
     topic_dir = site.topic_dir(topic)

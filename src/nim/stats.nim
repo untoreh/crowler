@@ -75,15 +75,16 @@ proc updateHits*(capts: UriCaptures) =
   let ak = join([capts.topic, capts.art])
   let tk = capts.topic
   var
-    art_count: int32 = statsDB[ak]
-    topic_count: int32 = statsDB[tk]
-  art_count += 1
-  topic_count += 1
-  statsDB[ak] = art_count
-  statsDB[tk] = topic_count
+    artCount: int32 = statsDB[ak]
+    topicCount: int32 = statsDB[tk]
+  artCount += 1
+  topicCount += 1
+  statsDB[ak] = artCount
+  statsDB[tk] = topicCount
 
 proc getHits*(topic: string, slug: string): int32 =
-  statsDB[join([topic, slug])]
+  checkNil(statsDB):
+    result = statsDB[join([topic, slug])]
 
 proc showStats*(topic: string, count = 10) {.async.} =
   for n, (art, artslug) in enumerate await publishedArticles[string](topic, "slug"):
@@ -93,7 +94,7 @@ proc showStats*(topic: string, count = 10) {.async.} =
 
 when isMainModule:
   initStats()
-  waitFor showStats("vps")
+  waitFor showStats("mini")
 
 # when isMainModule:
 #     initStats()

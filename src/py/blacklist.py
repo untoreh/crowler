@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
 import os
+from functools import partial
+from pathlib import Path
 from typing import MutableSequence
 from urllib.parse import urlparse
-from pathlib import Path
-from functools import partial
+
 
 def load_blacklist(site):
     try:
@@ -17,6 +18,7 @@ def load_blacklist(site):
         blacklist_path.touch()
         return set()
 
+
 def exclude(site, k):
     u = urlparse(k)
     if u.hostname is None:
@@ -24,13 +26,17 @@ def exclude(site, k):
     else:
         return u.hostname not in site.blacklist
 
-def exclude_sources(site, k): return exclude(site, k["url"])
+
+def exclude_sources(site, k):
+    return exclude(site, k["url"])
+
 
 def exclude_blacklist(site, data: MutableSequence, f=exclude) -> MutableSequence:
     f = partial(f, site)
     if site.blacklist is None:
         site.blacklist = load_blacklist(site)
     return list(filter(f, data))
+
 
 def exclude_blacklist_sources(site, *args):
     return exclude_blacklist(site, *args)

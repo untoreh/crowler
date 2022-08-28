@@ -1,17 +1,16 @@
 import warnings
-from multiprocessing.pool import ThreadPool
 from typing import List
-
-import articles as art
-import config as cfg
-from sites import Site
-from blacklist import exclude_blacklist
-import scheduler as sched
-import utils as ut
-from log import logger
 
 import feedfinder2 as ff2
 import feedparser as fep
+
+import articles as art
+import config as cfg
+import scheduler as sched
+import utils as ut
+from blacklist import exclude_blacklist
+from log import logger
+from sites import Site
 
 warnings.simplefilter("ignore")
 
@@ -22,6 +21,7 @@ FEEDFINDER_DATA = dict()
 
 # overwrite feedfinder to accept raw data
 setattr(ff2.FeedFinder, "get_feed", lambda _, url: FEEDFINDER_DATA.pop(url, ""))
+
 
 def parsesource(url, topic, site: Site):
     global FEEDFINDER_DATA, LAST_SOURCE
@@ -58,14 +58,12 @@ def parsefeed(f):
     return fep.parse(ut.fetch_data(f))
 
 
-def fromsources(sources, topic, site: Site, n=cfg.POOL_SIZE, use_proxies=True):
+def fromsources(sources, topic, site: Site, n=cfg.POOL_SIZE):
     """Create list of feeds from a subset of links found in the source file, according to SRC_SAMPLE_SIZE."""
     global FEEDS, ARTICLES
     sched.initPool()
     FEEDS = []
     ARTICLES = []
-    if use_proxies:
-        cfg.setproxies()
     jobs = []
     logger.info("Starting to collect articles/feeds from %d sources.", len(sources))
     for entry in sources:
@@ -79,8 +77,6 @@ def fromsources(sources, topic, site: Site, n=cfg.POOL_SIZE, use_proxies=True):
         logger.info("Waiting for job: %s.", n)
         j.wait()
 
-    if use_proxies:
-        cfg.setproxies()
     logger.info("Source parsing Done")
     FEEDS = ut.dedup(FEEDS)
     logger.info(
@@ -92,13 +88,11 @@ def fromsources(sources, topic, site: Site, n=cfg.POOL_SIZE, use_proxies=True):
     return (ARTICLES, FEEDS)
 
 
-def fromfeeds(sources, site: Site, n=cfg.POOL_SIZE, use_proxies=True):
+def fromfeeds(sources, site: Site, n=cfg.POOL_SIZE):
     """Create list of feeds from a subset of links found in the source file, according to SRC_SAMPLE_SIZE."""
     global ARTICLES
     sched.initPool()
     ARTICLES = []
-    if use_proxies:
-        cfg.setproxies()
     jobs = []
     for entry in sources:
         url = entry.get("url")
@@ -106,14 +100,12 @@ def fromfeeds(sources, site: Site, n=cfg.POOL_SIZE, use_proxies=True):
         if not url:
             continue
         logger.info("Fetching articles from %s", url)
-        j = pool.apply(parsearticle, url, topic, site)
+        j = sched.apply(parsearticle, url, topic, site)
         jobs.append(j)
     for n, j in enumerate(jobs):
         j.wait()
         logger.info("Waiting for job: %s.", n)
 
-    if use_proxies:
-        cfg.setproxies()
     logger.info("Articles parsing Done")
     logger.info(
         "Found %d articles in %d sources.",

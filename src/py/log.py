@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import logging, sys, os
-from io import StringIO
+from io import BytesIO, StringIO
 
 logger = logging.getLogger()
 logger_level = getattr(logging, os.getenv("PYTHON_DEBUG", "warning").upper())
@@ -51,7 +51,8 @@ class LoggerLevel(object):
             for (lv, h) in zip(self.handlers_lvl, self.logger.handlers):
                 h.setLevel(lv)
             if self.quiet:
-                self.null.close()
+                if isinstance(self.null, BytesIO):
+                    self.null.close()
                 sys.stdout = self.stdout
                 sys.stderr = self.stderr
 

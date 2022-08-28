@@ -1,28 +1,29 @@
 import os
+import re
 import time
 from collections import deque
-from pathlib import Path
-from random import choice
-from typing import Dict, Iterator, List, MutableSequence, Optional, Tuple
 from datetime import datetime
-import re
+from pathlib import Path
+from random import choice, randint
+from typing import Dict, Iterator, List, MutableSequence, Optional, Sequence, Tuple
 
 import numpy as np
 import tomli
 import zarr as za
 from bloom_filter2 import BloomFilter
+from facepy import GraphAPI as FBApi
 
 # social
 from praw import Reddit
 from praw.models.reddit.subreddit import Subreddit
 from twitter.api import Api as TwitterApi
-from facepy import GraphAPI as FBApi
 
 import blacklist
 import config as cfg
+import log
+import proxies_pb as pb
 import utils as ut
 from utils import ZarrKey, load_zarr, save_zarr
-import log
 
 SITES = {}
 
@@ -124,7 +125,7 @@ class Site:
         dom = self.domain.split(".")[0]
         message = f"{art['desc']}\nContinue at: {dom} {url}"
         try:
-            assert cfg.is_unproxied()
+            assert pb.is_unproxied()
             self._fb_graph.post(
                 self._feed_path,
                 link=self.fb_page_url,
@@ -162,6 +163,7 @@ class Site:
     def choose_article(self):
         self.load_topics()
         topic = self.get_random_topic()
+        assert topic is not None
         a = self.recent_article(topic)
         assert a is not None, "no article found"
         return (topic, a)
@@ -171,6 +173,7 @@ class Site:
     def reddit_submit(self):
         topic, a = self.choose_article()
         assert isinstance(self._subreddit, Subreddit), "subreddit instance error"
+        assert isinstance(a, dict)
         title = a["title"]
         url = self.article_url(a, topic)
         s = self._subreddit.submit(title=title, url=url)
@@ -178,7 +181,6 @@ class Site:
         return s
 
     def _init_twitter(self):
-        import twt
 
         consumer_key = self._config.get("twitter_consumer_key")
         consumer_secret = self._config.get("twitter_consumer_secret")
@@ -195,6 +197,7 @@ class Site:
     def tweet(self):
         topic, a = self.choose_article()
         assert isinstance(self._twitter_api, TwitterApi), "twitter api instance error"
+        assert isinstance(a, dict)
         url = self.article_url(a, topic)
         status = "{}: {}".format(a["title"], url)
         if len(url) > 280:
@@ -209,6 +212,7 @@ class Site:
     def recent_article(self, topic: str):
         arts = self.get_last_done(topic)
         assert isinstance(arts, za.Array), "ZArray instance error"
+        assert isinstance(arts, Sequence)
         max_tries = len(arts)
         tries = 0
         while tries < max_tries:
@@ -462,9 +466,17 @@ class Site:
                 if isinstance(a, dict):
                     yield a
 
-    def get_random_topic(self, n=10):
+    random_topic_list = list()
+
+    def get_random_topic(self, allow_empty=False):
         assert self.topics_arr is not None
-        return choice(self.topics_arr[-n:])[0]
+        if len(self.random_topic_list) == 0:
+            self.random_topic_list.extend(self.topics_dict.keys())
+        while len(self.random_topic_list) > 0:
+            idx = randint(0, len(self.random_topic_list) - 1)
+            topic = self.random_topic_list.pop(idx)
+            if allow_empty or not self.is_empty(topic):
+                return topic
 
     def remove_broken_articles(self, topic):
         # valid_unpub = []
@@ -485,7 +497,7 @@ class Site:
             page_arts = done[n]
             for n, a in enumerate(page_arts):
                 if a is not dict or a.get("topic", "") != topic:
-                   page_arts[n] = None
+                    page_arts[n] = None
                 # if isinstance(a, dict):
                 #     valid_pub.append(a)
             # if len(done[n]) > len(valid_pub):
@@ -506,6 +518,7 @@ class Site:
         for img in images:
             if img.url not in self.img_bloom:
                 return img
+
 
 # def init_topic(topic: str):
 #     tg = topic_group(topic)

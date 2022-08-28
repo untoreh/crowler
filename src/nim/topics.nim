@@ -158,26 +158,26 @@ proc publishedArticles*[V](topic: string, attr: string = ""): Future[seq[(PyObje
         pydone: PyObject
         page: PyObject
         art:  PyObject
-        n_pages: int
-        n_arts : int
+        nPages: int
+        nArts : int
         v: V
     withPyLock:
         pydone = site[].topic_group(topic)[$topicData.done]
-        n_pages = len(pydone)
+        nPages = len(pydone)
     let getArticleAttr = if attr != "": (art: PyObject) => pyget[V](art, attr, default(V))
                         else: (art: PyObject) => ""
-    for d in 0..<n_pages:
+    for d in 0..<nPages:
         withPyLock:
             page = pydone[d]
-            n_arts = len(page)
-        for a  in 0..<n_arts:
+            checkNil(page):
+                nArts = len(page)
+        for a  in 0..<nArts:
             withPyLock:
-                assert not page.isnil
                 art = page[a]
                 if not pyisnone(art):
-                    v = getArticleAttr(art)
+                  v = getArticleAttr(art)
                 else:
-                    v = default(V)
+                  v = default(V)
             result.add (art, v)
 
 proc fetch*(t: Topics, k: string): Future[TopicState] {.async.} =

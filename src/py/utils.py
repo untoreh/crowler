@@ -1,29 +1,28 @@
 #!/usr/bin/env python3
 #
+import imghdr
 import json
 import os
 import re
 import unicodedata
-import numpy as np
-from re import finditer
 from enum import Enum
+from io import BytesIO
+from re import finditer
 from time import sleep
-from typing import Optional, Dict
+from typing import Dict, Optional
+from urllib.request import urlopen
 
-from cachetools import LRUCache
 import numcodecs
+import numpy as np
 import zarr as za
+from cachetools import LRUCache
 from numcodecs import Blosc
 from trafilatura import fetch_url as _fetch_url
-
-import imghdr
-from urllib.request import urlopen
-from io import BytesIO
+from zict import LRU, Func
 
 import config as cfg
+import proxies_pb as pb
 from config import strtobool
-
-from zict import Func, LRU
 
 # data
 compressor = Blosc(cname="zstd", clevel=2, shuffle=Blosc.BITSHUFFLE)
@@ -57,9 +56,11 @@ def fetch_data(url, *args, delay=0.3, backoff=0.3, depth=0, fromcache=True, **kw
         try:
             data = LRU_CACHE[url]
         except KeyError:
-            data = _fetch_url(url)
+            with pb.http_opts(proxy="auto"):
+                data = _fetch_url(url)
     else:
-        data = _fetch_url(url)
+        with pb.http_opts(proxy="auto"):
+            data = _fetch_url(url)
     if data is None and depth < 4:
         # try an http request 2 times
         if depth == 2:
@@ -109,6 +110,7 @@ def save_file(
             f.write("\n")
         return r
 
+
 def is_img_url(url: str):
     try:
         with urlopen(url) as f:
@@ -116,6 +118,7 @@ def is_img_url(url: str):
             return bool(what)
     except:
         return False
+
 
 def slugify(value, allow_unicode=False):
     """
@@ -168,7 +171,10 @@ class ZarrKey(Enum):
     # stores the topics list and the last update timestamp for each one
     topics = "topics"
 
-def is_valid_article(a): return isinstance(a, dict) and a.get("content", "") != ""
+
+def is_valid_article(a):
+    return isinstance(a, dict) and a.get("content", "") != ""
+
 
 def _wrap_path(root):
     return os.path.normpath(os.path.sep + str(root) + os.path.sep)
@@ -228,6 +234,7 @@ def save_zarr(
             zfun = za.save_array
         zfun(**kwargs)
 
+
 def arr_key(k=ZarrKey.articles, subk="", root=cfg.DATA_DIR):
     path = ZarrKey(k).name
     if subk != "":
@@ -235,8 +242,14 @@ def arr_key(k=ZarrKey.articles, subk="", root=cfg.DATA_DIR):
     cache_key = (path, root)
     return cache_key, path
 
+
 def load_zarr(
-        k=ZarrKey.articles, subk="", root=cfg.DATA_DIR, dims=1, overwrite=OVERWRITE_FLAG, nocache=False
+    k=ZarrKey.articles,
+    subk="",
+    root=cfg.DATA_DIR,
+    dims=1,
+    overwrite=OVERWRITE_FLAG,
+    nocache=False,
 ):
     cache_key, path = arr_key(k, subk, root)
     if nocache:

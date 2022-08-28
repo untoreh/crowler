@@ -128,7 +128,7 @@ def run_parse1_job(site, topic):
     """
     try:
         sources = ensure_sources(site, topic)
-    except ValueError as e:
+    except ValueError:
         logger.warning(
             "Couldn't find sources for topic %s, site: %s.", topic, site.name
         )

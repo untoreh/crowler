@@ -64,8 +64,20 @@ proc getDoneArticles*(topic: string, pagenum: int): Future[seq[Article]] {.async
                 if not pyisnone(data): # blacklisted articles are set to None
                     result.add(initArticle(data, pagenum))
 
-proc getLastArticles*(topic: string): Future[seq[Article]] {.async.} =
-    return await getDoneArticles(topic, await lastPageNum(topic))
+proc getLastArticles*(topic: string, n = 1): Future[seq[Article]] {.async.} =
+  ## Return the latest articles, from newest to oldest (index 0 is newest)
+  if await topic.isEmptyTopic:
+    return
+  var pagenum = await lastPageNum(topic)
+  while pagenum >= 0:
+    let arts = await getDoneArticles(topic, pagenum)
+    var a = arts.len - 1
+    while a >= 0:
+      result.add arts[a]
+      if result.len >= n:
+        return
+      a.dec
+    pagenum.dec
 
 proc getArticlePy*(topic: string, page: string | int, slug: string): Future[PyObject] {.async.} =
 
@@ -135,3 +147,6 @@ proc deleteArt*(capts: UriCaptures, cacheOnly=false) {.async, gcsafe.} =
                 break
         for n in toRemove:
             pageArts[n] = PyNone
+
+when isMainModule:
+  echo waitFor getLastArticles("mini", 3)

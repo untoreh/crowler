@@ -1,20 +1,23 @@
-import config as cfg
-from typing import List, Callable
+import re
+import warnings
+from typing import Callable, List
+
 import lassie as la
-import utils as ut
-from goose3 import Goose
 import nltk
+import numpy as np
 import spacy
 import trafilatura as _tra
-import warnings
-import re
-import numpy as np
-from tagging import rake
+from goose3 import Goose
 from urllib3.util.url import Url, parse_url
-import translator as tr
+
+import config as cfg
 import log
+import proxies_pb as pb
+import translator as tr
+import utils as ut
 from sites import Site
 from sources import get_images
+from tagging import rake
 
 # NOTE: Check scikit version from time to time
 with warnings.catch_warnings():
@@ -39,9 +42,8 @@ def check_spacy_model():
             return
     assert spacy_version != ""
     if model_version != spacy_version:
-        cfg.setproxies(None)
-        spacy.cli.download(cfg.SPACY_MODEL)
-        cfg.setproxies()
+        with pb.http_opts():
+            spacy.cli.download(cfg.SPACY_MODEL)
         with open(cfg.CACHE_DIR / "last_spacy_version.txt", "w") as f:
             f.write(spacy_version)
 
@@ -311,7 +313,9 @@ def fillarticle(url, data, topic, site: Site):
         else:
             site.img_bloom.add(final["imageUrl"])
         if not final.get("imageTitle", ""):
-            final["imageTitle"] =  la["description"] if la["description"] != final["desc"] else ""
+            final["imageTitle"] = (
+                la["description"] if la["description"] != final["desc"] else ""
+            )
         if not final.get("imageOrigin", ""):
             final["imageOrigin"] = final["imageUrl"]
         final["topic"] = topic

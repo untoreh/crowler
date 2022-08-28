@@ -221,28 +221,30 @@ proc buildHomePage*(lang, amp: string): Future[(VNode, VNode)] {.async.} =
   withPyLock:
     a = default(Article)
   var
-    n_topics = len(topicsCache)
+    nTopics = len(topicsCache)
+    narts = 0
     content: string
     processed: HashSet[string]
+    trial = 0
+    maxTries = cfg.HOME_ARTS * 3
 
-  for _ in 0..<cfg.N_TOPICS:
+  while nArts < cfg.HOME_ARTS and trial < maxTries:
+    trial.inc
     var topic: string
     withPyLock:
       topic = site[].get_random_topic().to(string)
-    if topic in processed:
-      continue
-    else:
-      processed.incl topic
-    let arts = await getLastArticles(topic)
+    let arts = await getLastArticles(topic, 1)
     if len(arts) > 0:
-      content.add $(await articleEntry(arts[^1]))
-    if len(processed) == n_topics:
-      break
+      let ar = arts[0]
+      if not (ar.slug in processed):
+        content.add $(await articleEntry(ar))
+        processed.incl ar.slug
+        nArts.inc
   let pagetree = await buildPage(title = "",
                        content = verbatim(content),
                        slug = "",
                        desc = WEBSITE_DESCRIPTION)
-  if not pagetree.isnil:
+  checkNil(pagetree):
     return (pagetree, await processPage(lang, amp, pagetree))
 
 proc buildSearchPage*(topic: string, kws: string, lang: string): Future[

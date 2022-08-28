@@ -1,17 +1,16 @@
-import config as cfg
+import os
+import sys
+from random import shuffle
 
 from retry import retry
-import sys, os
-from random import shuffle
-from log import logger, LoggerLevel
-
-import scheduler as sched
-
-cfg.set_socket_timeout(10)
-
-from searx.search import SearchQuery, EngineRef
 from searx import search
+from searx.search import EngineRef, SearchQuery
+
+import config as cfg
+import proxies_pb as pb
+import scheduler as sched
 import translator as tr
+from log import LoggerLevel, logger
 
 # the searx.search module has a variable named `processors`
 # import importlib
@@ -81,7 +80,7 @@ def get_engine_params(engine):
     if False:  # cfg.PROXIES_ENABLED:
         params["network"] = {
             "verify": False,
-            "proxies": cfg.STATIC_PROXY_EP,
+            "proxies": pb.STATIC_PROXY_EP,
             "retries": 3,
             "retry_on_http_error": True,
             "max_redirects": 30,
@@ -108,7 +107,8 @@ def single_search(
             pageno=p,
             lang=lang,
         )
-        q = search.Search(s).search()
+        with pb.http_opts(proxy="auto"):
+            q = search.Search(s).search()
         res = q.get_ordered_results()
         if len(res) > 0:
             res.extend(res)
@@ -137,7 +137,7 @@ def dedup_results(results):
     return all_results
 
 
-def fromkeyword(keyword="trending", verbose=False, n_engines=1, filter_lang=False):
+def fromkeyword(keyword="trending", verbose=False, filter_lang=False):
     """
     `n_engines`: How many search engines to query.
     """
@@ -215,7 +215,8 @@ def get_images(kw, maxiter=3, min_count=1, raw=False):
             results
             if raw
             else [
-                Img(title=r["title"], url=r["img_src"], origin=r["url"]) for r in results
+                Img(title=r["title"], url=r["img_src"], origin=r["url"])
+                for r in results
             ]
         )
 

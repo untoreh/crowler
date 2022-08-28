@@ -1,83 +1,39 @@
-import os, socket, sys
-if os.getenv("LIBPYTHON_PATH", "").endswith("d.so"):
-    sys.path.extend(['/opt/python-dbg/lib/python310.zip', '/opt/python-dbg/lib/python3.10', '/opt/python-dbg/lib/python3.10/lib-dynload', '/opt/python-dbg/lib/python3.10/site-packages'])
-from pathlib import Path
-import warnings
-import pycurl
-from trafilatura import settings as traset, downloads as tradl
-from user_agent import generate_user_agent
-import copy
 import json
+import os
+import sys
+import warnings
+from pathlib import Path
 
+from proxies_pb import REQ_TIMEOUT
+
+if os.getenv("LIBPYTHON_PATH", "").endswith("d.so"):
+    sys.path.extend(
+        [
+            "/opt/python-dbg/lib/python310.zip",
+            "/opt/python-dbg/lib/python3.10",
+            "/opt/python-dbg/lib/python3.10/lib-dynload",
+            "/opt/python-dbg/lib/python3.10/site-packages",
+        ]
+    )
 if os.getenv("PYTHON_NO_WARNINGS"):
     warnings.simplefilter("ignore")
 
-PROXIES_ENABLED = True
-PROXIES_EP = "http://127.0.0.1:8080/proxies.json"
-STATIC_PROXY_EP = "socks5://localhost:8877"
-STATIC_PROXY = True
-PROXY_DICT = {"http": STATIC_PROXY_EP, "https": STATIC_PROXY_EP}
 
-if "CURL_CLASS" not in globals():
-    CURL_CLASS = copy.deepcopy(pycurl.Curl)
-
-
-def get_curlproxy(p=STATIC_PROXY_EP):
-    def curlproxy():
-        c = CURL_CLASS()
-        ua = generate_user_agent()
-        c.setopt(pycurl.PROXY, p)
-        c.setopt(pycurl.SSL_VERIFYHOST, 0)
-        c.setopt(pycurl.SSL_VERIFYPEER, 0)
-        # self.setopt(pycurl.PROXYTYPE, pycurl.PROXYTYPE_SOCKS5_HOSTNAME)
-        c.setopt(pycurl.USERAGENT, ua)
-        traset.DEFAULT_CONFIG.set("DEFAULT", "USER_AGENTS", ua)
-        traset.TIMEOUT = REQ_TIMEOUT
-        tradl.TIMEOUT = REQ_TIMEOUT
-        return c
-
-    return curlproxy
-
-
-PROXY_VARS = ("HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy")
-
-
-def setproxies(p=STATIC_PROXY_EP):
-    if p:
-        for name in PROXY_VARS:
-            os.environ[name] = p
-        pycurl.Curl = get_curlproxy()
-    else:
-        for name in PROXY_VARS:
-            if name in os.environ:
-                del os.environ[name]
-            pycurl.Curl = CURL_CLASS
-
-def is_unproxied():
-    return all(name not in os.environ for name in PROXY_VARS)
-
-def set_socket_timeout(timeout):
-    socket.setdefaulttimeout(timeout)
-
-
-set_socket_timeout(5)
-
-def strtobool (val):
+def strtobool(val):
     """Convert a string representation of truth to true (1) or false (0).
     True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values
     are 'n', 'no', 'f', 'false', 'off', and '0'.  Raises ValueError if
     'val' is anything else.
     """
     val = val.lower()
-    if val in ('y', 'yes', 't', 'true', 'on', '1'):
+    if val in ("y", "yes", "t", "true", "on", "1"):
         return 1
-    elif val in ('n', 'no', 'f', 'false', 'off', '0'):
+    elif val in ("n", "no", "f", "false", "off", "0"):
         return 0
     else:
         raise ValueError("invalid truth value %r" % (val,))
 
 
-REQ_TIMEOUT = 20
 # How many concurrent requests
 POOL_SIZE = os.cpu_count()
 

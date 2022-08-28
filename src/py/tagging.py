@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-import config as cfg
-from pyate import combo_basic
-import utils as ut
-import spacy
-import pytextrank as _
-import phrasemachine
-from rake_nltk import Rake
-import nltk
-from textacy import similarity
 from re import sub
+
+import nltk
+import phrasemachine
+import pytextrank as _
+import spacy
+from pyate import combo_basic
+from rake_nltk import Rake
+from textacy import similarity
+
+import config as cfg
+import utils as ut
 
 try:
     nltk.data.find("corpora/stopwords")
@@ -16,6 +18,7 @@ except LookupError:
     nltk.download("stopwords")
 rk = Rake()
 rk.max_length = cfg.TAGS_MAX_LEN
+
 
 def ate(text, n=3):
     tags = combo_basic(text)

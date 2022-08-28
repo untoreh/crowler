@@ -125,8 +125,6 @@ class Translator:
             self._translate[(self._sl, code)] = self._tr(source=self._sl, target=code)
         sched.initPool()
         pb.sync_from_file()
-        cfg.setproxies(None)
-        cfg.set_socket_timeout(5)
 
     def parse_data(self, data: str):
         queries = []
@@ -160,7 +158,8 @@ class Translator:
                 prx_dict["http"] = prx
                 tr.proxies = prx_dict
                 q = queries[current]
-                trans.append(tr.translate(q))
+                with pb.http_opts():
+                    trans.append(tr.translate(q))
                 current += 1
             except Exception as e:
                 if isinstance(e, (ConnectTimeout, ProxyError, ConnectionResetError)):

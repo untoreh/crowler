@@ -226,7 +226,6 @@ proc replaceLinks*(str: string, chunksize = 250): Future[string] {.async.} =
         if filled:
           break
     next(x)
-  # echo result
 
 import std/os
 import fsnotify

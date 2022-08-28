@@ -1,18 +1,103 @@
 import asyncio as aio
-from json.decoder import JSONDecodeError
-import proxybroker as pb
-from proxybroker.api import Broker
-from collections import deque
-from typing import Union
-import scheduler as sched
-from multiprocessing import Process, Queue
-from retry import retry
+import copy
+import os
+import socket
 import time
+from collections import deque
+from json.decoder import JSONDecodeError
+from multiprocessing import Process, Queue
+from typing import Union
 
-# warnings.simplefilter("ignore")
+import proxybroker as pb
+import pycurl
+from proxybroker.api import Broker
+from retry import retry
+from trafilatura import downloads as tradl
+from trafilatura import settings as traset
+from user_agent import generate_user_agent
 
 import config as cfg
 import log
+import scheduler as sched
+
+PROXIES_ENABLED = True
+STATIC_PROXY_EP = "socks5://localhost:8877"
+STATIC_PROXY = True
+PROXY_DICT = {"http": STATIC_PROXY_EP, "https": STATIC_PROXY_EP}
+REQ_TIMEOUT = 20
+
+if "CURL_CLASS" not in globals():
+    CURL_CLASS = copy.deepcopy(pycurl.Curl)
+
+
+def get_curlproxy(p=STATIC_PROXY_EP):
+    def curlproxy():
+        c = CURL_CLASS()
+        ua = generate_user_agent()
+        c.setopt(pycurl.PROXY, p)
+        c.setopt(pycurl.SSL_VERIFYHOST, 0)
+        c.setopt(pycurl.SSL_VERIFYPEER, 0)
+        # self.setopt(pycurl.PROXYTYPE, pycurl.PROXYTYPE_SOCKS5_HOSTNAME)
+        c.setopt(pycurl.USERAGENT, ua)
+        traset.DEFAULT_CONFIG.set("DEFAULT", "USER_AGENTS", ua)
+        traset.TIMEOUT = REQ_TIMEOUT
+        tradl.TIMEOUT = REQ_TIMEOUT
+        return c
+
+    return curlproxy
+
+
+PROXY_VARS = ("HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy")
+
+
+def setproxies(p=STATIC_PROXY_EP):
+    if p:
+        for name in PROXY_VARS:
+            os.environ[name] = p
+        pycurl.Curl = get_curlproxy()
+    else:
+        prev_proxy = os.getenv(PROXY_VARS[0])
+        for name in PROXY_VARS:
+            if name in os.environ:
+                del os.environ[name]
+            pycurl.Curl = CURL_CLASS
+        return prev_proxy
+
+
+def is_unproxied():
+    return all(name not in os.environ for name in PROXY_VARS)
+
+
+def set_socket_timeout(timeout):
+    socket.setdefaulttimeout(timeout)
+
+
+class http_opts(object):
+    prev_timeout = 0
+    prev_proxy = ""
+    timeout = 10
+    proxy = None
+
+    def __init__(self, timeout=10, proxy=None):
+        if proxy == "auto":
+            self.proxy = get_proxy()
+        else:
+            self.proxy = proxy
+        self.timeout = timeout
+        return self
+
+    def __call__(self):
+        return self
+
+    def __enter__(self):
+        self.prev_proxy = setproxies(self.proxy)
+        self.prev_timeout = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(self.timeout)
+
+    def __exit__(self):
+        setproxies(self.prev_proxy)
+        socket.setdefaulttimeout(self.prev_timeout)
+
 
 LIMIT = 50
 TYPES = [
@@ -26,8 +111,9 @@ TYPES = [
 PROXIES_SET = set()
 N_PROXIES = 200
 PROXIES = deque(maxlen=N_PROXIES)
-PROXIES.extendleft([cfg.STATIC_PROXY_EP])
+PROXIES.extendleft([STATIC_PROXY_EP])
 PB: Union[Broker, None] = None
+
 
 def next_proxy():
     i = 0
@@ -38,23 +124,26 @@ def next_proxy():
             yield PROXIES[i]
             i += 1
         else:
-            yield cfg.STATIC_PROXY_EP
+            yield STATIC_PROXY_EP
+
 
 PROXY_ITER = iter(next_proxy())
 
-import config as cfg
 import json
+
+import config as cfg
 
 typemap = {
     "CONNECT:80": "http",
     "CONNECT:25": "http",
     "HTTP": "http",
     "SOCKS4": "socks4",
-    "SOCKS5": "socks5"
+    "SOCKS5": "socks5",
 }
 
+
 @retry(tries=3, delay=1, backoff=3.0)
-def sync_from_file(wait_time=10):
+def sync_from_file():
     try:
         with open(cfg.PROXIES_DIR / "pbproxies.json", "r") as f:
             proxies = f.read()
@@ -63,7 +152,7 @@ def sync_from_file(wait_time=10):
         except JSONDecodeError:
             assert proxies.endswith(",\n")
             proxies = proxies.rstrip(",\n")
-            proxies += "]" # proxybroker keeps the json file unclosed open
+            proxies += "]"  # proxybroker keeps the json file unclosed open
             proxies = json.loads(proxies)
         PROXIES_SET = set(PROXIES)
         for p in proxies:
@@ -80,19 +169,23 @@ def sync_from_file(wait_time=10):
     except:
         log.logger.debug("Could't sync proxies, was the file being written?")
 
+
 def proxy_sync_forever(interval=60):
     while True:
         sync_from_file()
         time.sleep(interval)
 
+
 def get_proxy(static=True) -> str:
     try:
-        return cfg.STATIC_PROXY_EP if static else next(PROXY_ITER)
+        return STATIC_PROXY_EP if static else next(PROXY_ITER)
     except Exception:
-        return cfg.STATIC_PROXY_EP
+        return STATIC_PROXY_EP
+
 
 sched.initPool()
 sched.apply(proxy_sync_forever)
+
 
 async def fetch_proxies(limit: int, proxies, out: Queue):
     try:
@@ -159,6 +252,7 @@ def find_proxies_proc(limit: int = LIMIT):
     )
     p.run()
     return (out, p)
+
 
 # if __name__ == "__main__":
 #     limit = 10

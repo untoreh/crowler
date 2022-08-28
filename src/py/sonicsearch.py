@@ -71,14 +71,19 @@ def flush(*args, **kwargs):
     try:
         if "lang" in kwargs:
             del kwargs["lang"]
-        return ingestcl.flush(*args, **kwargs)
+        if "obj" in kwargs:
+            return ingestcl.flusho(*args, **kwargs)
+        elif "bucket" in kwargs:
+            return ingestcl.flushb(*args, **kwargs)
+        else:
+            return ingestcl.flushc(*args, **kwargs)
     except Exception as e:
         log.debug("sonic: flush error %s", e)
         pass
 
-def trigger(*args, **kwargs):
+def consolidate(*args, **kwargs):
     try:
-        return controlcl.trigger(*args, **kwargs)
+        return controlcl.consolidate(*args, **kwargs)
     except Exception as e:
         log.debug("sonic: trigger error %s", e)
         pass

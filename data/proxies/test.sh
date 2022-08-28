@@ -20,7 +20,7 @@ if [ -n "$2" ]; then
 elif [ $hostlist = "hostips.txt" ]; then
     tunnel_proto_cred="ss+quic://aes-128-cfb:128"
 elif [ $hostlist = "torips.txt" ]; then
-    tunnel_proto_cred="ss+quic://tlogin:123"
+    tunnel_proto_cred="ss+quic://aes-128-cfb:tpass123"
 else
     echo tunnel protocol and credentials not specified for hostlist "$hostlist"
     exit 1

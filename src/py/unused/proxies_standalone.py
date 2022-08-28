@@ -1,18 +1,22 @@
-import urllib.request
-from urllib.parse import urlparse
-import random
-from pathlib import Path
 import json
-import log
+import os
+import random
 import resource
 import time
-import time
+import urllib.request
 from copy import deepcopy
+from pathlib import Path
 from random import choice
+from urllib.parse import urlparse
+
+import requests
+from proxy_checker import ProxyChecker
 
 import config as cfg
-import utils as ut
+import log
+import proxies_pb as pb
 import scheduler
+import utils as ut
 
 JUDGES = [
     "http://mojeip.net.pl/asdfa/azenv.php",
@@ -22,10 +26,14 @@ JUDGES = [
 JUDGES_OK = None
 PROXIES = dict()
 UPDATE_FREQ = 60 * 5
+ENGINES = []
+PROXIES_EP = f"http://{os.getenv('PROXY_EP', '')}:8080/proxies.json"
+
 
 def set_resource_limit():
     _, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
     resource.setrlimit(resource.RLIMIT_NOFILE, (10000, hard))
+
 
 def validate_judges():
     set_resource_limit()
@@ -39,57 +47,59 @@ def validate_judges():
     if len(JUDGES) == 0:
         raise RuntimeError("No judges available for proxy checking")
 
-from proxy_checker import ProxyChecker
 
 checker = ProxyChecker()
+
 
 def check_proxy(proxy, timeout, verbose=False):
     if checker.send_query(proxy=proxy):
         return proxy
 
-# def check_proxy_judges(proxy, timeout, verbose=False):
-#     if JUDGES_OK is None:
-#         validate_judges()
-#     try:
-#         pr = urlparse(proxy)
-#         proxy_handler = urllib.request.ProxyHandler({pr.scheme: proxy})
-#         opener = urllib.request.build_opener(proxy_handler)
-#         opener.addheaders = [("User-agent", "Mozilla/5.0")]
-#         urllib.request.install_opener(opener)
-#         urllib.request.urlopen(JUDGES[0])  # change the url address here
-#     except urllib.error.HTTPError as e:
-#         if verbose:
-#             log.logger.debug(e.code)
-#         return False
-#     except Exception as detail:
-#         if verbose:
-#             log.logger.debug(detail)
-#         return True
-#     return True
+
+def check_proxy_judges(proxy, timeout, verbose=False):
+    if JUDGES_OK is None:
+        validate_judges()
+    try:
+        pr = urlparse(proxy)
+        proxy_handler = urllib.request.ProxyHandler({pr.scheme: proxy})
+        opener = urllib.request.build_opener(proxy_handler)
+        opener.addheaders = [("User-agent", "Mozilla/5.0")]
+        urllib.request.install_opener(opener)
+        urllib.request.urlopen(JUDGES[0])  # change the url address here
+    except urllib.error.HTTPError as e:
+        if verbose:
+            log.logger.debug(e.code)
+        return False
+    except Exception as detail:
+        if verbose:
+            log.logger.debug(detail)
+        return True
+    return True
 
 
-# def get_proxies():
-#     proxies = get(cfg.PROXIES_EP).content.splitlines()
-#     for p in proxies:
-#         parts = p.split()
-#         url = str(parts[-1]).rstrip(">'").lstrip("b'")
-#         prot_type = str(parts[3]).rstrip(":'").lstrip("'b'[").rstrip("]").rstrip(",")
-#         if (
-#             prot_type == "HTTP"
-#             or prot_type == "CONNECT:80"
-#             or prot_type == "CONNECT:25"
-#         ):
-#             prot = "http://"
-#         elif prot_type == "HTTPS":
-#             prot = "https://"
-#         elif prot_type == "SOCKS5":
-#             prot = "socks5h://"
+def get_proxies():
+    proxies = requests.get(PROXIES_EP).content.splitlines()
+    for p in proxies:
+        parts = p.split()
+        url = str(parts[-1]).rstrip(">'").lstrip("b'")
+        prot_type = str(parts[3]).rstrip(":'").lstrip("'b'[").rstrip("]").rstrip(",")
+        if (
+            prot_type == "HTTP"
+            or prot_type == "CONNECT:80"
+            or prot_type == "CONNECT:25"
+        ):
+            prot = "http://"
+        elif prot_type == "HTTPS":
+            prot = "https://"
+        elif prot_type == "SOCKS5":
+            prot = "socks5h://"
 
-#         prx = f"{prot}{url}"
-#         PROXIES[prx] = {eg: True for eg in ENGINES}
+        prx = f"{prot}{url}"
+        PROXIES[prx] = {eg: True for eg in ENGINES}
 
 
 prx_iter = iter(set(PROXIES))
+
 
 def switch_proxy(client):
     prx = next(prx_iter).lower()
@@ -99,6 +109,7 @@ def switch_proxy(client):
     client.proxy_dict["http"] = prx
     client.proxy_dict["https"] = prx
     print(client.proxy)
+
 
 def engine_proxy(engine):
     while True:
@@ -110,7 +121,7 @@ def engine_proxy(engine):
 
 def get_proxy(engine, static=True, check=True):
     if static:
-        return cfg.STATIC_PROXY_EP
+        return pb.STATIC_PROXY_EP
     else:
         proxy = engine_proxy(engine)
     if not check:
@@ -196,8 +207,8 @@ class Providers:
     def fetch(self):
         if time.time() - self._last_update > UPDATE_FREQ:
             print("Fetching proxies")
-            cfg.setproxies(None)
-            self.hookzof()
+            with pb.http_opts():
+                self.hookzof()
             # self.jetkai()
             # self.speedx()
             for k, l in self.proxies.items():

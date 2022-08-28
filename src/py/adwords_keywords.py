@@ -61,12 +61,13 @@ from time import sleep
 from typing import Union
 
 import config as cfg
-import translator as tr
 import log
+import proxies_pb as pb
+import translator as tr
+
 
 # [START generate_keyword_ideas]
 def main(client, customer_id, location_ids, language_id, keyword_texts, page_url):
-    cfg.setproxies(None)
     keyword_plan_idea_service = client.get_service("KeywordPlanIdeaService")
     keyword_competition_level_enum = client.enums.KeywordPlanCompetitionLevelEnum
     keyword_plan_network = (
@@ -115,7 +116,6 @@ def main(client, customer_id, location_ids, language_id, keyword_texts, page_url
 
     keyword_ideas = keyword_plan_idea_service.generate_keyword_ideas(request=request)
 
-    cfg.setproxies()
     return [idea.text for idea in keyword_ideas]
     # [END generate_keyword_ideas]
 
@@ -152,9 +152,15 @@ class Keywords:
     def __init__(self) -> None:
         self.client = GoogleAdsClient.load_from_storage(self._config, version="v10")
 
-    def suggest(self, kw: Union[list, str], page_url="", langloc=LANG_LOC_IDS, delay=1, sugs=None):
+    def suggest(
+        self,
+        kw: Union[list, str],
+        page_url="",
+        langloc=LANG_LOC_IDS,
+        delay=1,
+        sugs=None,
+    ):
         try:
-            cfg.setproxies(None)
             if sugs is None:
                 sugs = []
             if langloc is None:
@@ -167,14 +173,15 @@ class Keywords:
                     kw_t = tr.translate(kw, to_lang=lang_code, from_lang="en")
                 else:
                     kw_t = kw
-                s = main(
-                    self.client,
-                    self._customer_id,
-                    [loc_id] if isinstance(loc_id, str) else loc_id,
-                    lang_id,
-                    [kw_t] if kw_t is str else kw_t,
-                    page_url,
-                )
+                with pb.http_opts():
+                    s = main(
+                        self.client,
+                        self._customer_id,
+                        [loc_id] if isinstance(loc_id, str) else loc_id,
+                        lang_id,
+                        [kw_t] if kw_t is str else kw_t,
+                        page_url,
+                    )
                 sleep(1)
                 sugs.extend(s)
             return list(dict.fromkeys(sugs))  ## dedup
@@ -191,5 +198,3 @@ class Keywords:
                     for field_path_element in error.location.field_path_elements:
                         log.warn(f"\t\tOn field: {field_path_element.field_name}")
             return list(dict.fromkeys(sugs))  ## dedup
-        finally:
-            cfg.setproxies()

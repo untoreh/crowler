@@ -67,6 +67,7 @@ RUN cd /site; \
 
 
 FROM sitedeps1 AS sitedeps2
+ARG CACHE 0
 RUN apt update -y ; \
     apt install -y python3-dev python3-pip git libcurl4-openssl-dev libssl-dev gcc; true
 RUN /usr/bin/pip3 install wheel requests pyyaml supervisor bs4 six
@@ -74,6 +75,9 @@ COPY /requirements.git.txt /site/
 RUN /usr/bin/pip3 install -r requirements.git.txt
 COPY /requirements.txt /site/
 RUN /usr/bin/pip3 install -r requirements.txt
+# split requirements that cause dep conflicts
+COPY /requirements2.txt /site/
+RUN /usr/bin/pip3 install -r requirements2.txt
 
 FROM sitedeps2 AS sitedeps3
 RUN /usr/bin/python3 -m textblob.download_corpora
@@ -88,8 +92,9 @@ FROM scraper AS site
 ENV NIM_DEBUG debug
 ARG NIM_ARG release
 ENV NIM $NIM_ARG
+ARG LIBPYTHON_PATH /usr/lib/x86_64-linux-gnu/libpython3.10d.so
 # nim not still supporting ssl3
-RUN apt -y install libssl1.1
+# RUN apt -y install libssl1.1
 RUN /site/scripts/switchdebug.sh /site
 CMD ./cli
 

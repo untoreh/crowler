@@ -1,19 +1,16 @@
 # APT dependencies: libcurl4-openssl-dev
 # installed from pip cli
-# wheel, requests pyyaml, bs4, six
-# parsing
+## wheel, requests pyyaml, bs4, six
+## parsing
 html-parser
 lxml
-feedparser
-feedfinder2
-lassie
 spacy
 alt-profanity-check
 clean-text
 deep_translator
 textblob
 
-# requests
+## requests
 pyssl
 pycurl
 pysocks
@@ -21,26 +18,28 @@ retry
 user_agent
 zict
 
-# data
+## data
 google-ads
 zarr
 bloom_filter2
-# ALPINE distro packages
+## ALPINE distro packages
 # py3-numpy
 # py3-curl
 # HAVE TO BE BUILT
 # numcodecs
 
-# for nim
+## for nim
 unidecode
 langcodes
 pysonic-channel
 
 # sources/articles
-trafilatura # for python 3.10 install `python-tzlocal` from distro packages
-goose3
+feedparser
+feedfinder2
+lassie
 pytrends
 lingua-language-detector
+goose3
 
 # tags
 pyate

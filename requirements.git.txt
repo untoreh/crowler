@@ -2,7 +2,6 @@
 git+https://github.com/html5lib/html5lib-python@master  # for python3.10 use latest
 git+https://github.com/nidhaloff/deep-translator@master
 
-
 # proxy-checker
 git+https://github.com/bluet/proxybroker2@master
 

@@ -11,7 +11,7 @@ fi
 sites=$(echo "${1:-wsl}" | tr "," "\n")
 
 [ -e $trg/cli ] && rm -f $trg/cli
-cp requirements{,.git}.txt $trg/
+cp requirements{,2,.git}.txt $trg/
 mkdir -p $trg/run
 cp -a scripts $trg/
 mkdir -p $trg/logs

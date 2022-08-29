@@ -1,3 +1,4 @@
+{.push hint[DuplicateModuleImport]: off.}
 import
   karax / [karaxdsl, vstyles],
   uri,
@@ -233,6 +234,8 @@ proc buildHomePage*(lang, amp: string): Future[(VNode, VNode)] {.async.} =
     var topic: string
     withPyLock:
       topic = site[].get_random_topic().to(string)
+      if topic == "": # this can happen if we ran out of topics
+        continue
     let arts = await getLastArticles(topic, 1)
     if len(arts) > 0:
       let ar = arts[0]
@@ -300,7 +303,8 @@ proc buildSuggestList*(topic, input: string, prefix = ""): Future[
   return $p
 
 
-{.pop gcsafe.}
+{.pop.}
+{.pop.}
 
 when isMainModule:
   import cfg

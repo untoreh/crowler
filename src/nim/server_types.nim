@@ -1,4 +1,4 @@
-import nimpy, options, nre, strutils, strformat, os, std/enumerate, std/mimetypes, uri, scorper/http/httpcore
+import nimpy, std/[options, nre, strutils, strformat, os, enumerate, mimetypes, uri], scorper/http/httpcore
 import cfg, quirks, utils
 
 const
@@ -37,20 +37,6 @@ proc join*(tup: UriCaptures, sep = "/", n = 0): string =
             s[c] = v
             c += 1
     s.join(sep)
-
-proc suffixPath*(relpath: string): string =
-    var relpath = relpath
-    relpath.removeSuffix("/")
-    if relpath == "":
-        "index.html"
-    elif relpath.splitFile.ext == "":
-        relpath & ".html"
-    else: relpath
-
-proc fp*(relpath: string): string =
-    ## Full file path
-    # NOTE: Only Unix paths make sense! because `/` operator would output `\` on windows
-    SITE_PATH / relpath.suffixPath()
 
 var mimes {.threadvar.}: MimeDB
 proc mimePath*(url: string): string {.gcsafe.} =

@@ -1,9 +1,10 @@
-import nimpy, os, nimdbx
+import nimpy, std/[os, strutils, hashes], nimdbx
 import
     utils,
     quirks,
     cfg,
     types,
+    translate_types,
     translate_db
 
 export translate_db
@@ -33,6 +34,31 @@ proc `[]=`*[K, V](c: ptr PageCache, k: K, v: V) {.inline.} =
     c[][k] = v
 
 proc `[]`*[K](c: ptr PageCache, k: K): string = c[][k]
+
+proc suffixPath*(relpath: string): string =
+    var relpath = relpath
+    relpath.removeSuffix("/")
+    if relpath == "":
+        "index.html"
+    elif relpath.splitFile.ext == "":
+        relpath & ".html"
+    else: relpath
+
+proc fp*(relpath: string): string =
+    ## Full file path
+    # NOTE: Only Unix paths make sense! because `/` operator would output `\` on windows
+    SITE_PATH / relpath.suffixPath()
+
+proc deletePage*(relpath: string) {.gcsafe.} =
+    let
+        sfx = relpath.suffixPath()
+        fpath = SITE_PATH / sfx
+        fkey = fpath.hash
+    pageCache[].del(fkey)
+    pageCache[].del(hash(SITE_PATH / "amp" / sfx))
+    for lang in TLangsCodes:
+        pageCache[].del(hash(SITE_PATH / "amp" / lang / sfx))
+        pageCache[].del(hash(SITE_PATH / lang / sfx))
 
 # proc `get`*[K](c: ptr PageCache, k: K): string = c[].get(k)
 

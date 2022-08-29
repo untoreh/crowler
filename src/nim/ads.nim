@@ -188,8 +188,8 @@ proc replaceLinks*(str: string, chunksize = 250): Future[string] {.async.} =
   var filled: bool
   open(x, s, "")
   defer: close(x)
-  next(x)
   while true:
+    next(x)
     case x.kind:
       of xmlCharData:
         let
@@ -225,9 +225,7 @@ proc replaceLinks*(str: string, chunksize = 250): Future[string] {.async.} =
       else:
         if filled:
           break
-    next(x)
 
-import std/os
 import fsnotify
 type WatchKind = enum
   ads, assets

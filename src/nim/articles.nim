@@ -50,7 +50,7 @@ proc getArticles*(topic: string, n = 3, pagenum: int = -1): Future[(int, seq[Art
             if result[1].len >= n: # got the requested number of articles
               break
 
-proc getDoneArticles*(topic: string, pagenum: int): Future[seq[Article]] {.async.} =
+proc getDoneArticles*(topic: string, pagenum: int, rev=true): Future[seq[Article]] {.async.} =
     withPyLock:
         let
             grp = site[].topic_group(topic)
@@ -60,9 +60,15 @@ proc getDoneArticles*(topic: string, pagenum: int): Future[seq[Article]] {.async
             result = @[]
         else:
             info "Fetching {arts.shape[0]} published articles for {topic}/{pagenum}"
-            for data in pybi[].reversed(arts):
-                if not pyisnone(data): # blacklisted articles are set to None
-                    result.add(initArticle(data, pagenum))
+            template addArt(iter) =
+              for data in iter:
+                if data.isValidArticlePy: # blacklisted articles are set to None
+                  result.add(initArticle(data, pagenum))
+            if rev:
+              addArt(pybi[].reversed(arts))
+            else:
+              addArt(arts)
+
 
 proc getLastArticles*(topic: string, n = 1): Future[seq[Article]] {.async.} =
   ## Return the latest articles, from newest to oldest (index 0 is newest)
@@ -70,7 +76,7 @@ proc getLastArticles*(topic: string, n = 1): Future[seq[Article]] {.async.} =
     return
   var pagenum = await lastPageNum(topic)
   while pagenum >= 0:
-    let arts = await getDoneArticles(topic, pagenum)
+    let arts = await getDoneArticles(topic, pagenum, rev=false)
     var a = arts.len - 1
     while a >= 0:
       result.add arts[a]

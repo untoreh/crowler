@@ -298,8 +298,12 @@ def fillarticle(url, data, topic, site: Site):
             or goo.get("opengraph", {}).get("site_name")
         )
         final["pubDate"] = tra["date"] or goo.get("publish_date")
-
         url = final["url"] = tra["url"] or goo["meta"]["canonical"]
+
+        final["topic"] = topic
+        final["tags"] = rake(final["content"])
+
+        ## Icon/Image
         la = lassie_img(url, data, final)
         if not final["icon"]:
             final["icon"] = abs_url(goo["meta"]["favicon"], url)
@@ -318,8 +322,6 @@ def fillarticle(url, data, topic, site: Site):
             )
         if not final.get("imageOrigin", ""):
             final["imageOrigin"] = final["imageUrl"]
-        final["topic"] = topic
-        final["tags"] = rake(final["content"])
     except Exception as e:
         log.info("articles: Exception %s", e)
     return final

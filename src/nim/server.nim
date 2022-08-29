@@ -22,8 +22,7 @@ import strformat,
        std/cpuinfo,
        json,
        faststreams/inputs,
-       locktplasync,
-       lrucache
+       locktplasync
 
 {.experimental: "caseStmtMacros".}
 

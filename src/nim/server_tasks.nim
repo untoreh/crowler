@@ -1,25 +1,15 @@
-import std/os, strutils, hashes, chronos, chronos/timer
+import std/os, strutils, hashes, chronos
 from std/times import gettime, Time, fromUnix, inSeconds, `-`
 from chronos/timer import seconds, Duration
 
 import server_types,
-    cfg, types, topics, pyutils, publish, quirks, stats, articles, cache, sitemap, translate_types, server_types, chronos
+    cfg, types, topics, pyutils, publish, quirks, stats, articles, cache, sitemap, translate_types
 
-proc deletePage*(relpath: string) {.gcsafe.} =
-    let
-        sfx = relpath.suffixPath()
-        fpath = SITE_PATH / sfx
-        fkey = fpath.hash
-    pageCache[].del(fkey)
-    pageCache[].del(hash(SITE_PATH / "amp" / sfx))
-    for lang in TLangsCodes:
-        pageCache[].del(hash(SITE_PATH / "amp" / lang / sfx))
-        pageCache[].del(hash(SITE_PATH / lang / sfx))
 
 proc pubTask*(): Future[void] {.gcsafe, async.} =
     await syncTopics()
     # Give some time to services to warm up
-    await sleepAsync(10.seconds)
+    # await sleepAsync(10.seconds)
     let t = getTime()
     var backoff = 1
     # start the topic sync thread from python
@@ -33,25 +23,20 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
         backoff += 1
     # Only publish one topic every `CRON_TOPIC`
     var
-        prev_size = len(topicsCache)
-        n = prev_size
+        prevSize = len(topicsCache)
+        n = prevSize
     while true:
         if n <= 0:
             await syncTopics()
             n = len(topicsCache)
             # if new topics have been added clear homepage/sitemap
-            if n != prev_size:
-                prev_size = n
+            if n != prevSize:
+                prevSize = n
                 clearSitemap()
                 deletePage("")
         let topic = (await nextTopic())
         if topic != "":
-            # Don't publish each topic more than `CRON_TOPIC_FREQ`
-            debug "pubtask: {topic} was published {inHours(t - topicPubdate())} hours ago."
             if await maybePublish(topic):
-                # clear homepage and topic page cache
-                deletePage("")
-                deletePage("/" & topic)
                 discard
         await sleepAsync(cfg.CRON_TOPIC.seconds)
         n -= 1

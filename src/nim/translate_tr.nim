@@ -1,5 +1,4 @@
 import
-    cfg,
     xmltree,
     nre,
     strutils,

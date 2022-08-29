@@ -112,7 +112,6 @@ proc fetchStyle(el: VNode) {.async.} =
       await getFile(src)
   data.maybeStyle
 
-import htmlparser
 proc processHead(inHead: VNode, outHead: VNode, level = 0) {.async.} =
   var canonicalUnset = level == 0
   debug "iterating over {inHead.kind}"

@@ -127,7 +127,7 @@ proc buildTopicPagesSitemap*(topic: string): Future[XmlNode] {.async.} =
     await syncTopics()
     var nEntries = 0
     let done = await topicDonePages(topic)
-    template langUrl(lang): untyped {.dirty.} = $(WEBSITE_URL / lang/ topic / pages[n])
+    template langUrl(lang): untyped {.dirty.} = $(WEBSITE_URL / lang / topic / pages[n])
     withPyLock:
         # add the most recent articles first (pages with higher idx)
         let pages = pybi[].list(done.keys()).to(seq[string])

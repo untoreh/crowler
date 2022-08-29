@@ -26,9 +26,9 @@ proc ensurePy(srv: service): PyObject =
     try:
         return case srv:
             of deep_translator:
-                pyImport($srv)
+                pyImport(cstring($srv))
             of base_translator:
-                pyImport($srv)
+                pyImport(cstring($srv))
     except Exception as e:
         if "ModuleNotFoundError" in e.msg or "No module named" in e.msg:
             if getEnv("VIRTUAL_ENV", "") != "":

@@ -262,7 +262,6 @@ iterator items*[S](s: PySequence[S]): PyObject =
 
 {.experimental: "dotOperators".}
 
-import macros
 macro `.()`*(o: PySequence, field: untyped, args: varargs[untyped]): untyped =
     quote do:
         `o`.py.`field`(`args`)

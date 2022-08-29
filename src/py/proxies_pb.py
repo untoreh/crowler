@@ -18,7 +18,6 @@ from trafilatura import settings as traset
 from user_agent import generate_user_agent
 
 import log
-import scheduler as sched
 
 PROXIES_ENABLED = True
 STATIC_PROXY_EP = "socks5://localhost:8877"
@@ -84,7 +83,6 @@ class http_opts(object):
         else:
             self.proxy = proxy
         self.timeout = timeout
-        return self
 
     def __call__(self):
         return self
@@ -94,7 +92,7 @@ class http_opts(object):
         self.prev_timeout = socket.getdefaulttimeout()
         socket.setdefaulttimeout(self.timeout)
 
-    def __exit__(self):
+    def __exit__(self, *_):
         setproxies(self.prev_proxy)
         socket.setdefaulttimeout(self.prev_timeout)
 
@@ -185,8 +183,6 @@ def get_proxy(static=True) -> str:
         return STATIC_PROXY_EP
 
 
-sched.initPool()
-
 async def fetch_proxies(limit: int, proxies, out: Queue):
     try:
         c = 0
@@ -205,7 +201,6 @@ async def fetch_proxies(limit: int, proxies, out: Queue):
 def init_broker(loop, proxies):
     global PB
     try:
-        sched.initPool()
         PB = pb.Broker(proxies)
     except Exception as e:
         log.logger.warning("Cannot initialize ProxyBroker %s", e)

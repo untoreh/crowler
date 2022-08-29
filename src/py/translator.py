@@ -148,7 +148,7 @@ class Translator:
         n_queries = len(queries)
         while len(trans) != n_queries:
             try:
-                prx = pb.get_proxy(tries > 0) # use static proxy once, then from proxy list
+                prx = pb.get_proxy(tries == 0) # use static proxy once, then from proxy list
                 prx_dict["https"] = prx
                 prx_dict["http"] = prx
                 tr.proxies = prx_dict

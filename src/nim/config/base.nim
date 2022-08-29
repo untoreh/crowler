@@ -9,8 +9,8 @@ let dockerMode* {.compileTime.} = os.getenv("DOCKER", "") != ""
 const PROJECT_PATH* = when releaseMode: ""
                  else: os.getenv("PROJECT_DIR", "")
 
-let loggerObj = newConsoleLogger(fmtStr = "[$time] - $levelname: ")
-let logger* = loggerObj.unsafeAddr
+let logger* = create(ConsoleLogger)
+logger[] = newConsoleLogger(fmtStr = "[$time] - $levelname: ")
 
 proc logLevelFromEnv(): auto =
     case os.getenv("NIM_DEBUG", "INFO").toUpper:

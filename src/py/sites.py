@@ -477,6 +477,7 @@ class Site:
             topic = self.random_topic_list.pop(idx)
             if allow_empty or not self.is_empty(topic):
                 return topic
+        return ""
 
     def remove_broken_articles(self, topic):
         # valid_unpub = []

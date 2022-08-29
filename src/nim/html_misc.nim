@@ -107,8 +107,6 @@ proc buildRelated*(a: Article): Future[VNode] {.async.} =
     if c >= cfg.N_RELATED:
       return
 
-import strutils
-import sets
 import xmltree
 import html_entities
 import strformat

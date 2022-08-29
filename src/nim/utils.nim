@@ -197,13 +197,13 @@ proc fileExtension(path: string): string {.inline.} =
 
 iterator filterFiles*(root: string;
                    exts: Stringset = exts.asStringSet;
-                   excl_dirs: StringSet = [];
-                   top_dirs: StringSet = [];
+                   exclDirs: StringSet = [];
+                   topDirs: StringSet = [];
                   ): string {.closure.} =
     ## A directory iterator:
     ## `exts`: which file extensions should be included
-    ## `excl_dirs`: directory names that are skipped on every node (blacklist)
-    ## `top_dirs`: directory names that are included only at top node (subnodes only respect `excl_dirs`)
+    ## `exclDirs`: directory names that are skipped on every node (blacklist)
+    ## `topDirs`: directory names that are included only at top node (subnodes only respect `exclDirs`)
     let rootAbs = expandFilename(root)
     var
         path: string
@@ -212,7 +212,7 @@ iterator filterFiles*(root: string;
             for p in walkDir(rootAbs):
                 if p.kind == pcDir or p.kind == pcLinkToDir:
                     let n = p.path.absolutePath.lastPathPart
-                    if (not (n in excl_dirs)) and (len(top_dirs) == 0 or n in top_dirs):
+                    if (not (n in exclDirs)) and (len(topDirs) == 0 or n in topDirs):
                         p
                 elif p.path.fileExtension in exts:
                     p
@@ -225,7 +225,7 @@ iterator filterFiles*(root: string;
         if path in processed:
             continue
         if kind == pcDir:
-            if path.lastPathPart in excl_dirs:
+            if path.lastPathPart in exclDirs:
                 continue
             else:
                 for f in walkDir(path):
@@ -272,9 +272,9 @@ iterator preorder*(tree: XmlNode): XmlNode =
                     else:
                         if (not node.attrs.isnil) and node.attrs.haskey("class"):
                             var cls = false
-                            let node_classes = node.attrs["class"].split().toHashSet
+                            let nodeClasses = node.attrs["class"].split().toHashSet
                             for class in skip_class:
-                                if class in node_classes:
+                                if class in nodeClasses:
                                     cls = true
                                     break
                             if cls:
@@ -527,7 +527,7 @@ proc findclass*(tree: XmlNode, cls: string): XmlNode =
             return el
 {.pop inline.}
 
-import std/[macros, genasts]
+import std/[genasts]
 
 macro threadVars*(args: varargs[untyped]) =
     result = newStmtList()
@@ -744,14 +744,14 @@ proc withScheme*(url: string): string {.inline.} =
   else: "//" & url
 
 var uriVar {.threadVar.}: URI
-proc rewriteUrl*(el, rewrite_path: auto, hostname = WEBSITE_DOMAIN) =
+proc rewriteUrl*(el, rewritePath: auto, hostname = WEBSITE_DOMAIN) =
   let url = el.getAttr("href").string
   url.parseUri(uriVar)
   # remove initial dots from links
   uriVar.path = uriVar.path.replace(sre("^\\.?\\.?"), "")
   if uriVar.hostname == "" or (uriVar.hostname == hostname and
       uriVar.path.startsWith("/")):
-      uriVar.path = joinpath(rewrite_path, uriVar.path)
+      uriVar.path = joinpath(rewritePath, uriVar.path)
   el.setAttr("href",
              # `parseUri` doesn't keep the scheme, if it is relative ("//")
              # so we have to add it back
@@ -759,10 +759,9 @@ proc rewriteUrl*(el, rewrite_path: auto, hostname = WEBSITE_DOMAIN) =
                "//" & $uriVar
              else:
                $uriVar)
-  # debug "old: {prev} new: {$uriVar}, {rewrite_path}"
+  # debug "old: {prev} new: {$uriVar}, {rewritePath}"
 
 
-import chronos
 import faststreams/inputs
 proc readFileAsync*(file: string): Future[string] {.async.} =
     var data: seq[byte]

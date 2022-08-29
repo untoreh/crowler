@@ -49,7 +49,7 @@ proc clearSource(domain: string) =
   initThread()
   for topic in topicsCache.keys:
     for pn in 0..(waitFor lastPageNum(topic)):
-      let arts = (waitFor getDoneArticles(topic, pn))
+      let arts = (waitFor getDoneArticles(topic, pn, rev=false))
       for ar in arts:
         if parseUri(ar.url).hostname == domain:
           let capts = uriTuple("/" & topic & "/" & $pn & "/" & ar.slug)

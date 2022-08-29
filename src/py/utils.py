@@ -5,6 +5,7 @@ import json
 import os
 import re
 import unicodedata
+from difflib import SequenceMatcher
 from enum import Enum
 from io import BytesIO
 from re import finditer
@@ -151,6 +152,10 @@ def splitStr(string, sep="\\s+"):
         return (c for c in string)
     else:
         return (_.group(1) for _ in finditer(f"(?:^|{sep})((?:(?!{sep}).)*)", string))
+
+
+def similar(a, b):
+    return SequenceMatcher(None, a, b).ratio()
 
 
 def dirsbydate(path):

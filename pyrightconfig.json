@@ -1,5 +1,6 @@
 {
   "reportUnboundVariable": false,
   "venvPath": ".",
-  "venv": ".venv"
+  "venv": ".venv",
+  "stubPath": ""
 }

@@ -88,11 +88,15 @@ def get_engine_params(engine):
     return params
 
 
-ENGINES_PARAMS = [get_engine_params(engine) for engine in ENGINES]
-search.initialize(settings_engines=ENGINES_PARAMS)
-ENGINES_PARAMS_IMG = [get_engine_params(engine) for engine in ENGINES_IMG]
-search.initialize(settings_engines=ENGINES_PARAMS_IMG)
+ENGINES_INITIALIZED = False
 
+def ensure_engines():
+    if not ENGINES_INITIALIZED:
+        ENGINES_PARAMS = [get_engine_params(engine) for engine in ENGINES]
+        search.initialize(settings_engines=ENGINES_PARAMS)
+        ENGINES_PARAMS_IMG = [get_engine_params(engine) for engine in ENGINES_IMG]
+        search.initialize(settings_engines=ENGINES_PARAMS_IMG)
+        ENGINES_INITIALIZED = True
 
 @retry(tries=cfg.SRC_MAX_TRIES, delay=1, backoff=3.0, logger=None)
 def single_search(
@@ -142,6 +146,7 @@ def fromkeyword(keyword="trending", verbose=False, filter_lang=False):
     `n_engines`: How many search engines to query.
     """
     try:
+        ensure_engines()
         engines = ENGINES.copy()
         shuffle(engines)
         logger.info("Finding sources for keyword: %s", keyword)
@@ -194,6 +199,7 @@ class Img(NamedTuple):
 
 def get_images(kw, maxiter=3, min_count=1, raw=False):
     """"""
+    ensure_engines()
     results = []
     itr = 0
     try:

@@ -55,18 +55,23 @@ gs = Goose()
 if not hasattr(nltk, "punkt"):
     nltk.download("punkt")
 
-rx_nojs = r"(Your page may be loading slowly)|(block on your account)|((avail|enable)?(?i)(javascript|js)\s*(?i)(avail|enable)?)"
+char_start_rgx = re.compile(r"^[^a-zA-Z\-\*\=]")
+noise_rgx = re.compile(r"(cookies?)|(policy)|(privacy)|(browser)|(firefox)|(chrome)|(mozilla)|(\sads?\s)|(copyright)|(\slogo\s)|(trademark)|(javascript)|(supported)|(block)|(available)|(country?i?e?s?)|(slow)|(loading)(allowe?d?)", re.IGNORECASE)
 
+def isnoise(content, thresh=0.005) -> bool:
+    m = re.findall(noise_rgx, content)
+    if len(m) / len(content) > thresh:
+        return True
 
 def isrelevant(title, body):
     """String BODY is relevant if it contains at least one word from TITLE."""
     if not title or not body:
         return False
     # only allow contents that don't start with special chars to avoid spam/code blocks
-    if re.match(r"^[^a-zA-Z\-\*\=]", body):
+    if re.match(char_start_rgx, body):
         return False
-    # skip error pages
-    if re.match(rx_nojs, title) or re.match(rx_nojs, body):
+    # skip error/messages/warnings pages
+    if isnoise(title) or isnoise(body):
         return False
     t_words = set(title.split())
     for w in ut.splitStr(body):
@@ -226,20 +231,20 @@ def search_img(final: dict, site: Site):
 rgx_1 = re.compile(r"\.\s*\n")
 rgx_2 = re.compile(r"[^a-zA-Z0-9\n\s]{3,}|(.\s+)\1{2,}")
 rgx_3 = re.compile(r" {2,}")
-rgx_4 = re.compile(r"\!\[.*?\].*?\(.*?\)")
+rgx_4 = re.compile(r"(?:\!\[.*?\].*?\(.*?\))|(?:\!\[.*?\).*?\n?)")
 
 
 def clean_content(content: str):
     """"""
     try:
+        # some weird broken md links
+        content = re.sub(rgx_4, "", content)
         # double new lines for better formatting
         content = re.sub(rgx_1, "\n\n", content)
         # clean repeated charaters
         content = re.sub(rgx_2, "", content)
         # compact whitespace
         content = re.sub(rgx_3, "", content)
-        # some weird broken md links
-        content = re.sub(rgx_4, "", content)
         return content
     except:
         return content
@@ -324,4 +329,5 @@ def fillarticle(url, data, topic, site: Site):
             final["imageOrigin"] = final["imageUrl"]
     except Exception as e:
         log.info("articles: Exception %s", e)
+        return {}
     return final

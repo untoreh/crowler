@@ -11,13 +11,12 @@ import blacklist
 import config as cfg
 import contents as cnt
 import proxies_pb as pb
-import scheduler
 import scheduler as sched
-import sources  # NOTE: searx has some namespace conflicts with google.ads, initialize after the `adwords_keywords` module
 import topics as tpm
 import utils as ut
 from log import logger
 from sites import Site
+import sources  # NOTE: searx has some namespace conflicts with google.ads, initialize after the `adwords_keywords` module
 
 
 def get_kw_batch(site: Site, topic):
@@ -51,7 +50,7 @@ def run_sources_job(site: Site, topic):
     This function should never be called directly, instead `parse1` should use it when it runs out of sources.
     """
     logger.info("Getting kw batch...")
-    scheduler.initPool()
+    sched.initPool()
     batch = get_kw_batch(site, topic)
     root = site.topic_sources(topic)
     results = dict()
@@ -138,21 +137,20 @@ def run_parse1_job(site, topic):
     logger.info("Parsing %d sources...for %s:%s", len(sources), topic, site.name)
     arts, feeds = cnt.fromsources(sources, topic, site)
     topic_path = site.topic_dir(topic)
-    sa = sf = None
 
     if arts:
         logger.info("%s@%s: Saving %d articles.", topic, site.name, len(arts))
-        sa = ut.save_zarr(arts, k=ut.ZarrKey.articles, root=topic_path)
+        ut.save_zarr(arts, k=ut.ZarrKey.articles, root=topic_path)
     else:
         logger.info("%s@%s: No articles found.", topic, site.name)
 
     if feeds:
         logger.info("%s@%s: Saving %d articles.", topic, site.name, len(feeds))
-        sf = ut.save_zarr(feeds, k=ut.ZarrKey.feeds, root=topic_path)
+        ut.save_zarr(feeds, k=ut.ZarrKey.feeds, root=topic_path)
     else:
         logger.info("%s@%s: No feeds found.", topic, site.name)
 
-    return (sa, sf)
+    return (arts, feeds)
 
 
 def get_feeds(site: Site, topic, n=3, resize=True):
@@ -186,13 +184,12 @@ def run_parse2_job(site: Site, topic):
         return None
     logger.info("Search %d feeds for articles...", len(feed_links))
     articles = cnt.fromfeeds(feed_links, site)
-    a = None
     if articles:
         logger.info("%s@%s: Saving %d articles.", topic, site.name, len(articles))
-        a = ut.save_zarr(articles, k=ut.ZarrKey.articles, root=site.topic_dir(topic))
+        ut.save_zarr(articles, k=ut.ZarrKey.articles, root=site.topic_dir(topic))
     else:
         logger.info("%s@%s: No articles were found queued.", topic, site.name)
-    return a
+    return articles
 
 
 def new_topic(site: Site, force=False):
@@ -256,11 +253,11 @@ def site_loop(site: Site, target_delay=3600 * 8):
 def run_server(sites):
     # from guppy import hpy
     # h = hpy()
-    scheduler.initPool()
+    sched.initPool()
     jobs = []
     for sitename in sites:
         site = Site(sitename)
-        j = scheduler.apply(site_loop, site)
+        j = sched.apply(site_loop, site)
         jobs.append(j)
     # NOTE: this runs indefinitely
     for j in jobs:

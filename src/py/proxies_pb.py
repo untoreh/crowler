@@ -31,7 +31,7 @@ if "CURL_CLASS" not in globals():
     CURL_CLASS = copy.deepcopy(pycurl.Curl)
 
 
-def get_proxied_Curl(p=STATIC_PROXY_EP):
+def get_proxied_Curl(p=STATIC_PROXY_EP, to=10):
     def proxied():
         c = CURL_CLASS()
         ua = generate_user_agent()
@@ -41,8 +41,8 @@ def get_proxied_Curl(p=STATIC_PROXY_EP):
         # self.setopt(pycurl.PROXYTYPE, pycurl.PROXYTYPE_SOCKS5_HOSTNAME)
         c.setopt(pycurl.USERAGENT, ua)
         traset.DEFAULT_CONFIG.set("DEFAULT", "USER_AGENTS", ua)
-        traset.TIMEOUT = REQ_TIMEOUT
-        tradl.TIMEOUT = REQ_TIMEOUT
+        traset.TIMEOUT = to
+        tradl.TIMEOUT = to
         return c
 
     return proxied
@@ -53,21 +53,23 @@ if "REQUESTS_GET" not in globals():
     REQUESTS_POST = requests.post
 
 
-def disable_ssl_requests():
+def set_requests(to=10):
     def get(*args, **kwargs):
         kwargs["verify"] = False
+        kwargs["timeout"] = to
         return REQUESTS_GET(*args, **kwargs)
 
     requests.get = get
 
     def post(*args, **kwargs):
         kwargs["verify"] = False
+        kwargs["timeout"] = to
         return REQUESTS_POST(*args, **kwargs)
 
     requests.post = post
 
 
-def enable_ssl_requests():
+def reset_requests():
     requests.get = REQUESTS_GET
     requests.post = REQUESTS_POST
 
@@ -89,11 +91,11 @@ def reset_ssl_mode():
 PROXY_VARS = ("HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy")
 
 
-def setproxies(p=STATIC_PROXY_EP):
+def setproxies(p: str | None = STATIC_PROXY_EP, to=10):
     if p:
         for name in PROXY_VARS:
             os.environ[name] = p
-        pycurl.Curl = get_proxied_Curl(p)
+        pycurl.Curl = get_proxied_Curl(p, to=to)
     else:
         prev_proxy = os.getenv(PROXY_VARS[0])
         for name in PROXY_VARS:
@@ -114,7 +116,7 @@ def set_socket_timeout(timeout):
 class http_opts(object):
     prev_timeout = 0
     prev_proxy = ""
-    timeout = 10
+    timeout = 3
     proxy = None
 
     def __init__(self, timeout=10, proxy=None):
@@ -131,13 +133,15 @@ class http_opts(object):
 
     def __enter__(self):
         if not self.proxy:
-            disable_ssl_requests()
-        self.prev_proxy = setproxies(self.proxy)
+            set_requests()
+            set_ssl_mode()
+        self.prev_proxy = setproxies(self.proxy, self.timeout)
         self.prev_timeout = socket.getdefaulttimeout()
         socket.setdefaulttimeout(self.timeout)
 
     def __exit__(self, *_):
-        enable_ssl_requests()
+        reset_requests()
+        reset_ssl_mode()
         setproxies(self.prev_proxy)
         socket.setdefaulttimeout(self.prev_timeout)
 

@@ -206,10 +206,13 @@ template handleHomePage(relpath: string, capts: UriCaptures,
     # in case of translations, we to generate the base page first
     # which we cache too (`setPage only caches the page that should be served)
     let (tocache, toserv) = await buildHomePage(capts.lang, capts.amp)
-    assert not tocache.isnil, "homepage: can't generate homepage."
-    pageCache[homePath] = tocache.asHtml(minify_css = (capts.amp == ""))
-    assert not toserv.isnil, "homepage: can't generate processed homepage."
-    toserv.asHtml(minify_css = (capts.amp == ""))
+    checkTrue not tocache.isnil and not toserv.isnil, "homepage: page generation failed."
+    let hpage = tocache.asHtml(minify_css = (capts.amp == ""))
+    checkTrue hpage.len > 0, "homepage: minification 1 failed"
+    pageCache[homePath] = hpage
+    let ppage = toserv.asHtml(minify_css = (capts.amp == ""))
+    checkTrue ppage.len > 0, "homepage: minification 2 failed.."
+    ppage
   await reqCtx.doReply(page, rqid)
 
 template handleAsset() =
@@ -273,25 +276,31 @@ template handleTopic(capts: auto, ctx: Request) =
       topicPage(topic, pagenum, false)
       checkNil pagetree, "topic: pagetree couldn't be generated."
       let pageReqKey = (capts.topic / capts.page).fp.hash
-      pageCache[pageReqKey] = pagetree.asHtml
-      var ppage: string
+      var ppage = pagetree.asHtml
+      checkTrue ppage.len > 0, "topic: page gen 1 failed."
+      pageCache[pageReqKey] = ppage
+      ppage = ""
       checkNil(pagetree):
         let processed = await processPage(capts.lang, capts.amp, pagetree)
         checkNil(processed):
           ppage = processed.asHtml(minify_css = (capts.amp == ""))
+      checkTrue ppage.len > 0, "topic: page gen 2 failed."
       ppage
     updateHits(capts)
     await reqCtx.doReply(page, rqid, )
   elif capts.topic in customPages:
     debug "topic: looking for custom page"
     page = pageCache[].lcheckOrPut(reqCtx.key):
-      await pageFromTemplate(capts.topic, capts.lang, capts.amp)
+      let ppage = await pageFromTemplate(capts.topic, capts.lang, capts.amp)
+      checkTrue ppage.len > 0, "topic custom page gen failed."
+      ppage
     await reqCtx.doReply(page, rqid, )
   else:
     var filename = capts.topic.extractFilename()
     debug "topic: looking for assets {filename:.120}"
     if filename in assetsFiles[]:
       page = pageCache[].lcheckOrPut(filename):
+        # allow to cache this unconditionally of the file existing or not
         await readFileAsync(DATA_ASSETS_PATH / filename)
       await reqCtx.doReply(page, rqid, )
     else:
@@ -304,13 +313,15 @@ template handleArticle(capts: auto, ctx: Request) =
   let tg = topicsCache.get(capts.topic, emptyTopic)
   assert not tg.group.isnil
   if tg.topdir != -1:
-    page = pageCache[].lcheckOrPut(reqCtx.key):
-      debug "article: generating article"
-      await articleHtml(capts)
-    if page != "":
+    try:
+      page = pageCache[].lcheckOrPut(reqCtx.key):
+        debug "article: generating article"
+        let ppage = await articleHtml(capts)
+        checkTrue ppage.len > 0, "article: page gen failed."
+        ppage
       updateHits(capts)
       await reqCtx.doReply(page, rqid, )
-    else:
+    except ValueError:
       debug "article: redirecting to topic because page is empty"
       handle301($(WEBSITE_URL / capts.amp / capts.lang / capts.topic))
   else:
@@ -332,8 +343,10 @@ template handleSearch(relpath: string, ctx: Request) =
       # this is for js-less form redirection
       if searchq == "" and ($reqCtx.url.query == ""):
         searchq = capts.art.strip()
-      (await buildSearchPage(if capts.topic != "s": capts.topic else: "",
-          searchq, lang)).asHtml
+      let ppage = (await buildSearchPage(if capts.topic !=
+          "s": capts.topic else: "", searchq, lang)).asHtml
+      checkTrue ppage.len > 0, "search: page gen failed."
+      ppage
     reqCtx.mime = mimePath("index.html")
     await reqCtx.doReply(page, rqid, )
 
@@ -347,14 +360,16 @@ template handleSuggest(relpath: string, ctx: Request) =
 
 template handlePwa() =
   page = pageCache[].lcheckOrPut(reqCtx.key):
-    siteManifest()
+    let ppage = siteManifest()
+    checkTrue ppage.len > 0, "pwa: page gen failed."
+    ppage
   await reqCtx.doReply(page, rqid, )
 
 type feedKind = enum fSite, fTopic
 template handleFeed(kind) =
   page = case kind:
-           of fSite: await fetchFeedString()
-           of fTopic: await fetchFeedString(capts.topic)
+    of fSite: await fetchFeedString()
+    of fTopic: await fetchFeedString(capts.topic)
   await reqCtx.doReply(page, rqid, )
 
 type smKind = enum smSite, smTopic, smPage, smPageIdx
@@ -364,11 +379,13 @@ template handleSiteMap(kind) =
     of smTopic: await fetchSiteMap(capts.topic)
     of smPage: await fetchSiteMap(capts.topic, capts.page)
     of smPageIdx: await fetchSiteMap(capts.topic, on)
-  await reqCtx.doReply(page, rqid )
+  await reqCtx.doReply(page, rqid)
 
 template handleRobots() =
   page = pageCache[].lcheckOrPut(reqCtx.key):
-    buildRobots()
+    let ppage = buildRobots()
+    checkTrue ppage.len > 0, "robots: page gen failed."
+    ppage
   await reqCtx.doReply(page, rqid, )
 
 template handleCacheClear() =

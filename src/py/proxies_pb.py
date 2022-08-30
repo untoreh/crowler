@@ -1,5 +1,6 @@
 import asyncio as aio
 from pathlib import Path
+import ssl
 import copy
 import os
 import socket
@@ -11,6 +12,7 @@ from typing import Union
 
 import proxybroker as pb
 import pycurl
+import requests
 from proxybroker.api import Broker
 from retry import retry
 from trafilatura import downloads as tradl
@@ -29,8 +31,8 @@ if "CURL_CLASS" not in globals():
     CURL_CLASS = copy.deepcopy(pycurl.Curl)
 
 
-def get_curlproxy(p=STATIC_PROXY_EP):
-    def curlproxy():
+def get_proxied_Curl(p=STATIC_PROXY_EP):
+    def proxied():
         c = CURL_CLASS()
         ua = generate_user_agent()
         c.setopt(pycurl.PROXY, p)
@@ -43,7 +45,45 @@ def get_curlproxy(p=STATIC_PROXY_EP):
         tradl.TIMEOUT = REQ_TIMEOUT
         return c
 
-    return curlproxy
+    return proxied
+
+
+if "REQUESTS_GET" not in globals():
+    REQUESTS_GET = requests.get
+    REQUESTS_POST = requests.post
+
+
+def disable_ssl_requests():
+    def get(*args, **kwargs):
+        kwargs["verify"] = False
+        return REQUESTS_GET(*args, **kwargs)
+
+    requests.get = get
+
+    def post(*args, **kwargs):
+        kwargs["verify"] = False
+        return REQUESTS_POST(*args, **kwargs)
+
+    requests.post = post
+
+
+def enable_ssl_requests():
+    requests.get = REQUESTS_GET
+    requests.post = REQUESTS_POST
+
+
+if "DEFAULT_SSL_MODE" not in globals():
+    DEFAULT_SSL_MODE = ssl.SSLContext.verify_mode
+
+
+def set_ssl_mode():
+    ssl.SSLContext.verify_mode = property(
+        lambda self: ssl.CERT_NONE, lambda self, newval: None
+    )
+
+
+def reset_ssl_mode():
+    ssl.SSLContext.verify_mode = DEFAULT_SSL_MODE
 
 
 PROXY_VARS = ("HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy")
@@ -53,13 +93,13 @@ def setproxies(p=STATIC_PROXY_EP):
     if p:
         for name in PROXY_VARS:
             os.environ[name] = p
-        pycurl.Curl = get_curlproxy()
+        pycurl.Curl = get_proxied_Curl(p)
     else:
         prev_proxy = os.getenv(PROXY_VARS[0])
         for name in PROXY_VARS:
             if name in os.environ:
                 del os.environ[name]
-            pycurl.Curl = CURL_CLASS
+        pycurl.Curl = CURL_CLASS
         return prev_proxy
 
 
@@ -78,21 +118,26 @@ class http_opts(object):
     proxy = None
 
     def __init__(self, timeout=10, proxy=None):
-        if proxy == "auto":
-            self.proxy = get_proxy()
-        else:
-            self.proxy = proxy
+        if proxy is None or proxy == 0:
+            self.proxy = None
+        elif proxy == 1:
+            self.proxy = get_proxy(static=True)
+        elif proxy > 1:
+            self.proxy = get_proxy(static=False)
         self.timeout = timeout
 
     def __call__(self):
         return self
 
     def __enter__(self):
+        if not self.proxy:
+            disable_ssl_requests()
         self.prev_proxy = setproxies(self.proxy)
         self.prev_timeout = socket.getdefaulttimeout()
         socket.setdefaulttimeout(self.timeout)
 
     def __exit__(self, *_):
+        enable_ssl_requests()
         setproxies(self.prev_proxy)
         socket.setdefaulttimeout(self.prev_timeout)
 
@@ -165,7 +210,9 @@ def sync_from_file(file_path: Path):
     except:
         log.logger.debug("Could't sync proxies, was the file being written?")
 
+
 PROXY_SYNC_RUNNING = False
+
 
 def proxy_sync_forever(file_path: Path, interval=60):
     global PROXY_SYNC_RUNNING

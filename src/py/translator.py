@@ -6,6 +6,7 @@ import deep_translator
 from lingua import Language, LanguageDetectorBuilder
 from nltk.tokenize import sent_tokenize
 from requests.exceptions import ConnectTimeout, ProxyError, ConnectionError
+from ssl import SSLEOFError
 import scheduler as sched
 
 import config as cfg
@@ -142,11 +143,12 @@ class Translator:
         tr = self._translate[lp]
         prx_dict = {}
         trans = []
-        tries = 0
+        tries = -1
         current = 0
         queries = self.parse_data(data)
         n_queries = len(queries)
         while len(trans) != n_queries:
+            tries += 1
             try:
                 prx = pb.get_proxy(tries == 0) # use static proxy once, then from proxy list
                 prx_dict["https"] = prx
@@ -157,9 +159,8 @@ class Translator:
                     trans.append(tr.translate(q))
                 current += 1
             except Exception as e:
-                if isinstance(e, (ConnectTimeout, ProxyError, ConnectionResetError)):
+                if isinstance(e, (SSLEOFError, ConnectTimeout, ProxyError, ConnectionResetError)):
                     continue
-                tries += 1
                 if tries >= max_tries:
                     print(e)
                     log.warn("Translator: Could not translate, reached max tries.")

@@ -57,10 +57,10 @@ def fetch_data(url, *args, delay=0.3, backoff=0.3, depth=0, fromcache=True, **kw
         try:
             data = LRU_CACHE[url]
         except KeyError:
-            with pb.http_opts(proxy="auto"):
+            with pb.http_opts(proxy=depth):
                 data = _fetch_url(url)
     else:
-        with pb.http_opts(proxy="auto"):
+        with pb.http_opts(proxy=depth):
             data = _fetch_url(url)
     if data is None and depth < 4:
         # try an http request 2 times

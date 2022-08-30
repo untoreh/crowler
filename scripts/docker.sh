@@ -35,7 +35,7 @@ for site in $sites; do
 
     sudo docker build --target $site $nocache \
         --build-arg NIM_ARG=$NIM \
-        --build-args LIBPYTHON_PATH=$py \
+        --build-arg LIBPYTHON_PATH=$py \
         -t $tag \
         -f Dockerfile docker/
 

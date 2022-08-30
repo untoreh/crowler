@@ -1,8 +1,8 @@
 import os
 import sys
 from random import shuffle
+from time import sleep
 
-from retry import retry
 from searx import search
 from searx.search import EngineRef, SearchQuery
 
@@ -34,9 +34,7 @@ ENGINES = [
     "startpage",
     "duckduckgo",
     "bing",
-    "qwant",
-    "gigablast",
-    "unsplash",
+    "gigablast"
 ]
 ENGINES_IMG = [
     "google_images",
@@ -60,9 +58,11 @@ def get_engine():
     for e in engines:
         yield e
 
+def img_engine_name(engine):
+    return engine.replace("_", "-")
 
 def get_engine_img():
-    engines = [e.split("_")[0] for e in ENGINES_IMG.copy()]
+    engines = [img_engine_name(e) for e in ENGINES_IMG.copy()]
     shuffle(engines)
     for e in engines:
         yield e
@@ -73,7 +73,7 @@ def get_engine_params(engine):
     params = {
         "shortcut": engine,
         "engine": engine,
-        "name": engine.split("_")[0],
+        "name": img_engine_name(engine),
         "timeout": cfg.REQ_TIMEOUT,
         "categories": cats,
     }
@@ -90,17 +90,16 @@ def get_engine_params(engine):
 
 ENGINES_INITIALIZED = False
 
-def ensure_engines():
-    if not ENGINES_INITIALIZED:
-        ENGINES_PARAMS = [get_engine_params(engine) for engine in ENGINES]
-        search.initialize(settings_engines=ENGINES_PARAMS)
-        ENGINES_PARAMS_IMG = [get_engine_params(engine) for engine in ENGINES_IMG]
-        search.initialize(settings_engines=ENGINES_PARAMS_IMG)
+def ensure_engines(force=False):
+    global ENGINES_INITIALIZED
+    if force or not ENGINES_INITIALIZED:
+        settings = [get_engine_params(engine) for engine in ENGINES]
+        settings.extend([get_engine_params(engine) for engine in ENGINES_IMG])
+        search.initialize(settings_engines=settings)
         ENGINES_INITIALIZED = True
 
-@retry(tries=cfg.SRC_MAX_TRIES, delay=1, backoff=3.0, logger=None)
 def single_search(
-    kw, engine, pages=1, lang="all", timeout=cfg.REQ_TIMEOUT, category=""
+        kw, engine, pages=1, lang="all", timeout=cfg.REQ_TIMEOUT, category="general", depth=0
 ):
     res = []
     for p in range(pages):
@@ -111,22 +110,29 @@ def single_search(
             pageno=p,
             lang=lang,
         )
-        with pb.http_opts(proxy="auto"):
+        with pb.http_opts(proxy=depth):
             q = search.Search(s).search()
-        res = q.get_ordered_results()
-        if len(res) > 0:
-            res.extend(res)
+        if q.results_number() == 0:
+            q.close()
+            return res
+        q_res = q.get_ordered_results()
+        if len(q_res) > 0:
+            res.extend(q_res)
     return res
 
 
-def try_search(*args, **kwargs):
+def try_search(*args, depth=0, backoff=0.3, **kwargs):
     logger.info("Processing single search...")
-    with LoggerLevel():
-        try:
-            return single_search(*args, **kwargs)
-        except Exception as e:
-            exc = e
-    logger.debug("Caught search exception %s", type(exc))
+    ensure_engines()
+    try:
+        return single_search(*args, **kwargs, depth=depth)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        logger.debug("Caught search exception %s", type(e))
+        if depth < 4:
+            sleep(backoff)
+            return try_search(*args, **kwargs, depth = depth + 1, backoff=backoff + 0.3)
     return []
 
 
@@ -153,7 +159,7 @@ def fromkeyword(keyword="trending", verbose=False, filter_lang=False):
         assert isinstance(cfg.POOL_SIZE, int)
         kwlang = tr.detect(keyword) if filter_lang else "all"
         res = sched.POOL.starmap(
-            try_search, [(keyword, engines[n], 1, kwlang) for n in range(cfg.POOL_SIZE)]
+            try_search, [(keyword, engines[n], 1, kwlang) for n in range(min(len(engines), cfg.POOL_SIZE))]
         )
     except KeyboardInterrupt:
         print("Caught KB interrupt.")
@@ -204,7 +210,7 @@ def get_images(kw, maxiter=3, min_count=1, raw=False):
     itr = 0
     try:
         for egn in get_engine_img():
-            response = single_search(
+            response = try_search(
                 kw,
                 egn,
                 pages=1,

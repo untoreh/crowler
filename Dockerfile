@@ -95,6 +95,9 @@ ENV NIM $NIM_ARG
 ARG LIBPYTHON_PATH /usr/lib/x86_64-linux-gnu/libpython3.10d.so
 # nim not still supporting ssl3
 # RUN apt -y install libssl1.1
+RUN curl http://ftp.de.debian.org/debian/pool/main/o/openssl/libssl1.1_1.1.1n-0+deb11u3_amd64.deb --output libssl.deb && \
+    dpkg -i libssl.deb && \
+    rm libssl.deb
 RUN /site/scripts/switchdebug.sh /site
 CMD ./cli
 

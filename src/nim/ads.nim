@@ -166,7 +166,7 @@ proc insertAd*(name: ptr XmlNode): seq[VNode] {.gcsafe.} =
       if el.kind == xnElement:
         result.add verbatim(el.withClosingHtmlTag)
   else:
-    warn "xmlnode is nil."
+    warn "ad xmlnode is nil."
 
 proc replaceLinks*(str: string, chunksize = 250): Future[string] {.async.} =
   ## chunksize is the number of chars between links
@@ -198,7 +198,8 @@ proc replaceLinks*(str: string, chunksize = 250): Future[string] {.async.} =
         prevstrpos = strpos
         strpos = x.offsetBase + x.bufpos - txtStop
         # add processed non text data starting from previous point
-        result.add str[prevstrpos..strpos]
+        if strpos > prevstrpos:
+          result.add str[prevstrpos..strpos]
         strpos += txtStop # add the current text to the current string position
 
         if unlikely(positions.len == 0):

@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 #
-import time
-from typing import NamedTuple
+from multiprocessing.pool import AsyncResult
+from ssl import SSLEOFError
+from time import sleep
+from typing import List, NamedTuple
+
 import deep_translator
 from lingua import Language, LanguageDetectorBuilder
 from nltk.tokenize import sent_tokenize
-from requests.exceptions import ConnectTimeout, ProxyError, ConnectionError
-from ssl import SSLEOFError
-import scheduler as sched
+from requests.exceptions import ConnectTimeout, ProxyError
 
 import config as cfg
-import proxies_pb as pb
 import log
+import proxies_pb as pb
+import scheduler as sched
 
 
 class Lang(NamedTuple):
@@ -106,7 +108,10 @@ def detect(s: str):
 
 
 def override_requests_timeout():
-    import requests, copy, functools
+    import copy
+    import functools
+
+    import requests
 
     get = copy.deepcopy(requests.get)
     requests.get = functools.partial(get, timeout=10)
@@ -130,46 +135,104 @@ class Translator:
     def parse_data(self, data: str):
         queries = []
         if len(data) > self._max_query_len:
-            queries.extend(sent_tokenize(data))
+            tkz = sent_tokenize(data)
+            chunk = []
+            chunk_len = 0
+            for t in tkz:
+                token_len = len(t)
+                if chunk_len + token_len > self._max_query_len:
+                    queries.append("".join(chunk))
+                    del chunk[:]
+                    chunk_len = 0
+                chunk.append(t)
+                chunk_len += token_len
+            if chunk_len > 0:
+                queries.append("".join(chunk))
         else:
             queries.append(data)
         assert all(len(q) < self._max_query_len for q in queries)
         return queries
+
+    @staticmethod
+    def check_jobs(jobs):
+        while len(jobs) > 0:
+            todel = []
+            for i in range(0, len(jobs)):
+                if jobs[i].ready():
+                    todel.append(i)
+            if len(todel) > 0:
+                for d in todel:
+                    del jobs[d]
+            else:
+                sleep(1)
 
     def translate(self, data: str, target: str, source=SLang.code, max_tries=5):
         lp = (source, target)
         if lp not in self._translate:
             self._translate[lp] = self._tr(source=source, target=target)
         tr = self._translate[lp]
-        prx_dict = {}
-        trans = []
+        trans = {}
         tries = -1
-        current = 0
+        query_idx = 0
         queries = self.parse_data(data)
         n_queries = len(queries)
+        jobs = []
         while len(trans) != n_queries:
             tries += 1
             try:
-                prx = pb.get_proxy(tries == 0) # use static proxy once, then from proxy list
-                prx_dict["https"] = prx
-                prx_dict["http"] = prx
-                tr.proxies = prx_dict
-                q = queries[current]
-                with pb.http_opts():
-                    trans.append(tr.translate(q))
-                current += 1
+                q = queries[query_idx]
+
+                def translate_task(qidx: int):
+                    inflight: List[AsyncResult] = []
+
+                    def do_trans(p: int):
+                        with pb.http_opts(timeout=10, proxy=p):
+                            return tr.translate(q)
+
+                    while True:
+                        # eager translation tasks for the same query (max 4)
+                        if len(inflight) < 5:
+                            inflight.append(sched.apply(do_trans, len(inflight)))
+                        todel = []
+                        for i in range(0, len(inflight)):
+                            j = inflight[i]
+                            if j.ready():
+                                if j.successful():
+                                    trans[qidx] = j.get()
+                                    return
+                                else:
+                                    todel.append(i)
+                        for i in todel:
+                            del inflight[i]
+                        sleep(1)
+
+                # print(f"query_idx {query_idx}")
+                if query_idx not in trans:
+                    j = sched.apply(translate_task, query_idx)
+                    jobs.append(j)
+                query_idx += 1
+                # Once all queries are asked, wait for jobs
+                if query_idx >= len(queries):
+                    self.check_jobs(jobs)
+                    # reset query_idx, in case some jobs failed
+                    query_idx = 0
             except Exception as e:
-                if isinstance(e, (SSLEOFError, ConnectTimeout, ProxyError, ConnectionResetError)):
+                if isinstance(
+                    e, (SSLEOFError, ConnectTimeout, ProxyError, ConnectionResetError)
+                ):
                     continue
                 if tries >= max_tries:
-                    print(e)
+                    import traceback
+
+                    traceback.print_exc()
                     log.warn("Translator: Could not translate, reached max tries.")
                     break
-        return "".join(trans)
+        # return the joined query, correctly ordered by query_idx
+        return "".join(trans[k] for k in range(0, len(trans) - 1))
 
 
 _SLATOR = Translator()
 
 
-def translate(text: str, to_lang: str, from_lang: str):
+def translate(text: str, to_lang: str, from_lang="auto"):
     return _SLATOR.translate(text, target=to_lang, source=from_lang)

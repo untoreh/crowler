@@ -28,14 +28,7 @@ from log import LoggerLevel, logger
 
 # proc.online.default_request_params = default_request_params
 
-ENGINES = [
-    "google",
-    "reddit",
-    "startpage",
-    "duckduckgo",
-    "bing",
-    "gigablast"
-]
+ENGINES = ["google", "reddit", "startpage", "duckduckgo", "bing", "gigablast"]
 ENGINES_IMG = [
     "google_images",
     "duckduckgo_images",
@@ -58,8 +51,10 @@ def get_engine():
     for e in engines:
         yield e
 
+
 def img_engine_name(engine):
     return engine.replace("_", "-")
+
 
 def get_engine_img():
     engines = [img_engine_name(e) for e in ENGINES_IMG.copy()]
@@ -90,6 +85,7 @@ def get_engine_params(engine):
 
 ENGINES_INITIALIZED = False
 
+
 def ensure_engines(force=False):
     global ENGINES_INITIALIZED
     if force or not ENGINES_INITIALIZED:
@@ -98,8 +94,15 @@ def ensure_engines(force=False):
         search.initialize(settings_engines=settings)
         ENGINES_INITIALIZED = True
 
+
 def single_search(
-        kw, engine, pages=1, lang="all", timeout=cfg.REQ_TIMEOUT, category="general", depth=0
+    kw,
+    engine,
+    pages=1,
+    lang="all",
+    timeout=cfg.REQ_TIMEOUT,
+    category="general",
+    depth=0,
 ):
     res = []
     for p in range(pages):
@@ -127,12 +130,10 @@ def try_search(*args, depth=0, backoff=0.3, **kwargs):
     try:
         return single_search(*args, **kwargs, depth=depth)
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         logger.debug("Caught search exception %s", type(e))
         if depth < 4:
             sleep(backoff)
-            return try_search(*args, **kwargs, depth = depth + 1, backoff=backoff + 0.3)
+            return try_search(*args, **kwargs, depth=depth + 1, backoff=backoff + 0.3)
     return []
 
 
@@ -159,7 +160,11 @@ def fromkeyword(keyword="trending", verbose=False, filter_lang=False):
         assert isinstance(cfg.POOL_SIZE, int)
         kwlang = tr.detect(keyword) if filter_lang else "all"
         res = sched.POOL.starmap(
-            try_search, [(keyword, engines[n], 1, kwlang) for n in range(min(len(engines), cfg.POOL_SIZE))]
+            try_search,
+            [
+                (keyword, engines[n], 1, kwlang)
+                for n in range(min(len(engines), cfg.POOL_SIZE))
+            ],
         )
     except KeyboardInterrupt:
         print("Caught KB interrupt.")

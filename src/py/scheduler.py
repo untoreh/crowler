@@ -4,7 +4,7 @@ import config
 # import nest_asyncio
 # nest_asyncio.apply()
 
-POOL = None
+POOL: None | ThreadPool = None
 
 def initPool(restart=False):
     global POOL
@@ -16,6 +16,7 @@ def initPool(restart=False):
         POOL = ThreadPool(processes=config.POOL_SIZE)
 
 def apply(f, *args, **kwargs):
+    assert isinstance(POOL, ThreadPool)
     return POOL.apply_async(f, args=args, kwds=kwargs)
 
 def stop():

@@ -49,21 +49,31 @@ def get_proxied_Curl(p=STATIC_PROXY_EP, to=10):
 
 
 if "REQUESTS_GET" not in globals():
-    REQUESTS_GET = requests.get
-    REQUESTS_POST = requests.post
+    REQUESTS_GET = copy.deepcopy(requests.get)
+    REQUESTS_POST = copy.deepcopy(requests.post)
+    # Handle target environment that doesn't support HTTPS verification
+    SSL_DEFAULT_HTTPS_CTX = copy.deepcopy(ssl._create_default_https_context)
 
 
-def set_requests(to=10):
+def set_requests(proxy=None, to=10):
     def get(*args, **kwargs):
-        kwargs["verify"] = False
         kwargs["timeout"] = to
+        if proxy is not None:
+            kwargs["proxies"] = {"https": proxy, "http": proxy}
+            kwargs["verify"] = False
+        elif "proxies" in kwargs:
+            del kwargs["proxies"]
         return REQUESTS_GET(*args, **kwargs)
 
     requests.get = get
 
     def post(*args, **kwargs):
-        kwargs["verify"] = False
         kwargs["timeout"] = to
+        if proxy is not None:
+            kwargs["proxies"] = {"https": proxy, "http": proxy}
+            kwargs["verify"] = False
+        elif "proxies" in kwargs:
+            del kwargs["proxies"]
         return REQUESTS_POST(*args, **kwargs)
 
     requests.post = post
@@ -75,17 +85,19 @@ def reset_requests():
 
 
 if "DEFAULT_SSL_MODE" not in globals():
-    DEFAULT_SSL_MODE = ssl.SSLContext.verify_mode
+    DEFAULT_SSL_MODE = copy.deepcopy(ssl.SSLContext.verify_mode)
 
 
 def set_ssl_mode():
     ssl.SSLContext.verify_mode = property(
         lambda self: ssl.CERT_NONE, lambda self, newval: None
     )
+    ssl._create_default_https_context = ssl._create_unverified_context
 
 
 def reset_ssl_mode():
     ssl.SSLContext.verify_mode = DEFAULT_SSL_MODE
+    ssl._create_default_https_context = SSL_DEFAULT_HTTPS_CTX
 
 
 PROXY_VARS = ("HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy")
@@ -132,9 +144,9 @@ class http_opts(object):
         return self
 
     def __enter__(self):
-        if not self.proxy:
-            set_requests()
+        if self.proxy:
             set_ssl_mode()
+        set_requests(proxy=self.proxy, to=self.timeout)
         self.prev_proxy = setproxies(self.proxy, self.timeout)
         self.prev_timeout = socket.getdefaulttimeout()
         socket.setdefaulttimeout(self.timeout)
@@ -240,7 +252,6 @@ async def fetch_proxies(limit: int, proxies, out: Queue):
         while c < limit:
             prx = await proxies.get()
             if prx is not None:
-                print(prx)
                 addr = prx.as_text().strip()
                 out.put(addr)
                 c += 1

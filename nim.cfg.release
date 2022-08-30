@@ -1,6 +1,6 @@
 -d:release
 --passC:"-fuse-ld=lld"
-# -d:lto
-# --panics:on
+-d:lto
+--panics:on
 --verbosity:0
 --putenv:LIBPYTHON_PATH="/usr/local/lib/libpython3.10.so"

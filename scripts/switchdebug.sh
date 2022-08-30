@@ -13,5 +13,7 @@ elif [ -e $trg/nim.cfg.release ]; then
     on=".release"
 fi
 
-mv $trg/nim.cfg{,$off}
+if [ ! -e "$trg/nim.cfg$off" ]; then
+    mv $trg/nim.cfg{,$off}
+fi
 mv $trg/nim.cfg{$on,}

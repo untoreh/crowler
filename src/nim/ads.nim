@@ -166,7 +166,7 @@ proc insertAd*(name: ptr XmlNode): seq[VNode] {.gcsafe.} =
       if el.kind == xnElement:
         result.add verbatim(el.withClosingHtmlTag)
   else:
-    warn "ad xmlnode is nil."
+    debug "ads: xmlnode is nil."
 
 proc replaceLinks*(str: string, chunksize = 250): Future[string] {.async.} =
   ## chunksize is the number of chars between links

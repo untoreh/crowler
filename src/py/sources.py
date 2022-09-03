@@ -1,8 +1,10 @@
+import copy
 import os
 import sys
 from random import shuffle
 from time import sleep
 
+import searx
 from searx import search
 from searx.search import EngineRef, SearchQuery
 
@@ -28,15 +30,15 @@ from log import LoggerLevel, logger
 
 # proc.online.default_request_params = default_request_params
 
-ENGINES = ["google", "reddit", "startpage", "duckduckgo", "bing", "gigablast"]
+ENGINES = ["google", "reddit", "startpage", "duckduckgo", "bing"]
 ENGINES_IMG = [
-    "google_images",
+    "google_images", # lang is not initialized problem
     "duckduckgo_images",
     "bing_images",
     "unsplash",
     "flickr_noapi",
     "frinkiac",
-    "openverse",
+    # "openverse", # error 400
 ]
 # ENGINES_IMG_ONLY = {"flickr_noapi", "frinkiac", "openverse"}
 ""
@@ -63,23 +65,24 @@ def get_engine_img():
         yield e
 
 
-def get_engine_params(engine):
-    cats = "general" if engine in ENGINES else "images"
+def get_engine_params(engine, cat=None):
+    cats = cat if cat is not None else "general" if engine in ENGINES else "images"
     params = {
-        "shortcut": engine,
+        "shortcut": engine if cats != "images" else f"{engine[0:2]}i",
+        # "shortcut": engine,
         "engine": engine,
+        # "name": engine.split("_")[0],
         "name": img_engine_name(engine),
         "timeout": cfg.REQ_TIMEOUT,
         "categories": cats,
     }
-    if False:  # cfg.PROXIES_ENABLED:
-        params["network"] = {
-            "verify": False,
-            "proxies": pb.STATIC_PROXY_EP,
-            "retries": 3,
-            "retry_on_http_error": True,
-            "max_redirects": 30,
-        }
+    params["network"] = {
+        "verify": False,
+        "proxies": pb.STATIC_PROXY_EP,
+        "retries": 3,
+        "retry_on_http_error": True,
+        "max_redirects": 30,
+    }
     return params
 
 
@@ -89,9 +92,17 @@ ENGINES_INITIALIZED = False
 def ensure_engines(force=False):
     global ENGINES_INITIALIZED
     if force or not ENGINES_INITIALIZED:
+        searx.network.network.NETWORKS.clear()
+        searx.search.PROCESSORS.clear()
+        searx.engines.engines.clear()
         settings = [get_engine_params(engine) for engine in ENGINES]
         settings.extend([get_engine_params(engine) for engine in ENGINES_IMG])
         search.initialize(settings_engines=settings)
+        # fix for non initialized langs
+        eng = searx.engines.engines.get("google-images")
+        if not eng is None and not eng.supported_languages:
+            if not eng.supported_languages:
+                eng.supported_languages = eng.fetch_supported_languages()
         ENGINES_INITIALIZED = True
 
 
@@ -102,38 +113,43 @@ def single_search(
     lang="all",
     timeout=cfg.REQ_TIMEOUT,
     category="general",
-    depth=0,
+    depth=1,
 ):
     res = []
+    logger.info(f"Processing single search, engine: {engine}")
     for p in range(pages):
-        s = SearchQuery(
-            kw,
-            [EngineRef(engine, category)],
-            timeout_limit=timeout,
-            pageno=p,
-            lang=lang,
-        )
         with pb.http_opts(proxy=depth):
+            s = SearchQuery(
+                kw,
+                [EngineRef(engine, category)],
+                timeout_limit=timeout,
+                pageno=p,
+                lang=lang,
+            )
             q = search.Search(s).search()
-        if q.results_number() == 0:
-            q.close()
-            return res
+        if len(q.unresponsive_engines) > 0:
+            raise ValueError(q.unresponsive_engines.pop())
         q_res = q.get_ordered_results()
         if len(q_res) > 0:
             res.extend(q_res)
     return res
 
 
-def try_search(*args, depth=0, backoff=0.3, **kwargs):
-    logger.info("Processing single search...")
+def try_search(*args, depth=0, backoff=0.3, max_tries=4, **kwargs):
     ensure_engines()
     try:
         return single_search(*args, **kwargs, depth=depth)
     except Exception as e:
         logger.debug("Caught search exception %s", type(e))
-        if depth < 4:
+        if depth < max_tries:
             sleep(backoff)
-            return try_search(*args, **kwargs, depth=depth + 1, backoff=backoff + 0.3)
+            return try_search(
+                *args,
+                **kwargs,
+                depth=depth + 1,
+                backoff=backoff + 0.3,
+                max_tries=max_tries,
+            )
     return []
 
 
@@ -213,6 +229,7 @@ def get_images(kw, maxiter=3, min_count=1, raw=False):
     ensure_engines()
     results = []
     itr = 0
+    logger.info(f"fetching images for {kw}")
     try:
         for egn in get_engine_img():
             response = try_search(

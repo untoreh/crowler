@@ -3,7 +3,6 @@
 import argparse
 import json
 import os
-import random
 import shutil
 import time
 
@@ -12,11 +11,11 @@ import config as cfg
 import contents as cnt
 import proxies_pb as pb
 import scheduler as sched
+import sources  # NOTE: searx has some namespace conflicts with google.ads, initialize after the `adwords_keywords` module
 import topics as tpm
 import utils as ut
 from log import logger
-from sites import Site
-import sources  # NOTE: searx has some namespace conflicts with google.ads, initialize after the `adwords_keywords` module
+from sites import Job, Site
 
 
 def get_kw_batch(site: Site, topic):
@@ -47,7 +46,7 @@ def get_kw_batch(site: Site, topic):
 def run_sources_job(site: Site, topic):
     """
     Run one iteration of the job to find source links from keywords. Sources are used to find articles.
-    This function should never be called directly, instead `parse1` should use it when it runs out of sources.
+    This function should never be called directly, instead `parse` should use it when it runs out of sources.
     """
     logger.info("Getting kw batch...")
     sched.initPool()
@@ -122,7 +121,7 @@ def ensure_sources(site, topic):
     return sources
 
 
-def run_parse1_job(site, topic):
+def run_parse_job(site, topic):
     """
     Run one iteration of the job to find articles and feeds from source links.
     """
@@ -154,27 +153,22 @@ def run_parse1_job(site, topic):
 
 
 def get_feeds(site: Site, topic, n=3, resize=True):
-    while True:
-        z = ut.load_zarr(k=ut.ZarrKey.feeds, root=site.topic_dir(topic))
-        if len(z) > 0:
-            break
-        else:
-            logger.info(
-                "No feeds found to parse for topic %s, searching new ones", topic
-            )
-            run_parse1_job(site, topic)
+    z = site.load_feeds(topic)
+    if len(z) == 0:
+        return
     if len(z) < n:
+        feeds = z[:]
         if resize:
             z.resize(0)
-        return z[:]
+        return feeds
     else:
-        f = z[-n:]
+        feeds = z[-n:]
         if resize:
             z.resize(len(z) - n)
-        return f
+        return feeds
 
 
-def run_parse2_job(site: Site, topic):
+def run_feed_job(site: Site, topic):
     """
     Run one iteration of the job to find articles from feed links.
     """
@@ -199,7 +193,7 @@ def new_topic(site: Site, force=False):
         logger.info("topics: added new topic %s", newtopic)
 
 
-def site_loop(site: Site, target_delay=3600 * 8):
+def site_loop(site: Site, throttle=5):
     site.load_topics()
     sched.initPool()
     sched.apply(pb.proxy_sync_forever, cfg.PROXIES_FILE)
@@ -208,42 +202,39 @@ def site_loop(site: Site, target_delay=3600 * 8):
         try:
             topics = list(site.topics_dict.keys())
             # print(h.heap())
-            loop_start = time.time()
             try:
                 for topic in topics:
-                    run_parse1_job(site, topic)
+                    if site.is_paste_interval(Job.parse, topic):
+                        run_parse_job(site, topic)
             except Exception as e:
-                logger.warn("parse1_job failed. \n %s", e)
+                logger.warn("parse job failed. \n %s", e)
             try:
-                if random.randrange(3) == 0:
-                    for topic in topics:
-                        run_parse2_job(site, topic)
+                for topic in topics:
+                    if site.is_paste_interval(Job.feed, topic):
+                        run_feed_job(site, topic)
             except Exception as e:
-                logger.warn("parse2_job failed. \n %s", e)
+                logger.warn("feed job failed. \n %s", e)
             try:
                 if site.new_topics_enabled:
                     new_topic(site)
             except Exception as e:
                 logger.warn("new topics  failed. \n %s", e)
             try:
-                if site.has_reddit:
+                if site.is_paste_interval(Job.reddit):
                     site.reddit_submit()
             except Exception as e:
                 logger.warn("reddit failed. \n %s", e)
             try:
-                if site.has_twitter:
+                if site.is_paste_interval(Job.twitter):
                     site.tweet()
             except Exception as e:
                 logger.warn("twitter failed. \n %s", e)
             try:
-                if site.has_facebook:
+                if site.is_paste_interval(Job.facebook):
                     site.facebook_post()
             except Exception as e:
                 logger.warn("facebook failed. \n %s", e)
-            time.sleep(target_delay - (time.time() - loop_start))
-            random.shuffle(
-                topics
-            )  # in case of crashes helps to distribute queryies more uniformly
+            time.sleep(throttle)
         except Exception as e:
             logger.warning(f"{e} (site: {site.name})")
             backoff += 1
@@ -266,14 +257,14 @@ def run_server(sites):
 
 JOBS_MAP = {
     "sources": run_sources_job,
-    "parse1": run_parse1_job,
-    "parse2": run_parse2_job,
+    "parse": run_parse_job,
+    "feed": run_feed_job,
     "newtopic": new_topic,
 }
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-job", help="What kind of job to perform", default="parse1")
+    parser.add_argument("-job", help="What kind of job to perform", default="parse")
     parser.add_argument("-sites", help="The sites to run the server for.", default="")
     parser.add_argument("-workers", help="How many workers.", default=cfg.POOL_SIZE)
     parser.add_argument("-server", help="Start the server.", default=False)

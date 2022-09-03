@@ -414,6 +414,7 @@ template handleCacheClear() =
         warn "cache: deletion failed for {reqCtx.norm_capts:.120}"
     of '1':
       pageCache[].clear()
+      reqCtxCache.clear()
       warn "cache: cleared all pages"
     else:
       discard

@@ -9,7 +9,7 @@ from difflib import SequenceMatcher
 from enum import Enum
 from io import BytesIO
 from re import finditer
-from time import sleep
+from time import sleep, time
 from typing import Dict, Optional
 from urllib.request import urlopen
 
@@ -219,6 +219,7 @@ def save_zarr(
             data = data[-max_append:]
         # print(f"loading zarr: appending {len(data)} elements")
         z.append(data)
+        z.attrs["updated"] = time()
     else:
         store = za.DirectoryStore(_wrap_path(root))
         path = ZarrKey(k).name

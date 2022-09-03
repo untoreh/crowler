@@ -42,9 +42,11 @@ const excluded_dirs = to_hashset[string](collect(for lang in TLangs: lang.code))
 const included_dirs = to_hashset[string]([])
 
 let htmlcache = newLRUCache[string, XmlNode](32)
-var vbtmcache {.threadvar.}: LruCache[array[5, byte], XmlNode]
+var vbtmcache* {.threadvar.}: LruCache[array[5, byte], XmlNode]
 var rxcache {.threadvar.}: LruCache[string, Regex]
 let trOut* = initLockTable[string, VNode]()
+
+func get*[K, V](c: LruCache[K, V], k: K): V = c[k]
 
 proc getDirRx*(dir: string): Regex =
     try:
@@ -117,14 +119,15 @@ template translateNode*(otree: XmlNode, q: QueueXml, tformsTags: auto, fin = fal
                     translate(q.addr, el, srv)
     discard await translate(q.addr, srv, finish = fin)
 
-proc get*[K, V](c: LruCache[K, V], k: K): V = c[k]
+
 template translateNode*(node: VNode, q: QueueXml) =
+  ## deprecated, see translate_lang `translateVbtm`
     assert node.kind == VNodeKind.verbatim
     let
         s = $node
-        tree = vbtmcache.lgetOrPut(s.key): parseHtml(s)
+        tree = vbtmcache.lcheckOrPut(s.key): parseHtml(s)
         otree = deepcopy(tree)
-    when defined(finish):
+    when declared(finish):
         finish = false # FIXME: This overrides `finish` argument
     else:
         let finish = true

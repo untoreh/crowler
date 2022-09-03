@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import time
 from collections import deque
 from datetime import datetime
@@ -45,6 +46,17 @@ def read_sites_config(sitename: str, ensure=False, force=False):
     return SITES_CONFIG.get(sitename, {})
 
 
+from enum import Enum
+
+
+class Job(Enum):
+    parse = -1
+    feed = -1
+    reddit = 60 * 60 * 24
+    twitter = 60 * 60 * 4
+    facebook = 60 * 60 * 8
+
+
 class Site:
     _config: dict
     _name: str
@@ -58,6 +70,9 @@ class Site:
     twitter_url = ""
     has_facebook = False
     fb_page_url = ""
+    _last_twitter: float = 0
+    _last_facebook: float = 0
+    _last_reddit: float = 0
 
     def __init__(self, sitename=""):
         if not cfg.SITES_CONFIG_FILE.exists():
@@ -81,7 +96,7 @@ class Site:
 
         self.created = self._config.get("created", "1970-01-01")
         self.created_dt = datetime.fromisoformat(self.created)
-        self.domain = self._config.get("domain", "")
+        self.domain: str = self._config.get("domain", "")
         self.domain_rgx = re.compile(f"(?:https?:)?//{self.domain}")
         assert (
             self.domain != ""
@@ -98,6 +113,17 @@ class Site:
             self._init_twitter()
             self._init_facebook()
 
+    def _save_post_time(self, name, val):
+        with open(self.site_dir / f"last_{name}.json", "w") as f:
+            json.dump(val, f)
+
+    def _load_post_time(self, name):
+        try:
+            with open(self.site_dir / f"last_{name}.json", "r") as f:
+                return json.load(f)
+        except:
+            return 0
+
     def _init_facebook(self):
         self._fb_page_id = self._config.get("facebook_page_id", "")
         if not self._fb_page_id:
@@ -111,6 +137,7 @@ class Site:
         self._feed_path = self._fb_page_id + "/feed" if self._fb_page_id else ""
         self.has_facebook = True
         self.fb_page_url = "https://facebook.com/" + self._fb_page_id
+        self._last_facebook = self._load_post_time("facebook")
 
     def facebook_post(self):
         self.load_topics()
@@ -132,6 +159,8 @@ class Site:
                 title=art["title"],
                 message=message,
             )
+            self._last_facebook = time.time()
+            self._save_post_time("facebook", self._last_facebook)
         except Exception as e:
             log.warn(e)
 
@@ -158,6 +187,7 @@ class Site:
             username=reddit_user,
             password=reddit_psw,
         ).subreddit(reddit_sub)
+        self._last_reddit = self._load_post_time("reddit")
         self.has_reddit = True
 
     def choose_article(self):
@@ -178,6 +208,8 @@ class Site:
         url = self.article_url(a, topic)
         s = self._subreddit.submit(title=title, url=url)
         self.recent_reddit_submissions.append(url)
+        self._last_reddit = time.time()
+        self._save_post_time("reddit", self._last_reddit)
         return s
 
     def _init_twitter(self):
@@ -190,6 +222,7 @@ class Site:
             consumer_key, consumer_secret, access_key, access_secret
         )
         self.has_twitter = True
+        self._last_twitter = self._load_post_time("twitter")
         self.twitter_url = "https://twitter.com/" + self._config.get(
             "twitter_handle", ""
         )
@@ -207,16 +240,19 @@ class Site:
             status = "{}: {}".format(tags, url)
             if len(status) > 280:
                 status = url
-        return self._twitter_api.PostUpdate(status=status)
+        pu = self._twitter_api.PostUpdate(status=status)
+        self._last_twitter = time.time()
+        self._save_post_time("twitter", self._last_twitter)
+        return pu
 
     def recent_article(self, topic: str):
         arts = self.get_last_done(topic)
         assert isinstance(arts, za.Array), "ZArray instance error"
-        assert isinstance(arts, Sequence)
         max_tries = len(arts)
         tries = 0
         while tries < max_tries:
             a = choice(arts)
+            assert isinstance(a, dict)
             if a["slug"] not in self.recent_reddit_submissions:
                 break
             tries += 1
@@ -224,10 +260,38 @@ class Site:
             return
         return a
 
-    def article_url(self, a: dict, topic=None):
+    def article_url(self, a: dict, topic=""):
         return "".join(
             ("https://", self.domain, "/", a["topic"] or topic, "/", a["slug"])
         )
+
+    @staticmethod
+    def _sources_check(arr: za.Array):
+        upd = arr.attrs.get("updated")
+        if not upd:
+            upd = arr.attrs["updated"] = time.time()
+        return time.time() - upd > len(arr) * 20 * 60
+
+    def is_paste_interval(self, kind: Job, topic: str = ""):
+        # How much time should wait between jobs
+        match kind:
+            case Job.parse:
+                assert isinstance(topic, str)
+                return self._sources_check(self.load_articles(topic))
+            case Job.feed:
+                assert isinstance(topic, str)
+                return self._sources_check(self.load_feeds(topic))
+            case Job.reddit:
+                return self.has_reddit and time.time() - self._last_reddit > kind.value
+            case Job.facebook:
+                return self.has_facebook and time.time() - self._last_facebook > kind.value
+            case Job.twitter:
+                return self.has_twitter and time.time() - self._last_twitter > kind.value
+
+    def topic_feed_interval(self, topic: str):
+        # How much time should wait between parse jobs
+        feed_count = len(self.load_articles(topic))
+        return feed_count * 45
 
     def topic_dir(self, topic: str):
         return self.topics_dir / topic
@@ -241,6 +305,9 @@ class Site:
 
     def load_articles(self, topic: str, k=ZarrKey.articles, subk=""):
         return load_zarr(k=k, subk=subk, root=self.topic_dir(topic))
+
+    def load_feeds(self, topic: str):
+        return ut.load_zarr(k=ZarrKey.feeds, root=self.topic_dir(topic))
 
     def load_done(self, topic: str, pagenum: Optional[int] = None):
         return (
@@ -342,6 +409,8 @@ class Site:
             save_zarr([], k=ZarrKey.pages, root=self.topic_dir(topic))
         if "articles" not in grp:
             save_zarr([], k=ZarrKey.articles, root=self.topic_dir(topic))
+        if "feeds" not in grp:
+            save_zarr([], k=ZarrKey.feeds, root=self.topic_dir(topic))
 
     def _init_data(self):
         if not os.path.exists(self.topics_idx):

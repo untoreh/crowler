@@ -99,7 +99,7 @@ def lassie_img(url, data, final):
     la = lassie(url, data)
     img = icon = ""
     for im in la["images"]:
-        if im["type"] == "icon":
+        if im.get("type") == "icon":
             if not icon:
                 icon = im["src"]
         elif not img:
@@ -264,7 +264,7 @@ def fillarticle(url, data, topic, site: Site):
             goo = {}
         la = {}
         # first try content
-        if tra["text"] >= goo["cleaned_text"]:
+        if len(tra["text"]) >= len(goo["cleaned_text"]):
             final["content"] = tra["text"]
             final["source"] = "tra"
         else:
@@ -328,6 +328,8 @@ def fillarticle(url, data, topic, site: Site):
         if not final.get("imageOrigin", ""):
             final["imageOrigin"] = final["imageUrl"]
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         log.info("articles: Exception %s", e)
         return {}
     return final

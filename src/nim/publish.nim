@@ -285,19 +285,17 @@ let lastPubTime = create(Time)
 var pubLock: Lock
 initLock(pubLock)
 lastPubTime[] = getTime()
-let siteCreated = create(Time)
-try:
-  syncPyLock:
-    assert pyhasAttr(site[], "created"), "site does not have creation date"
-    siteCreated[] = parse(site[].created.to(string), "yyyy-MM-dd").toTime
-except:
-  let e = getCurrentException()[]
-  warn "{e}"
-  siteCreated[] = fromUnix(0)
-proc pubTimeInterval(): int =
-  ## This formula gradually reduces the interval between publications
-  max(cfg.CRON_TOPIC_FREQ_MIN, cfg.CRON_TOPIC_FREQ_MAX - ((getTime() -
-      siteCreated[]).inMinutes.int.div (3600 * 24) * 26))
+
+proc pubTimeInterval(topic: string): Future[int] {.async.} =
+  ## Publication interval is dependent on how many articles we can publish
+  ## If we have 1000 arts: every 0.12 hours
+  ## If we have 100 arts: every 1.2 hours
+  ## If we have 10 arts: every 12 hours
+  withPyLock:
+    let artsLen = site[].load_articles(topic).len
+    # in minutes
+    result = 120.div(artsLen) * 60
+
 
 proc maybePublish*(topic: string): Future[bool] {.gcsafe, async.} =
   let t = getTime()
@@ -307,7 +305,7 @@ proc maybePublish*(topic: string): Future[bool] {.gcsafe, async.} =
       tpd = (await topicPubdate())
       pastTime = inMinutes(t - tpd)
     # Don't publish each topic more than `CRON_TOPIC_FREQ`
-    if pastTime > pubTimeInterval():
+    if pastTime > (await pubTimeInterval(topic)):
       debug "pubtask: {topic} was published {pastTime} hours ago, publishing."
       lastPubTime[] = t
       result = await pubTopic(topic)

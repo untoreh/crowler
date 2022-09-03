@@ -1,15 +1,17 @@
 import asyncio as aio
-from pathlib import Path
-import ssl
 import copy
 import os
 import socket
+import ssl
 import time
 from collections import deque
+from functools import partial
 from json.decoder import JSONDecodeError
 from multiprocessing import Process, Queue
+from pathlib import Path
 from typing import Union
 
+import httpx
 import proxybroker as pb
 import pycurl
 import requests
@@ -26,6 +28,7 @@ STATIC_PROXY_EP = "socks5://localhost:8877"
 STATIC_PROXY = True
 PROXY_DICT = {"http": STATIC_PROXY_EP, "https": STATIC_PROXY_EP}
 REQ_TIMEOUT = 20
+CURRENT_PROXY = ""
 
 if "CURL_CLASS" not in globals():
     CURL_CLASS = copy.deepcopy(pycurl.Curl)
@@ -87,6 +90,9 @@ def reset_requests():
 if "DEFAULT_SSL_MODE" not in globals():
     DEFAULT_SSL_MODE = copy.deepcopy(ssl.SSLContext.verify_mode)
 
+if "DEFAULT_HTTPX_SSL" not in globals():
+    DEFAULT_HTTPX_SSL = copy.deepcopy(httpx.create_ssl_context)
+
 
 def set_ssl_mode():
     ssl.SSLContext.verify_mode = property(
@@ -125,25 +131,38 @@ def set_socket_timeout(timeout):
     socket.setdefaulttimeout(timeout)
 
 
-class http_opts(object):
+def select_proxy(proxy):
+    if proxy is None or proxy == 0:
+        sel = None
+    elif proxy == 1:
+        sel = get_proxy(static=True)
+    elif proxy > 1:
+        sel = get_proxy(static=False)
+    return sel
+
+
+def get_current_proxy():
+    return CURRENT_PROXY
+
+
+class _http_opts(object):
     prev_timeout = 0
     prev_proxy = ""
     timeout = 3
     proxy = None
 
-    def __init__(self, timeout=10, proxy=None):
-        if proxy is None or proxy == 0:
-            self.proxy = None
-        elif proxy == 1:
-            self.proxy = get_proxy(static=True)
-        elif proxy > 1:
-            self.proxy = get_proxy(static=False)
-        self.timeout = timeout
+    def __init__(self):
+        return
 
-    def __call__(self):
+    def __call__(self, timeout=10, proxy=None):
+        global CURRENT_PROXY
+        CURRENT_PROXY = self.proxy = select_proxy(proxy)
+        self.timeout = timeout
         return self
 
     def __enter__(self):
+        global CURRENT_PROXY
+        CURRENT_PROXY = self.proxy
         if self.proxy:
             set_ssl_mode()
         set_requests(proxy=self.proxy, to=self.timeout)
@@ -152,11 +171,15 @@ class http_opts(object):
         socket.setdefaulttimeout(self.timeout)
 
     def __exit__(self, *_):
+        global CURRENT_PROXY
+        CURRENT_PROXY = None
         reset_requests()
         reset_ssl_mode()
         setproxies(self.prev_proxy)
         socket.setdefaulttimeout(self.prev_timeout)
 
+
+http_opts = _http_opts()
 
 LIMIT = 50
 TYPES = [
@@ -233,8 +256,8 @@ PROXY_SYNC_RUNNING = False
 def proxy_sync_forever(file_path: Path, interval=60):
     global PROXY_SYNC_RUNNING
     if not PROXY_SYNC_RUNNING:
-        PROXY_SYNC_RUNNING = True
         while True:
+            PROXY_SYNC_RUNNING = True
             sync_from_file(file_path)
             time.sleep(interval)
 
@@ -242,7 +265,7 @@ def proxy_sync_forever(file_path: Path, interval=60):
 def get_proxy(static=True) -> str:
     try:
         return STATIC_PROXY_EP if static else next(PROXY_ITER)
-    except Exception:
+    except Exception as e:
         return STATIC_PROXY_EP
 
 

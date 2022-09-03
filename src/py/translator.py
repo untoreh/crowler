@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 #
-from multiprocessing.pool import AsyncResult
 from ssl import SSLEOFError
-from time import sleep
-from typing import List, NamedTuple
+from typing import Dict, NamedTuple, Tuple, Callable
+import asyncio
 
 import deep_translator
 from lingua import Language, LanguageDetectorBuilder
@@ -124,7 +123,7 @@ class Translator:
 
         override_requests_timeout()
         self._tr = getattr(deep_translator, provider)
-        self._translate = {}
+        self._translate: Dict[Tuple[str, str], Callable] = {}
         self._proxies = {"https": "", "http": ""}
         self._sl = SLang.code
         for (_, code) in TLangs:
@@ -154,19 +153,21 @@ class Translator:
         return queries
 
     @staticmethod
-    def check_jobs(jobs):
-        while len(jobs) > 0:
-            todel = []
-            for i in range(0, len(jobs)):
-                if jobs[i].ready():
-                    todel.append(i)
-            if len(todel) > 0:
-                for d in todel:
-                    del jobs[d]
-            else:
-                sleep(1)
+    async def check_queries(q_tasks):
+        try:
+            while len(q_tasks) > 0:
+                todel = []
+                for k in q_tasks.keys():
+                    if q_tasks[k].done():
+                        todel.append(k)
+                if len(todel) > 0:
+                    for k in todel:
+                        del q_tasks[k]
+                await asyncio.sleep(1)
+        except Exception as e:
+            print(e)
 
-    def translate(self, data: str, target: str, source=SLang.code, max_tries=5):
+    def translate(self, data: str, target: str, source="auto", max_tries=5):
         lp = (source, target)
         if lp not in self._translate:
             self._translate[lp] = self._tr(source=source, target=target)
@@ -176,46 +177,55 @@ class Translator:
         query_idx = 0
         queries = self.parse_data(data)
         n_queries = len(queries)
-        jobs = []
+        q_tasks = dict()
         while len(trans) != n_queries:
             tries += 1
             try:
                 q = queries[query_idx]
 
-                def translate_task(qidx: int):
-                    inflight: List[AsyncResult] = []
+                async def translate_task(qidx: int):
+                    tasks: dict[int, asyncio.Task] = {}
 
-                    def do_trans(p: int):
-                        with pb.http_opts(timeout=10, proxy=p):
+                    async def do_trans(i, depth=0):
+                        def done(t):
+                            v = t.result()
+                            if v:
+                                return v
+                            else:
+                                tasks[i] = sched.create_task(do_trans, i, depth + 1)
+
+                        tasks[i].add_done_callback(done)
+                        with pb.http_opts(timeout=10, proxy=i):
                             return tr.translate(q)
 
                     while True:
+                        i = len(tasks)
                         # eager translation tasks for the same query (max 4)
-                        if len(inflight) < 5:
-                            inflight.append(sched.apply(do_trans, len(inflight)))
-                        todel = []
-                        for i in range(0, len(inflight)):
-                            j = inflight[i]
-                            if j.ready():
-                                if j.successful():
-                                    trans[qidx] = j.get()
+                        if i < 5:
+                            tasks[len(tasks)] = sched.create_task(do_trans, i)
+                        for n in range(0, len(tasks)):
+                            t = tasks[n]
+                            if t.done():
+                                v = t.result()
+                                if v:
+                                    trans[qidx] = v
+                                    for t in tasks.values():
+                                        t.cancel()
                                     return
-                                else:
-                                    todel.append(i)
-                        for i in todel:
-                            del inflight[i]
-                        sleep(1)
+                        await asyncio.sleep(1)
 
-                # print(f"query_idx {query_idx}")
-                if query_idx not in trans:
-                    j = sched.apply(translate_task, query_idx)
-                    jobs.append(j)
-                query_idx += 1
-                # Once all queries are asked, wait for jobs
-                if query_idx >= len(queries):
-                    self.check_jobs(jobs)
-                    # reset query_idx, in case some jobs failed
+                if query_idx not in trans and query_idx not in q_tasks:
+                    # j = sched.apply(translate_task, query_idx)
+                    t = sched.create_task(translate_task, query_idx)
+                    q_tasks[query_idx] = t
+
+                # Once all queries are asked, wait for q_tasks
+                if query_idx + 1 >= len(queries):
+                    sched.run(self.check_queries, q_tasks)
+                    # reset query_idx, in case some q_tasks failed
                     query_idx = 0
+                else:
+                    query_idx += 1
             except Exception as e:
                 if isinstance(
                     e, (SSLEOFError, ConnectTimeout, ProxyError, ConnectionResetError)
@@ -228,7 +238,7 @@ class Translator:
                     log.warn("Translator: Could not translate, reached max tries.")
                     break
         # return the joined query, correctly ordered by query_idx
-        return "".join(trans[k] for k in range(0, len(trans) - 1))
+        return "".join(trans[k] for k in range(0, len(trans)))
 
 
 _SLATOR = Translator()

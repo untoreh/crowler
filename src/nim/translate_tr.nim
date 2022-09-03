@@ -147,26 +147,26 @@ proc elementsUpdate[T](q: var T) =
     # q.sz = 0
 
 proc doQueryAll(els: auto, q: QueueXml | QueueDom, batches: seq[seq[string]]): Future[void] {.async.} =
-    # We might have multiple batches when translating a single element
-    var tr: seq[string]
-    if len(els) == 1:
-        for batch in batches:
-            tr.add await doQuery(q, batch)
-        setEl(q, els[0], tr.join())
-        saveToDB()
-    else:
-        doassert len(batches) == 1
-        tr.add await doQuery(q, batches[0])
-        for (el, t) in zip(els, tr):
-            setEl(q, el, t)
-        saveToDB()
+  # We might have multiple batches when translating a single element
+  var tr: seq[string]
+  if len(els) == 1:
+    for batch in batches:
+      tr.add await doQuery(q, batch)
+    setEl(q, els[0], tr.join())
+    saveToDB()
+  else:
+    doassert len(batches) == 1
+    tr.add await doQuery(q, batches[0])
+    for (el, t) in zip(els, tr):
+      setEl(q, el, t)
+    saveToDB()
 
 proc queueTrans(): seq[Future[void]]  =
     var jobs: seq[Future[void]]
     for (els, q, batches) in jobsQueueX:
-        jobs.add doQueryAll(els, q, batches)
+      jobs.add doQueryAll(els, q, batches)
     for (els, q, batches) in jobsQueueV:
-        jobs.add doQueryAll(els, q, batches)
+      jobs.add doQueryAll(els, q, batches)
     debug "translate: waiting for {len(jobs)} jobs."
     return jobs
 

@@ -78,6 +78,8 @@ RUN /usr/bin/pip3 install -r requirements.txt
 # split requirements that cause dep conflicts
 COPY /requirements2.txt /site/
 RUN /usr/bin/pip3 install -r requirements2.txt
+# this has to be installed at the end for `lassie` compatibility
+RUN /usr/bin/pip3 install --upgrade --pre html5lib
 
 FROM sitedeps2 AS sitedeps3
 RUN /usr/bin/python3 -m textblob.download_corpora

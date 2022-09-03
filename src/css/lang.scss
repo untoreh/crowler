@@ -28,10 +28,9 @@
 }
 
 [dir="rtl"] .langs-dropdown-content.show {
-  display: block;
-  left: -1rem;
-  right: 0;
+  left: -12rem;
   pointer-events: visible;
+  padding-left: 3rem;
 }
 
 .langs-dropdown-content a {

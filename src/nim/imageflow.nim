@@ -68,7 +68,7 @@ proc check(c: IFLContext): bool =
        imageflow_context_error_try_clear(c.p):
       return false
     else:
-      raise newException(Exception, msg)
+      raise newException(ValueError, msg)
   return true
 
 threadVars(
@@ -133,7 +133,7 @@ proc initImageFlow*() =
       mj = imageflow_abi_version_major()
       mn = imageflow_abi_version_minor()
       msg = fmt"Could not create imageflow context, requested version {IF_VERSION_MAJOR}.{IF_VERSION_MINOR} but found {mj}.{mn}"
-    raise newException(Exception, msg)
+    raise newException(LibraryError, msg)
 
   ctx.p = imageflow_context_create(IF_VERSION_MAJOR, IF_VERSION_MINOR)
   # NOTE: only needed with method v1/execute (probably)

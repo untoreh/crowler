@@ -198,6 +198,7 @@ proc translate*[T](q: ptr[QueueXml | QueueDom], el: T, srv: service, finish: boo
         let (success, _) = setFromDB(q[].pair, el)
         if not success:
             addJob(@[el], q[], el.getText)
+            debug "translate: waiting for pair: {q[].pair}"
             await doTrans()
     return true
 

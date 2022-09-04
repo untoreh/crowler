@@ -34,8 +34,8 @@ def strtobool(val):
         raise ValueError("invalid truth value %r" % (val,))
 
 
-# How many concurrent requests
-POOL_SIZE = os.cpu_count()
+# How many concurrent requests, An high number for many http requests
+POOL_SIZE = 256 # os.cpu_count()
 
 PROJECT_DIR = Path(
     os.path.realpath(

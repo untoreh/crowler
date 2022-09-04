@@ -121,7 +121,7 @@ template translateNode*(otree: XmlNode, q: QueueXml, tformsTags: auto, fin = fal
 
 
 template translateNode*(node: VNode, q: QueueXml) =
-  ## deprecated, see translate_lang `translateVbtm`
+    ## deprecated, see translate_lang `translateVbtm`
     assert node.kind == VNodeKind.verbatim
     let
         s = $node

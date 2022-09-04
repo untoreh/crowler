@@ -294,7 +294,7 @@ proc pubTimeInterval(topic: string): Future[int] {.async.} =
   withPyLock:
     let artsLen = site[].load_articles(topic).len
     # in minutes
-    result = 120.div(artsLen) * 60
+    result = 120.div(max(1, artsLen)) * 60
 
 
 proc maybePublish*(topic: string): Future[bool] {.gcsafe, async.} =

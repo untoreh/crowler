@@ -2,6 +2,8 @@
 #
 from ssl import SSLEOFError
 from typing import Dict, NamedTuple, Tuple, Callable
+from multiprocessing.pool import AsyncResult
+from time import sleep
 import asyncio
 
 import deep_translator
@@ -106,29 +108,18 @@ def detect(s: str):
 #     return wrapped_fn
 
 
-def override_requests_timeout():
-    import copy
-    import functools
-
-    import requests
-
-    get = copy.deepcopy(requests.get)
-    requests.get = functools.partial(get, timeout=10)
-
-
 class Translator:
     _max_query_len = 5000
 
     def __init__(self, provider="GoogleTranslator"):
 
-        override_requests_timeout()
         self._tr = getattr(deep_translator, provider)
         self._translate: Dict[Tuple[str, str], Callable] = {}
         self._proxies = {"https": "", "http": ""}
         self._sl = SLang.code
         for (_, code) in TLangs:
             self._translate[(self._sl, code)] = self._tr(source=self._sl, target=code)
-        sched.initPool()
+        sched.initPool(procs=False)
         sched.apply(pb.proxy_sync_forever, cfg.PROXIES_FILE)
 
     def parse_data(self, data: str):
@@ -153,17 +144,20 @@ class Translator:
         return queries
 
     @staticmethod
-    async def check_queries(q_tasks):
+    def check_queries(q_tasks: dict[int, AsyncResult], trans):
         try:
             while len(q_tasks) > 0:
                 todel = []
                 for k in q_tasks.keys():
-                    if q_tasks[k].done():
+                    t = q_tasks[k]
+                    if t.ready():
+                        if t.successful():
+                            trans[k] = t.get()
                         todel.append(k)
                 if len(todel) > 0:
                     for k in todel:
                         del q_tasks[k]
-                await asyncio.sleep(1)
+                sleep(1)
         except Exception as e:
             print(e)
 
@@ -177,56 +171,40 @@ class Translator:
         query_idx = 0
         queries = self.parse_data(data)
         n_queries = len(queries)
-        q_tasks = dict()
+        q_tasks: Dict[int, AsyncResult] = dict()
         while len(trans) != n_queries:
-            tries += 1
+            if n_queries == 1:
+                q = queries[0]
+
+                def do_trans_single():
+                    try:
+                        with pb.http_opts(timeout=3, proxy=1):
+                            return tr.translate(q)
+                    except Exception as e:
+                        return do_trans_single()
+
+                trans[query_idx] = do_trans_single()
+                break
             try:
                 q = queries[query_idx]
 
-                async def translate_task(qidx: int):
-                    tasks: dict[int, asyncio.Task] = {}
-
-                    async def do_trans(i, depth=0):
-                        def done(t):
-                            v = t.result()
-                            if v:
-                                return v
-                            else:
-                                tasks[i] = sched.create_task(do_trans, i, depth + 1)
-
-                        tasks[i].add_done_callback(done)
-                        with pb.http_opts(timeout=10, proxy=i):
+                def do_trans(q):
+                    try:
+                        with pb.http_opts(timeout=3, proxy=1):
                             return tr.translate(q)
-
-                    while True:
-                        i = len(tasks)
-                        # eager translation tasks for the same query (max 4)
-                        if i < 5:
-                            tasks[len(tasks)] = sched.create_task(do_trans, i)
-                        for n in range(0, len(tasks)):
-                            t = tasks[n]
-                            if t.done():
-                                v = t.result()
-                                if v:
-                                    trans[qidx] = v
-                                    for t in tasks.values():
-                                        t.cancel()
-                                    return
-                        await asyncio.sleep(1)
+                    except:
+                        return do_trans(q)
 
                 if query_idx not in trans and query_idx not in q_tasks:
-                    # j = sched.apply(translate_task, query_idx)
-                    t = sched.create_task(translate_task, query_idx)
-                    q_tasks[query_idx] = t
-
-                # Once all queries are asked, wait for q_tasks
+                    q_tasks[query_idx] = sched.apply(do_trans, q)
+                    assert query_idx in q_tasks
                 if query_idx + 1 >= len(queries):
-                    sched.run(self.check_queries, q_tasks)
-                    # reset query_idx, in case some q_tasks failed
+                    self.check_queries(q_tasks, trans)
                     query_idx = 0
                 else:
                     query_idx += 1
             except Exception as e:
+                tries += 1
                 if isinstance(
                     e, (SSLEOFError, ConnectTimeout, ProxyError, ConnectionResetError)
                 ):
@@ -245,4 +223,8 @@ _SLATOR = Translator()
 
 
 def translate(text: str, to_lang: str, from_lang="auto"):
+    global _SLATOR
+    if _SLATOR is None:
+        _SLATOR = Translator()
+        sched.initPool(procs=False)
     return _SLATOR.translate(text, target=to_lang, source=from_lang)

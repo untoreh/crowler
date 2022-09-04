@@ -86,7 +86,6 @@ def reset_requests():
     requests.get = REQUESTS_GET
     requests.post = REQUESTS_POST
 
-
 if "DEFAULT_SSL_MODE" not in globals():
     DEFAULT_SSL_MODE = copy.deepcopy(ssl.SSLContext.verify_mode)
 

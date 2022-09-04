@@ -89,6 +89,7 @@ proc processImgData(imgKey: (string, string, string)) {.async.} =
       processImg(query)
   except CatchableError:
     submitImg()
+    return
   finally:
     imgLock[].release
 

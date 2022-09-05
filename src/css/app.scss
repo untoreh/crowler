@@ -483,6 +483,9 @@ section[role="toolbar"] {
   overflow-y: scroll;
   max-height: calc(100% - 12.5rem);
   scrollbar-width: none; // firefox
+  // dont cover lang dropdown menu
+  z-index: -1;
+  position: relative;
   &::-webkit-scrollbar {
     // chrome
     display: none;
@@ -510,6 +513,12 @@ section[role="toolbar"] {
   & li a {
     padding-right: 1rem;
     padding-left: 0;
+  }
+}
+[dir="rtl"] form.search {
+  & .clear-search-btn {
+    left: 3rem;
+    transform: scaleX(-1);
   }
 }
 form.search {

@@ -28,7 +28,8 @@
 }
 
 [dir="rtl"] .langs-dropdown-content.show {
-  left: -12rem;
+  right: -12rem;
+  width: 12rem;
   pointer-events: visible;
   padding-left: 3rem;
 }

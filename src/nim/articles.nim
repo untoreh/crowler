@@ -40,14 +40,17 @@ proc getArticles*(topic: string, n = 3, pagenum: int = -1): Future[(int, seq[Art
         let total = arts.shape[0].to(int)
 
         info "Fetching {n}(total:{total}) unpublished articles for {topic}/page:{pagenum}"
+        var invalidCount = 0
         for i in countDown(total - 1, 0):
             result[0] += 1
             data = arts[i]
             if not data.isValidArticlePy():
-                warn "articles: topic {topic} has _empty_ articles in storage."
-                continue
+              invalidCount.inc
+              continue
             result[1].add(initArticle(data, pagenum))
             if result[1].len >= n: # got the requested number of articles
+              if invalidCount > 0:
+                warn "articles: topic {topic} has {invalidCount} _empty_ articles in storage."
               break
 
 proc getDoneArticles*(topic: string, pagenum: int, rev=true): Future[seq[Article]] {.async.} =

@@ -98,7 +98,9 @@ proc articleExcerpt(a: Article): string =
     return parseHtml(a.content[0..maxlen+runesize]).innerText & "..."
 
 import htmlparser
-proc articleEntry(ar: Article): Future[VNode] {.async.} =
+proc articleEntry(ar: Article, topic = ""): Future[VNode] {.async.} =
+  if ar.topic == "" and topic != "":
+    ar.topic = topic
   let relpath = getArticlePath(ar)
   try:
     return buildHtml(article(class = "entry")):
@@ -135,16 +137,16 @@ proc articleEntry(ar: Article): Future[VNode] {.async.} =
     warn "articles: entry creation failed {e}"
     raise getCurrentException()
 
-proc buildShortPosts*(arts: seq[Article], homepage = false): Future[
+proc buildShortPosts*(arts: seq[Article], topic = ""): Future[
     string] {.async.} =
   for a in arts:
-    result.add $(await articleEntry(a))
+    result.add $(await articleEntry(a, topic))
 
 template topicPage*(topic: string, pagenum: string, istop = false) {.dirty.} =
   ## Writes a single page (fetching its related articles, if its not a template) to storage
   let arts = await getDoneArticles(topic, pagenum = pagenum.parseInt)
   debug "topics: topic page for page {pagenum} ({len(arts)})"
-  let content = await buildShortPosts(arts)
+  let content = await buildShortPosts(arts, topic)
   # if the page is not finalized, it is the homepage
   let footer = await pageFooter(topic, pagenum, home = istop)
   let pagetree = await buildPage(title = "",       # this is NOT a `title` tag
@@ -155,8 +157,8 @@ template topicPage*(topic: string, pagenum: string, istop = false) {.dirty.} =
 
 {.experimental: "strictnotnil".}
 {.push gcsafe.}
-proc processPage*(lang, amp: string, tree: VNode not nil, relpath = "index"): Future[
-    VNode] {.async.} =
+proc processPage*(lang, amp: string, tree: VNode not nil,
+    relpath = "index"): Future[VNode] {.async.} =
   if lang in TLangsCodes:
     let
       filedir = SITE_PATH
@@ -189,7 +191,7 @@ proc pageFromTemplate*(tpl, lang, amp: string): Future[string] {.async.} =
   txt = multiReplace(txt, vars)
   let
     slug = slugify(title)
-    page = await buildPage(title = title, content = txt, wrap=true)
+    page = await buildPage(title = title, content = txt, wrap = true)
   checkNil(page):
     let processed = await processPage(lang, amp, page, relpath = tpl)
     checkNil(processed, fmt"failed to process template {tpl}, {lang}, {amp}"):

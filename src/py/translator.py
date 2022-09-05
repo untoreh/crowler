@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 #
-from ssl import SSLEOFError
 from typing import Dict, NamedTuple, Tuple, Callable
 from multiprocessing.pool import AsyncResult
 from time import sleep
-import asyncio
 
 import deep_translator
 from lingua import Language, LanguageDetectorBuilder
 from nltk.tokenize import sent_tokenize
-from requests.exceptions import ConnectTimeout, ProxyError
 
 import config as cfg
 import log
@@ -110,6 +107,7 @@ def detect(s: str):
 
 class Translator:
     _max_query_len = 5000
+    _inflight = 0
 
     def __init__(self, provider="GoogleTranslator"):
 
@@ -121,16 +119,18 @@ class Translator:
             self._translate[(self._sl, code)] = self._tr(source=self._sl, target=code)
         sched.initPool(procs=False)
         sched.apply(pb.proxy_sync_forever, cfg.PROXIES_FILE)
+        log.info("translator: initialized.")
 
-    def parse_data(self, data: str):
+    @staticmethod
+    def parse_data(data: str):
         queries = []
-        if len(data) > self._max_query_len:
+        if len(data) > Translator._max_query_len:
             tkz = sent_tokenize(data)
             chunk = []
             chunk_len = 0
             for t in tkz:
                 token_len = len(t)
-                if chunk_len + token_len > self._max_query_len:
+                if chunk_len + token_len > Translator._max_query_len:
                     queries.append("".join(chunk))
                     del chunk[:]
                     chunk_len = 0
@@ -140,7 +140,7 @@ class Translator:
                 queries.append("".join(chunk))
         else:
             queries.append(data)
-        assert all(len(q) < self._max_query_len for q in queries)
+        assert all(len(q) < Translator._max_query_len for q in queries)
         return queries
 
     @staticmethod
@@ -162,6 +162,8 @@ class Translator:
             print(e)
 
     def translate(self, data: str, target: str, source="auto", max_tries=5):
+        if self._inflight % 50 == 0:
+            log.info("translator: current inflight count: %s", self._inflight)
         lp = (source, target)
         if lp not in self._translate:
             self._translate[lp] = self._tr(source=source, target=target)
@@ -176,24 +178,35 @@ class Translator:
             if n_queries == 1:
                 q = queries[0]
 
-                def do_trans_single():
+                def do_trans_single(depth=1):
                     try:
-                        with pb.http_opts(timeout=3, proxy=1):
+                        if depth == 1:
+                            self._inflight += 1
+                        with pb.http_opts(proxy=1):
                             return tr.translate(q)
-                    except Exception as e:
-                        return do_trans_single()
+                    except:
+                        return do_trans_single(depth + 1)
+                    finally:
+                        if depth == 1:
+                            self._inflight -= 1
 
                 trans[query_idx] = do_trans_single()
                 break
             try:
                 q = queries[query_idx]
 
-                def do_trans(q):
+                def do_trans(q, depth=1):
                     try:
-                        with pb.http_opts(timeout=3, proxy=1):
+                        if depth == 1:
+                            self._inflight += 1
+                        with pb.http_opts(proxy=1):
                             return tr.translate(q)
                     except:
-                        return do_trans(q)
+                        return do_trans(q, depth=depth + 1)
+                    finally:
+                        if depth == 1:
+                            self._inflight -= 1
+
 
                 if query_idx not in trans and query_idx not in q_tasks:
                     q_tasks[query_idx] = sched.apply(do_trans, q)
@@ -203,12 +216,8 @@ class Translator:
                     query_idx = 0
                 else:
                     query_idx += 1
-            except Exception as e:
+            except:
                 tries += 1
-                if isinstance(
-                    e, (SSLEOFError, ConnectTimeout, ProxyError, ConnectionResetError)
-                ):
-                    continue
                 if tries >= max_tries:
                     import traceback
 

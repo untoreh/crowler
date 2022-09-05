@@ -136,9 +136,8 @@ def select_proxy(proxy):
     elif proxy == 1:
         sel = get_proxy(static=True)
     elif proxy > 1:
-        sel = get_proxy(static=False)
+        sel = get_proxy(static=(proxy % 2))
     return sel
-
 
 def get_current_proxy():
     return CURRENT_PROXY
@@ -153,7 +152,7 @@ class _http_opts(object):
     def __init__(self):
         return
 
-    def __call__(self, timeout=10, proxy=None):
+    def __call__(self, timeout=3, proxy=None):
         global CURRENT_PROXY
         CURRENT_PROXY = self.proxy = select_proxy(proxy)
         self.timeout = timeout

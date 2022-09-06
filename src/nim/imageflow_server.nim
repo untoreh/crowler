@@ -99,8 +99,10 @@ proc asyncImgHandler() {.async.} =
     while true:
       let imgKey = await imgIn[].get()
       asyncSpawn processImgData(imgKey)
-  except:
-    discard
+  except CatchableError:
+    let e = getCurrentException()[]
+    warn "imageflow: image handler crashed. {e}"
+    quit()
 
 proc imgHandler*() = waitFor asyncImgHandler()
 
@@ -118,6 +120,7 @@ proc startImgFlow*() =
     createThread(iflThread, imgHandler)
   except CatchableError as e:
     warn "Could not init imageflow! \n {e[]}"
+    quit()
 
 # import chronos
 # var iflThread: Thread[(string, string)]

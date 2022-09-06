@@ -14,7 +14,7 @@ const clevel = 2
 var z {.threadvar.}: Zstd
 
 when defined(gcDestructors):
-  proc `=destroy`(z: var Zstd) =
+  proc `=destroy`(z: var Zstd) {.nimcall.} =
     if not z.c.isnil:
       discard free_context(z.c)
     if not z.d.isnil:

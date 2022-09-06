@@ -50,7 +50,8 @@ import
   search,
   sitemap,
   articles,
-  stats
+  stats,
+  lsh
 
 # lockedStore(LruCache)
 # lockedStore(Table)
@@ -97,6 +98,7 @@ proc initThread*() {.gcsafe.} =
   initLDJ()
   initFeed()
   startImgFlow()
+  startLsh()
   initSonic()
   initMimes()
   try:
@@ -391,7 +393,7 @@ template handleRobots() =
 template handleCacheClear() =
   case nocache:
     of '0':
-      const notTopics = ["assets", "i", "robots.txt", "feed.xml", "sitemap.xml",
+      const notTopics = ["assets", "i", "robots.txt", "feed.xml", "index.xml", "sitemap.xml",
           "s", "g"].toHashSet
       reqCtx.cached = false
       reqCtx.norm_capts = uriTuple(reqCtx.url.path)
@@ -414,7 +416,7 @@ template handleCacheClear() =
         warn "cache: deletion failed for {reqCtx.norm_capts:.120}"
     of '1':
       pageCache[].clear()
-      reqCtxCache.clear()
+      reqCtxCache.clear() # FIXME: should account for running requests...
       warn "cache: cleared all pages"
     else:
       discard
@@ -552,14 +554,6 @@ template wrapInit(code: untyped): proc() =
     code
   task
 
-when declared(Taskpool):
-  var tp = Taskpool.new(num_threads = 3)
-  template initSpawn(code: untyped, doinit: static[bool] = true) =
-    proc mytask(): bool {.closure, gensym, nimcall.} =
-      initThread()
-      `code`
-      true
-    discard tp.spawn mytask()
 
 proc doServe*(address: string, callback: ScorperCallback): Future[
     Scorper] {.async.} =

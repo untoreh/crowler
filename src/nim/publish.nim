@@ -5,7 +5,6 @@ import nimpy,
        strutils,
        strformat,
        algorithm,
-       minhash {.all.},
        marshal,
        karax / vdom,
        std / importutils,
@@ -21,9 +20,9 @@ import cfg,
        cache,
        search,
        pyutils,
-       sitemap
+       sitemap,
+       lsh
 
-privateAccess(LocalitySensitive)
 let pageset = initLockTable[string, bool]()
 
 include "pages"
@@ -35,67 +34,6 @@ proc ensureDir(dir: string) =
       removeFile(dir)
     info "Creating directory {dir}"
     createDir(dir)
-
-proc initLS(): LocalitySensitive[uint64] =
-  let hasher = initMinHasher[uint64](64)
-  # very small band width => always find duplicates
-  var lsh = initLocalitySensitive[uint64](hasher, 16)
-  return lsh
-
-proc getLSPath(topic: string): string =
-  DATA_PATH / "sites" / WEBSITE_NAME / "topics" / topic / "lsh"
-
-import zstd / [compress, decompress]
-type
-  CompressorObj = object of RootObj
-    zstd_c: ptr ZSTD_CCtx
-    zstd_d: ptr ZSTD_DCtx
-  Compressor = ptr CompressorObj
-
-when defined(gcDestructors):
-  proc `=destroy`(c: var CompressorObj) =
-    if not c.zstd_c.isnil:
-      discard free_context(c.zstd_c)
-    if not c.zstd_d.isnil:
-      discard free_context(c.zstd_d)
-
-let comp = create(CompressorObj)
-comp.zstd_c = new_compress_context()
-comp.zstd_d = new_decompress_context()
-
-proc compress[T](v: T): seq[byte] = compress(comp.zstd_c, v, level = 2)
-proc decompress[T](v: sink seq[byte]): T = cast[T](decompress(comp.zstd_d, v))
-proc decompress[T](v: sink string): T = cast[T](decompress(comp.zstd_d, v))
-
-proc saveLS(topic: string, lsh: LocalitySensitive[uint64]) =
-  let path = getLSPath(topic)
-  createDir(path)
-  let lshJson = $$lsh
-  writeFile(path / "lsh.json.zst", compress(lshJson))
-
-proc loadLS(topic: string): LocalitySensitive[uint64] =
-  var lspath = getLSPath(topic) / "lsh.json.zst"
-  var data: string
-  if fileExists(lspath):
-    let f = readFile(lspath)
-    data = decompress[string](f)
-  else:
-    lspath = lspath[0..^5]
-    if fileExists(lspath):
-      data = readFile(lspath)
-  if data.len != 0:
-    var lsh = to[LocalitySensitive[uint64]](data)
-    # reinitialize minhasher since it is a cbinding func
-    lsh.hasher = initMinHasher[uint64](64)
-    return lsh
-  else:
-    initLS()
-
-proc addArticle(lsh: LocalitySensitive[uint64], a: Article): bool =
-  if not isDuplicate(lsh, a.content):
-    lsh.add(a.content, $(len(lsh.fingerprints) + 1))
-    return true
-  false
 
 proc curPageNumber(topic: string): Future[int] {.async.} =
   withPyLock:
@@ -164,7 +102,7 @@ proc finalizePages(topic: string, pn: int, newpage: bool,
 #             let pagedone = done[k]
 #             newdone.add()
 
-proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
+proc filterDuplicates(topic: string, lsh: PublishedArticles, pagenum: int,
                       posts: ptr seq[(VNode, Article)],
                       donePy: ptr seq[PyObject],
                       doneArts: ptr seq[Article]): Future[bool] {.gcsafe, async.} =
@@ -174,7 +112,7 @@ proc filterDuplicates(topic: string, lsh: LocalitySensitive, pagenum: int,
     return false
   clear(pageset)
   for a in arts:
-    if addArticle(lsh, a):
+    if await addArticle(lsh, a):
       # make sure article titles/slugs are unique
       var u = 1
       var uslug = a.slug
@@ -218,7 +156,7 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   # The subdir (at $pagenum) at this point must be already present on storage
   let pagedir = topic / $pagenum
 
-  let lsh = loadLS(topic)
+  let lsh = await loadLS(topic)
   let startTime = getTime()
   var
     posts: seq[(VNode, Article)]
@@ -242,7 +180,7 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   # only write articles after having saved LSH (within `filterDuplicates)
   # to avoid duplicates. It is fine to add articles to the set
   # even if we don't publish them, but we never want duplicates
-  saveLS(topic, lsh)
+  await saveLS(topic, lsh)
   info "Writing {newposts} articles for topic: {topic}"
   # FIXME: should this be here?
   for (tree, a) in posts:
@@ -318,7 +256,7 @@ proc resetTopic(topic: string) =
     discard site[].reset_topic_data(topic)
   pageCache[].del(topic.feedKey)
   clearSiteMap(topic, all = true)
-  saveLS(topic, initLS())
+  waitFor saveLS(topic, initLS())
 
 proc pubAllPages(topic: string, clear = true) {.async.} =
   ## Starting from the homepage, rebuild all archive pages, and their articles

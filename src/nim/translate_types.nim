@@ -72,16 +72,16 @@ proc `html=`*(fc: ptr FileContext, data: vdom.VNode) = fc.vhtml = data
 
 proc initFileContext*(data, file_path, url_path, pair, t_path: auto): ptr FileContext =
     result = create(FileContext)
-
-    if data is XmlNode:
-        result.kind = xml
-    else:
-        result.kind = dom
-    result.html = data
-    result.file_path = file_path
-    result.url_path = url_path
-    result.pair = pair
-    result.t_path = t_path
+    if not result.isnil:
+        if data is XmlNode:
+            result.kind = xml
+        else:
+            result.kind = dom
+        result.html = data
+        result.file_path = file_path
+        result.url_path = url_path
+        result.pair = pair
+        result.t_path = t_path
 
 const
     default_service* = base_translator

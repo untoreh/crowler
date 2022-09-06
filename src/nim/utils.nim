@@ -762,13 +762,18 @@ proc rewriteUrl*(el, rewritePath: auto, hostname = WEBSITE_DOMAIN) =
   # debug "old: {prev} new: {$uriVar}, {rewritePath}"
 
 
-import faststreams/inputs
+import faststreams/[inputs, outputs]
 proc readFileAsync*(file: string): Future[string] {.async.} =
     var data: seq[byte]
     let handler = memFileInput(file)
     data.setLen(handler.s.len.get())
     discard Async(handler).readInto(data)
     return data.toString
+
+proc writeFileAsync*[T](path: string, data: T) {.async.} =
+    let handler = fileOutput(path)
+    defer: handler.close()
+    handler.write(data)
 
 proc innerText*(n: VNode): string =
   if result.len > 0: result.add '\L'
@@ -851,3 +856,25 @@ proc raw*(n: VNode, indent = 0): string =
         result.add raw(child, indent+2)
       for i in 1..indent: result.add ' '
       result.add "\L</" & $n.kind & ">"
+
+import zstd / [compress, decompress]
+type
+  CompressorObj = object of RootObj
+    zstd_c: ptr ZSTD_CCtx
+    zstd_d: ptr ZSTD_DCtx
+  Compressor = ptr CompressorObj
+
+when defined(gcDestructors):
+  proc `=destroy`(c: var CompressorObj) {.nimcall.} =
+    if not c.zstd_c.isnil:
+      discard free_context(c.zstd_c)
+    if not c.zstd_d.isnil:
+      discard free_context(c.zstd_d)
+
+let comp = create(CompressorObj)
+comp.zstd_c = new_compress_context()
+comp.zstd_d = new_decompress_context()
+
+proc compress*[T](v: T): seq[byte] = compress(comp.zstd_c, v, level = 2)
+proc decompress*[T](v: sink seq[byte]): T = cast[T](decompress(comp.zstd_d, v))
+proc decompress*[T](v: sink string): T = cast[T](decompress(comp.zstd_d, v))

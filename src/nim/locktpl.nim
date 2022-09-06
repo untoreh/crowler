@@ -16,7 +16,7 @@ template lockedStore*(name: untyped): untyped {.dirty.} =
             result.storage = store
 
     template `init Lock name`*[K, V](args: varargs[untyped]): `Lock name`[K, V] =
-        var store: name[K, V]
+        var store: name[K, V] # FIXME: this is incompatible with `notnil` pragma
         store = when compiles(`init name`):
                     when varargsLen(args) > 0:
                         `init name`[K, V](args)

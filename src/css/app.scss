@@ -364,7 +364,7 @@ header .page {
 }
 .entry .image-link {
   float: left;
-  padding: 0.5rem;
+  padding: 0.5rem 1rem;
   img {
     max-width: 20rem;
     min-width: 8rem;
@@ -373,6 +373,9 @@ header .page {
     min-height: 8rem;
     background: url("https://api.iconify.design/bx/image.svg") no-repeat center
       center/cover;
+    body.dark & {
+      filter: invert(1.0);
+    }
   }
 }
 .entry-tags {

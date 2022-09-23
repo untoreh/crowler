@@ -307,7 +307,7 @@ template handleTopic(capts: auto, ctx: Request) =
       await reqCtx.doReply(page, rqid, )
     else:
       debug "topic: asset not found at {DATA_ASSETS_PATH / filename:.120}"
-      handle301($(WEBSITE_URL / capts.amp / capts.lang))
+      handle404()
 
 template handleArticle(capts: auto, ctx: Request) =
   ##
@@ -325,9 +325,11 @@ template handleArticle(capts: auto, ctx: Request) =
       await reqCtx.doReply(page, rqid, )
     except ValueError:
       debug "article: redirecting to topic because page is empty"
-      handle301($(WEBSITE_URL / capts.amp / capts.lang / capts.topic))
+      handle501()
+      # handle301($(WEBSITE_URL / capts.amp / capts.lang / capts.topic))
   else:
-    handle301($(WEBSITE_URL / capts.amp / capts.lang))
+    handle404()
+    # handle301($(WEBSITE_URL / capts.amp / capts.lang))
 
 template handleSearch(relpath: string, ctx: Request) =
   # extract the referer to get the correct language
@@ -427,7 +429,7 @@ template abort() =
 
   let e = getCurrentException()[]
   sdebug "Router failed, Exception: \n {e}"
-  handle301()
+  handle501()
 
 {.pop dirty.}
 

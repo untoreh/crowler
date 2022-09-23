@@ -220,8 +220,8 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
 
 
 let lastPubTime = create(Time)
-var pubLock: Lock
-initLock(pubLock)
+let pubLock = create(AsyncLock)
+pubLock[] = newAsyncLock()
 lastPubTime[] = getTime()
 
 proc pubTimeInterval(topic: string): Future[int] {.async.} =
@@ -235,10 +235,11 @@ proc pubTimeInterval(topic: string): Future[int] {.async.} =
     result = 120.div(max(1, artsLen)) * 60
 
 
-proc maybePublish*(topic: string): Future[bool] {.gcsafe, async.} =
+proc maybePublish*(topic: string) {.gcsafe, async.} =
   let t = getTime()
-  if pubLock.tryacquire:
-    defer: pubLock.release
+  if not pubLock[].locked:
+    await pubLock[].acquire()
+    defer: pubLock[].release
     let
       tpd = (await topicPubdate())
       pastTime = inMinutes(t - tpd)
@@ -246,7 +247,7 @@ proc maybePublish*(topic: string): Future[bool] {.gcsafe, async.} =
     if pastTime > (await pubTimeInterval(topic)):
       debug "pubtask: {topic} was published {pastTime} hours ago, publishing."
       lastPubTime[] = t
-      result = await pubTopic(topic)
+      discard await pubTopic(topic)
       # clear homepage and topic page cache
       deletePage("")
       deletePage("/" & topic)

@@ -133,7 +133,7 @@ proc resumeSonic() {.async.} =
       lang = s[3]
     var relpath = lang / topic / page / slug
     await push(relpath)
-  writeFile(SONIC_BACKLOG, "")
+  await writeFileAsync(SONIC_BACKLOG, "")
 
 import std/monotimes
 import locktplasync

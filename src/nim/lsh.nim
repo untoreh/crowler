@@ -1,4 +1,4 @@
-import std/[importutils, strutils, marshal, tables, algorithm, os], chronos,
+import std/[importutils, strutils, marshal, tables, algorithm, os, strformat], chronos,
     minhash {.all.}
 
 import cfg, types, utils
@@ -22,16 +22,33 @@ proc initLS*(): PublishedArticles =
     result = lsh
   result[] = initLocalitySensitive[uint64](hasher, 16)
 
-proc saveLS*(topic: string, lsh: PublishedArticles) {.async.} =
+proc saveLSImpl(topic: string, lsh: PublishedArticlesObj) {.async.} =
   let path = getLSPath(topic)
   createDir(path)
   let lshJson = $$lsh
   await writeFileAsync(path / "lsh.json.zst", compress(lshJson))
 
+proc saveLS*(topic: string, lsh: PublishedArticles) {.async.} =
+  if lsh.isnil:
+    raise newException(ValueError, "lsh can't be nil.")
+  await saveLSImpl(topic, lsh[])
+
 proc toLsh(data: string): PublishedArticlesObj =
   result = to[PublishedArticlesObj](data)
   # reinitialize minhasher since it is a cbinding func
   result.hasher = initMinHasher[uint64](64)
+
+import json
+proc fixLS(topic: string, data: string) {.async.} =
+  ## This fixes a marshalling bug where the LS set was saved as a tuple (ptr, ls), to be deprecated.
+  let j = data.parseJson
+  if j.kind == JArray:
+    if j.len > 1:
+      if j[0].kind == JInt:
+        if j[1].kind == JObject:
+          let ls = create(PublishedArticlesObj)
+          ls[] = ($j[1]).toLsh
+          await saveLS(topic, ls)
 
 proc loadLS*(topic: string): Future[PublishedArticles] {.async.} =
   var lspath = getLSPath(topic) / "lsh.json.zst"
@@ -46,7 +63,15 @@ proc loadLS*(topic: string): Future[PublishedArticles] {.async.} =
   if data.len != 0:
     result = create(PublishedArticlesObj)
     checkNil(result):
-      result[] = data.toLsh
+      try:
+        result[] = data.toLsh
+      except CatchableError as e:
+        warn "Couldn't load LSH for topic {topic}, trying fix."
+        try:
+          await fixLS(topic, data)
+        except CatchableError:
+          warn "Couldn't apply fix for lsh."
+          raise e
   else:
     return initLS()
 
@@ -86,7 +111,7 @@ proc asyncLshHandler() {.async.} =
       let (lsh, ar) = await lshIn[].get()
       checkNil(lsh):
         asyncSpawn lsh.checkAndAddArticle(ar)
-  except CatchableError:
+  except: # If we quit we can catch defects too.
     let e = getCurrentException()[]
     warn "lsh: lsh handler crashed. {e}"
     quit()

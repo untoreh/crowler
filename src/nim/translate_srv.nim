@@ -14,9 +14,12 @@ import
     cfg,
     types,
     translate_types,
+    translate_native,
     utils,
     quirks,
     pyutils
+
+const nativeTranslator* {.booldefine.}: bool = true
 
 static: echo "loading translate_srv"
 
@@ -29,6 +32,8 @@ proc ensurePy(srv: service): PyObject =
                 pyImport(cstring($srv))
             of base_translator:
                 pyImport(cstring($srv))
+            else:
+              raise newException(OSError, fmt"{srv} is not python based.")
     except Exception as e:
         if "ModuleNotFoundError" in e.msg or "No module named" in e.msg:
             if getEnv("VIRTUAL_ENV", "") != "":
@@ -73,24 +78,42 @@ proc getProxies(srv: service = deep_translator): auto =
 proc initTranslator*(srv: service = default_service, provider: string = "", source: Lang = SLang,
         targets: HashSet[Lang] = TLangs): Translator =
     new(result)
-    syncPyLock:
-        result.pymod = ensurePy(srv)
-        result.pycls = result.pymod.getattr("Translator")()
-        result.pytranslate = result.pycls.translate
-        result.name = base_translator
-        result.provider = ""
+    if srv != native:
+      syncPyLock:
+          result.pymod = ensurePy(srv)
+          result.pycls = result.pymod.getattr("Translator")()
+          result.pytranslate = result.pycls.translate
+          result.name = base_translator
+          # result.provider = ""
+    else:
+      result.name = native
 
-let slatorObj = initTranslator()
-let slator* = slatorObj.unsafeAddr
+let
+  srv = when nativeTranslator:
+          export translate_native
+          native
+        else:
+          base_translator
+  slatorObj = initTranslator(srv)
+  slator* = slatorObj.unsafeAddr
+
+# when not nativeTranslator:
+#   slatorObj = initTranslator()
+#   slator = slatorObj.unsafeAddr
+# else:
+#   slator = create(Translator)
+#   slator[] = Translator()
+#   slator[].name = "native"
+#   export translate_native
 
 proc doJob(src: string, lang: langPair): PyObject {.withLocks: [pyGil].} =
-  if unlikely(slator.pytranslate.isnil):
-    doassert not slator.isnil
-    doassert not slator.pycls.isnil
-    slator.pytranslate = slator.pycls.translate
+  # if unlikely(slator.pytranslate.isnil):
+  #   doassert not slator.isnil
+  #   doassert not slator.pycls.isnil
+  #   slator.pytranslate = slator.pycls.translate
   result = pySched[].apply(slator.pytranslate, src, lang.trg)
 
-proc callTranslator*(src: string, lang: langPair): Future[string] {.async.}  =
+proc callTranslatorPy*(src: string, lang: langPair): Future[string] {.async, gcsafe.}  =
     try:
         var rdy: bool
         var res, j: PyObject
@@ -118,6 +141,16 @@ proc callTranslator*(src: string, lang: langPair): Future[string] {.async.}  =
                 result = ""
     except Exception as e:
         raise newException(ValueError, fmt"Translation failed with error: {e.msg}")
+
+proc callTranslatorNative*(src: string, lang: langPair): Future[string] {.async.}  =
+  return await translate_native.translate(src, lang.src, lang.trg)
+
+const callTranslator* =
+  when nativeTranslator:
+    callTranslatorNative
+  else:
+    callTranslatorPy
+
 
 # /////////// THIS SHOULD BE DONE PYTHON SIDE ///////////
 #

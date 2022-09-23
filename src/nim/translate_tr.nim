@@ -172,8 +172,9 @@ proc queueTrans(): seq[Future[void]]  =
 
 proc doTrans*() {.async.} =
     let jobs = queueTrans()
-    for j in jobs:
-        await j
+    await allFutures(jobs)
+    # for j in jobs:
+    #     await j
     saveToDB(force=true)
 
 proc translate*[T](q: ptr[QueueXml | QueueDom], el: T, srv: service) =

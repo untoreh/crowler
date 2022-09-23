@@ -1,16 +1,15 @@
 import std/[parsexml, streams, uri, httpcore, nre, strformat, strutils, json]
 import std/times except seconds, milliseconds
-# from std/times import nil
-# from std/times import getTime, fromUnix, Time, `-`
 import chronos/apps/http/httpclient
 import chronos
+import chronos/asyncsync
 from chronos/timer import seconds, milliseconds
 
 from cfg import PROXY_EP
 import types
 import utils
+import translate_native_utils
 
-type TranslateError = object of ValueError
 type
   BingConfig = ref object
     tld: string
@@ -25,37 +24,20 @@ type
     isSignedInOrCorporateUser: bool
     cookie: string
     count: int
-  BingTranslateObj = object
-    session: HTtpSessionRef
+    lock: AsyncLock
+  BingTranslateObj* = object of TranslateObj
     config: BingConfig
-  BingTranslate = ref BingTranslateObj
-  Query = tuple[text: string, src: string, trg: string]
-  BingTranslatePtr = ptr BingTranslateObj
+  BingTranslate* = ref BingTranslateObj
+  BingTranslatePtr* = ptr BingTranslateObj
 
 const
   USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.88 Safari/537.36"
-  # USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
   TRANSLATE_API_ROOT = "https://{config.tld}bing.com" # this is formatted, requires `var config: BingConfig`
   TRANSLATE_WEBSITE = TRANSLATE_API_ROOT & "/translator"
   TRANSLATE_API = TRANSLATE_API_ROOT & "/ttranslatev3"
   TRANSLATE_SPELL_CHECK_API = TRANSLATE_API_ROOT & "/tspellcheckv3"
 
-proc raiseTranslateError(msg: string) =
-  raise newException(TranslateError, msg)
-
 var bt*: BingTranslatePtr
-proc init(bto: var BingTranslateObj) =
-  bto.session =
-    new(HttpSessionRef,
-    connectTimeout = 5.seconds,
-    headersTimeout = 5.seconds,
-    proxyTimeout = 5.seconds,
-    maxRedirections = 10,
-    # proxy = PROXY_EP,
-    # flags = {NewConnectionAlways}
-    # proxyAuth=proxyAuth("user", "pass")
-    )
-  bto.config = new(BingConfig)
 
 proc isTokenExpired(self: BingTranslateObj): bool =
   if self.config.isnil:
@@ -96,29 +78,11 @@ template newReq(): untyped =
   headers.add ("user-agent", userAgent)
   HttpClientRequestRef.new(self.session, url, headers = headers).get
 
-template sendReq(req): HttpClientResponseRef =
-  block:
-    var
-      req = req
-      resp: HttpClientResponseRef
-      backoff = 250.milliseconds
-      tries = 0
-    while true:
-      try:
-        resp = await req.send()
-        break
-      except CatchableError:
-        if tries > 10:
-          break
-        await sleepAsync(backoff)
-        tries.inc
-        backoff += backoff
-        req = req.redirect(req.address).get
-    resp
-
 proc fetchBingConfig(self: BingTranslateObj, userAgent = USER_AGENT): Future[
     BingConfig] {.async.} =
+  let lock = self.config.lock
   let config = new(BingConfig)
+  config.lock = lock
   try:
     var newTld: string
     var req = newReq()
@@ -127,13 +91,14 @@ proc fetchBingConfig(self: BingTranslateObj, userAgent = USER_AGENT): Future[
       if newTld != "":
         config.tld = newTld & "."
       resp = sendReq(req)
-      # resp = await req.send()
       if resp.status >= 300 and resp.status < 400:
         let loc = resp.headers.getString("location")
         let tldMatch = loc.match(sre r"^https?:\/\/(\w+)\.bing\.com")
         if tldMatch.isnone:
           raiseTranslateError "Bing redirect doesn't match."
         newTld = loc[tldMatch.get.captureBounds[0]]
+        if req.session.isnil:
+          req.session = self.session
         let res = req.redirect(parseUri(loc))
         if res.isErr:
           raiseTranslateError "Bing redirect failed."
@@ -145,6 +110,7 @@ proc fetchBingConfig(self: BingTranslateObj, userAgent = USER_AGENT): Future[
       else:
         break
 
+    # defer: ensureClosed(req, resp)
     # PENDING: optional?
     for ck in resp.headers.getList("set-cookie"):
       let cks = ck.split(";")
@@ -186,17 +152,26 @@ proc fetchBingConfig(self: BingTranslateObj, userAgent = USER_AGENT): Future[
   shallowCopy self.config[], config[]
   return config
 
-proc translateBing*(text, src, trg: string): Future[string] {.async.} =
-  let bt = bt[]
-  let config = bt.config
-  if bt.isTokenExpired():
-    discard await bt.fetchBingConfig()
+proc validateResponse(respBody: JsonNode): bool =
+  respBody.kind == JArray and
+  respBody.len > 0 and
+  "translations" in respBody[0] and
+  respBody[0]["translations"].len > 0
+
+proc translate*(self: BingTranslateObj, text, src, trg: string): Future[
+    string] {.async.} =
+  let config = self.config
+  if self.isTokenExpired():
+    echo "translate_bing.nim:165"
+    withAsyncLock(self.config.lock):
+      if self.isTokenExpired():
+        discard await self.fetchBingConfig()
 
   let
     src = if src == "auto": "auto-detect" else: src
-    uri = bt.buildReqUri()
-    address = bt.session.getAddress(uri).get
-    body = bt.buildReqBody(text, src, trg)
+    uri = self.buildReqUri()
+    address = self.session.getAddress(uri).get
+    body = self.buildReqBody(text, src, trg)
     headers = @[
       ("user-agent", USER_AGENT),
       ("referer", TRANSLATE_WEBSITE.fmt),
@@ -207,7 +182,7 @@ proc translateBing*(text, src, trg: string): Future[string] {.async.} =
       ]
 
   let req = HttpClientRequestRef.new(
-    session = bt.session, ha = address,
+    session = self.session, ha = address,
     meth = MethodPost,
     headers = headers, body = body.toOpenArrayByte(0, body.len - 1))
 
@@ -216,18 +191,28 @@ proc translateBing*(text, src, trg: string): Future[string] {.async.} =
     raiseTranslateError "Bing POST request error, response code {resp.status}".fmt
 
   let respBody = (bytesToString (await getBodyBytes resp)).parseJson
-  if respBody.len == 0 or "translations" notin respBody[0] or respBody[0][
-      "translations"].len == 0:
+  if not validateResponse(respBody):
     raiseTranslateError "Bing translations not found in bing response."
 
   return respBody[0]["translations"][0]["text"].to(string)
 
+proc init*(_: typedesc[BingTranslateObj],
+    timeout = DEFAULT_TIMEOUT): BingTranslateObj =
+  let base = init(TranslateObj, timeout = timeout)
+  var srv = BingTranslateObj()
+  srv.session = base.session
+  srv.maxQuerySize = 1000
+  srv.config = new(BingConfig)
+  srv.config.lock = newAsyncLock()
+  setTranslateClosure()
+  return srv
+
 when isMainModule:
   bt = create(BingTranslateObj)
-  init(bt[])
+  bt[] = init(BingTranslateObj)
   # let bc = waitFor bt[].fetchBingConfig()
   # echo bt[].isTokenExpired()
   # echo bc.tokenTs
   # echo bc.tokenExpiryInterval
   let what = "Hello, how are you?"
-  echo waitFor translateBing(what, "auto", "it")
+  echo waitFor bt[].translate(what, "auto", "it")

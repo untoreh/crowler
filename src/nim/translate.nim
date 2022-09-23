@@ -308,6 +308,8 @@ proc initThread*() =
     initQueueCache()
     initSlations()
     initTforms()
+    when nativeTranslator:
+      startTranslator()
 
 proc exitThread() =
     saveToDB(force = true)

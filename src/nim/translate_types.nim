@@ -18,6 +18,7 @@ type
     service* = enum
         base_translator = "translator"
         deep_translator = "deep_translator"
+        native = "native"
     FcKind* = enum xml, dom
     Lang* = tuple
         name: string
@@ -25,7 +26,7 @@ type
     langPair* = tuple[src: string, trg: string]
     TFunc* = proc(src: string, lang: langPair): Future[string] {.gcsafe.} ## interface for translation function
     ServiceTable* = Table[langPair, PyObject] ## Maps the api of the wrapped service
-    TranslatorObj = object ## An instance of a translation service
+    TranslatorObj* = object ## An instance of a translation service
         pymod*: PyObject # module
         pycls*: PyObject # instance of class inside module
         pytranslate*: PyObject # the function that should implement TFunc

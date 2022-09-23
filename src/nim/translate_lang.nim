@@ -24,7 +24,8 @@ template translateVbtm(node: VNode, q: QueueDom) =
   if tree.tag == "document": tree.tag = "div"
   let convNode = tree.toVNode
   convNode.takeOverFields(node)
-  assert node.kind == convNode.kind
+  node.kind = convNode.kind
+  assert node.kind == convNode.kind, "vbtm failed, orig kind: " & node.kind & ", conv: " & convNode.kind
   translateIter(node, vbtm = false)
 
 template translateIter(otree; vbtm: static[bool] = true) =

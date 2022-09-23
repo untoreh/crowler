@@ -4,6 +4,7 @@ import os
 import socket
 import ssl
 import time
+import warnings
 from collections import deque
 from functools import partial
 from json.decoder import JSONDecodeError
@@ -11,11 +12,14 @@ from multiprocessing import Process, Queue
 from pathlib import Path
 from typing import Union
 
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    import proxybroker as pb
+    from proxybroker.api import Broker
+
 import httpx
-import proxybroker as pb
 import pycurl
 import requests
-from proxybroker.api import Broker
 from retry import retry
 from trafilatura import downloads as tradl
 from trafilatura import settings as traset

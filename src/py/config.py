@@ -35,7 +35,7 @@ def strtobool(val):
 
 
 # How many concurrent requests, An high number for many http requests
-POOL_SIZE = 256 # os.cpu_count()
+POOL_SIZE = 32 # os.cpu_count()
 
 PROJECT_DIR = Path(
     os.path.realpath(

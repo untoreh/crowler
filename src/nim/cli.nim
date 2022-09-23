@@ -26,8 +26,13 @@ import
 # import ./test                     #
 # static: echo "using test!"
 
-proc clearPage*(url: string) =
+template initAll() =
   initThread()
+  initCache()
+  initStats()
+
+proc clearPage*(url: string) =
+  initAll()
   let
     relpath = url.parseUri.path
     capts = uriTuple(relpath)
@@ -46,7 +51,7 @@ proc clearPageCache(force = false) =
 
 import topics, uri
 proc clearSource(domain: string) =
-  initThread()
+  initAll()
   for topic in topicsCache.keys:
     for pn in 0..(waitFor lastPageNum(topic)):
       let arts = (waitFor getDoneArticles(topic, pn, rev=false))
@@ -55,12 +60,19 @@ proc clearSource(domain: string) =
           let capts = uriTuple("/" & topic & "/" & $pn & "/" & ar.slug)
           waitFor deleteArt(capts)
 
+proc removeArt(url: string) =
+  ## Delete article from database
+  initAll()
+  let uri = parseUri(url)
+  let capts = uriTuple(uri.path)
+  waitFor deleteArt(capts, cacheOnly = false)
+
 proc cliPubTopic(topic: string) =
-  initThread()
+  initAll()
   discard waitFor pubTopic(topic)
 
 proc cliReindexSearch() =
-  initThread()
+  initAll()
   waitFor pushAllSonic(clear = true)
 
 # import system/nimscript
@@ -107,8 +119,9 @@ proc genPage(relpath: string) =
 
 when isMainModule:
   dispatchMulti([startServer], [clearPage], [cliPubTopic], [cliReindexSearch], [
-      clearSource], [clearPageCache], [versionInfo], [showStats])
+      clearSource], [clearPageCache], [versionInfo], [showStats], [removeArt])
 
   # initThread()
   # genPage("/")
 
+# import http

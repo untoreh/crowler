@@ -43,8 +43,7 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
       let topic = (await nextTopic())
       if topic != "":
         debug "pubtask: trying to publish {topic}"
-        if await maybePublish(topic):
-          discard
+        await maybePublish(topic):
     except CatchableError as e:
       debug "pubtask: failed with error {e[]}"
     await sleepAsync(cfg.CRON_TOPIC.seconds)

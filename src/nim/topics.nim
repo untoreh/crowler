@@ -243,7 +243,7 @@ proc syncTopics*(force = false) {.gcsafe, async.} =
           discard topicsCache.fetch(tp)
           await pygil.acquire()
         pygil.release()
-  except Exception as e:
+  except CatchableError as e:
     let e = getCurrentException()[]
     debug "could not sync topics {e}"
 

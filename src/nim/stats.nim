@@ -48,8 +48,8 @@ proc initStatsDB*(): StatsDB =
 proc initStats*()  =
   try:
     if statsDB.isnil:
-      let sdb {.global.} = initStatsDB()
-      statsDB = sdb.unsafeAddr
+      statsDB = create(StatsDB)
+      statsDB[] = initStatsDB()
   except CatchableError:
     let e = getCurrentException()[]
     qdebug "{e}"

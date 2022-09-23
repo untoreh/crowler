@@ -373,9 +373,10 @@ header .page {
     min-height: 8rem;
     background: url("https://api.iconify.design/bx/image.svg") no-repeat center
       center/cover;
-    body.dark & {
-      filter: invert(1.0);
-    }
+    // this should make the placeholder img icon visible on dark mode, but inverts every image
+    // body.dark & {
+    //   filter: invert(1.0);
+    // }
   }
 }
 .entry-tags {

@@ -1,5 +1,5 @@
 {
-    "Timeout": 3,
+    "Timeout": 10,
     "ServeNodes": [
         "socks5://:8877"
     ],

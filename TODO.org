@@ -1,2 +1,0 @@
-- make sure articles publishing is working
-- research ads (yllix)

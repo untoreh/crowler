@@ -19,6 +19,7 @@ requires "cligen >= 1.5.23"
 requires "lrucache"
 requires "weave#master"
 requires "normalize"
+requires "harpoon"
 requires "scorper#devel"
 requires "nimterop#master"
 requires "https://github.com/untoreh/nimdbx" # Use version! not #branch
@@ -31,3 +32,6 @@ requires "https://github.com/ringabout/Xio" # dep of fsnotify, but `xio` link in
 requires "fsnotify"
 requires "zip"
 requires "threading"
+requires "uuids"
+requires "https://github.com/untoreh/nim-chronos#master" # required for proxy support
+requires "https://github.com/untoreh/nimSocks#master" # required for proxy support

@@ -39,7 +39,7 @@ macro withLocks*(l: untyped, def: untyped): untyped =
   def.body = lockedBody
   return def
 
-template withASyncLock*(l: AsyncLock, code) =
+template withAsyncLock*(l: AsyncLock, code) =
   try:
     await l.acquire()
     code

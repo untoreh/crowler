@@ -135,9 +135,9 @@ proc deleteArt*(capts: UriCaptures, cacheOnly=false) {.async, gcsafe.} =
     let
         artPath = getArticlePath(capts)
         fpath = SITE_PATH / artPath
-    doassert capts.topic != ""
-    doassert capts.art != ""
-    doassert capts.page != ""
+    !! (capts.topic != "")
+    !! (capts.art != "")
+    !! (capts.page != "")
     pageCache[].del(fpath)
     pageCache[].del(SITE_PATH / "amp" / artPath)
     # remove statistics about article
@@ -147,6 +147,10 @@ proc deleteArt*(capts: UriCaptures, cacheOnly=false) {.async, gcsafe.} =
         pageCache[].del(SITE_PATH / lang / artPath)
     if not cacheOnly:
         let tg = (await topicsCache.fetch(capts.topic)).group[]
+        await pygil.acquire()
+        defer:
+          if pygil.locked:
+            pygil.release()
         let pageArts = tg[$topicData.done][capts.page]
         let pyslug = capts.art.nimValueToPy().newPyObject
         var toRemove: seq[int]

@@ -1,2 +1,3 @@
 * multiple kw arguments when using proxies
 https://github.com/searx/searx/pull/3165
+* don't use cloudflare zaraz for html injection since it adds foreign js that breaks amp pages

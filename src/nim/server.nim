@@ -485,13 +485,13 @@ proc handleGet(ctx: Request): Future[bool] {.gcsafe, async.} =
         info "router: serving homepage rel: {reqCtx.url.path:.20}, fp: {reqCtx.file:.20}, {reqCtx.key}"
         handleHomePage(reqCtx.url.path, capts, ctx)
       of (topic: "assets"):
-        debug "router: serving assets {relpath:.20}"
+        logall "router: serving assets {relpath:.20}"
         handleAsset()
       of (topic: "i"):
-        info "router: serving image {relpath:.80}"
+        logall "router: serving image {relpath:.80}"
         dispatchImg()
       of (topic: "robots.txt"):
-        debug "router: serving robots"
+        logall "router: serving robots"
         handleRobots()
       of (topic: "feed.xml"):
         info "router: serving site feed"

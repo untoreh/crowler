@@ -1,6 +1,7 @@
 import karax/[vdom, karaxdsl], strformat, locks, sugar, strutils, uri, parsexml,
     streams, std/algorithm
 import chronos, chronos/asyncsync, htmlparser, xmltree
+import nre
 import os
 import sets
 import cfg
@@ -56,8 +57,8 @@ template initLinks(name, data) =
   if fileExists(`name File`):
     let links = readFile(`name File`)
     data[] = collect:
-      for link in links.split():
-        if link.len > 0:
+      for link in links.splitLines():
+        if link.len > 0 and (sre(r"^\s*#") notin link):
           link.withScheme
     `name Idx` = 0
     `name Count` = data[].len

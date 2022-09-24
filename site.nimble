@@ -7,6 +7,7 @@ license       = "MIT"
 srcDir        = "src/nim"
 installExt    = @["nim"]
 bin           = @["cli"]
+skipdirs      = @["vendor"]
 
 # Dependencies
 echo "building... "

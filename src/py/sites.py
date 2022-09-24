@@ -583,7 +583,7 @@ class Site:
 
     def get_new_img(self, kw: str):
         if "get_images" not in globals():
-            from .sources import get_images
+            from sources import get_images
         images = get_images(kw)
         for img in images:
             if img.url not in self.img_bloom:

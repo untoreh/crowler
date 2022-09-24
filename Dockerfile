@@ -27,9 +27,10 @@ RUN apt -y install git lld file
 RUN curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
 RUN echo PATH=/root/.nimble/bin:\$PATH >> /root/.profile
 RUN ln -sr /root/.choosenim/toolchains/*/tools /root/.nimble
+RUN ~/.nimble/bin/choosenim "#version-1-6"
 RUN bash -c "$(curl -fsSL https://gef.blah.cat/sh)"
 # required by gef
-RUN apt -y install locales; \
+RUN apt update -y; apt -y install locales; \
     sed '/en_US.UTF-8/s/^# //g' -i /etc/locale.gen && \
     locale-gen
 ENV LANG en_US.UTF-8
@@ -55,6 +56,9 @@ VOLUME ["/site/data"]
 FROM siteenv AS sitedeps1
 # install nimterop separately
 ARG CLEARCACHE=1
+RUN curl http://ftp.de.debian.org/debian/pool/main/o/openssl/libssl1.1_1.1.1n-0+deb11u3_amd64.deb --output libssl.deb && \
+    dpkg -i libssl.deb && \
+    rm libssl.deb
 RUN cd /; nimble install -y nimterop
 RUN cd /
 RUN cd /site; \
@@ -97,9 +101,6 @@ ENV NIM $NIM_ARG
 ARG LIBPYTHON_PATH /usr/lib/x86_64-linux-gnu/libpython3.10d.so
 # nim not still supporting ssl3
 # RUN apt -y install libssl1.1
-RUN curl http://ftp.de.debian.org/debian/pool/main/o/openssl/libssl1.1_1.1.1n-0+deb11u3_amd64.deb --output libssl.deb && \
-    dpkg -i libssl.deb && \
-    rm libssl.deb
 RUN /site/scripts/switchdebug.sh /site
 CMD ./cli
 

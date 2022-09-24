@@ -22,7 +22,7 @@ template translateVbtm(node: VNode, q: QueueDom) =
     s = $node
     tree = vbtmcache.lgetOrPut(s.key): parseHtml(s)
   if tree.tag == "document": tree.tag = "div"
-  takeOverFields(node, tree.toVNode)
+  takeOverFields(tree.toVNode, node)
   translateIter(node, vbtm = false)
 
 template translateIter(otree; vbtm: static[bool] = true) =
@@ -40,12 +40,13 @@ template translateIter(otree; vbtm: static[bool] = true) =
         if t == VNodeKind.a:
           if el.hasAttr("href"):
             rewriteUrl(el, rewrite_path, hostname)
-        elif t == VNodeKind.verbatim:
+        if t == VNodeKind.verbatim:
           when vbtm:
             debug "dom: translating verbatim", false
             translateVbtm(el, q)
-        elif ((el.hasAttr("alt")) and el.isTranslatable("alt")) or
-                ((el.hasAttr("title")) and el.isTranslatable("title")):
+        else:
+          if(el.hasAttr("alt") and el.isTranslatable("alt")) or
+            (el.hasAttr("title") and el.isTranslatable("title")):
             translate(q.addr, el, srv)
 
 proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN): Future[(

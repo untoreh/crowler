@@ -2,12 +2,12 @@ import nimpy, std/[options, nre, strutils, strformat, os, enumerate, mimetypes, 
 import cfg, quirks, utils
 
 const
-    rxend = "(?=/|(?=[?].*)|$)"
-    rxAmp = fmt"(/amp{rxend})"
+    rxend = "(?=/+|(?=[?].*)|$)"
+    rxAmp = fmt"(/+amp{rxend})"
     rxLang = "(/[a-z]{2}(?:-[A-Z]{2})?" & fmt"{rxend})" # split to avoid formatting regex `{}` usage
-    rxTopic = fmt"(/.*?{rxend})"
-    rxPage = fmt"(/(?:[0-9]+|s|g|feed\.xml|sitemap\.xml){rxend})"
-    rxArt = fmt"(/.*?{rxend})"
+    rxTopic = fmt"(/+.*?{rxend})"
+    rxPage = fmt"(/+(?:[0-9]+|s|g|feed\.xml|sitemap\.xml){rxend})"
+    rxArt = fmt"(/+.*?{rxend})"
     rxPath = fmt"{rxAmp}?{rxLang}?{rxTopic}?{rxPage}?{rxArt}?"
 
 const defaultHeaders = @["Cache-Control: no-store"]

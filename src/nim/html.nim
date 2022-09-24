@@ -550,7 +550,6 @@ macro wrapContent(content: string, wrap: static[bool]): untyped =
     quote do:
       verbatim(`content`)
 
-proc emptyVNode(y: static[bool] = true): VNode = newVNode(VNodeKind.verbatim)
 
 proc buildPage*(title, content: string; wrap: static[bool] = false;
        pagefooter = emptyVNode()): Future[VNode] {.async.} =

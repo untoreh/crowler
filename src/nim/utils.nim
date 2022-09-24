@@ -803,6 +803,8 @@ proc toXmlNode*(el: VNode): XmlNode =
           kids.add k.toXmlNode
       newXmlTree($el.kind, kids, attributes = xAttrs)
 
+proc emptyVNode*(y: static[bool] = true): VNode = newVNode(VNodeKind.text)
+
 import std/unidecode
 proc toVNode*(el: XmlNode): VNode =
   privateAccess(VNode)

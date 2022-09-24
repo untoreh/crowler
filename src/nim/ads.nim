@@ -57,7 +57,8 @@ template initLinks(name, data) =
     let links = readFile(`name File`)
     data[] = collect:
       for link in links.split():
-        link.withScheme
+        if link.len > 0:
+          link.withScheme
     `name Idx` = 0
     `name Count` = data[].len
     if `name Count` == 0:
@@ -147,10 +148,14 @@ proc adLinkFut(kind: AdLinkType, stl: static[AdLinkStyle]): Future[
   let link = case kind:
     of tags: await nextAdsLink()
     of footer: await nextFooterLink()
-  return buildHtml(a(href = link, class = "ad-link")):
-    adLinkIco true, stl
-    text "Ad"
-    adLinkIco false, stl
+  result =
+    if link.len > 0:
+      buildHtml(a(href = link, class = "ad-link")):
+        adLinkIco true, stl
+        text "Ad"
+        adLinkIco false, stl
+    else:
+      newVNode(VNodeKind.text)
 
 template adLink*(kind; stl: static): auto =
   await adLinkFut(kind, stl)

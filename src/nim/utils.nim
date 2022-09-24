@@ -379,6 +379,11 @@ proc clearAttrs*(node: VNode) {.inline.} =
     privateAccess(VNode)
     node.attrs.setlen(0)
 
+proc `attrs=`*(node: VNode, v: seq[kstring]) {.inline.} =
+    privateAccess(VNode)
+    node.attrs.setLen(0)
+    node.attrs.add v
+
 proc clearChildren*(node: VNode) {.inline.} =
     privateAccess(VNode)
     node.kids.setlen(0)
@@ -746,6 +751,8 @@ proc withScheme*(url: string): string {.inline.} =
 var uriVar {.threadVar.}: URI
 proc rewriteUrl*(el, rewritePath: auto, hostname = WEBSITE_DOMAIN) =
   let url = el.getAttr("href").string
+  if url.len == 0:
+    return
   url.parseUri(uriVar)
   # remove initial dots from links
   uriVar.path = uriVar.path.replace(sre("^\\.?\\.?"), "")

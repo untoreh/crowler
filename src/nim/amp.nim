@@ -22,7 +22,8 @@ import cfg,
        ads
 
 const CSS_MAX_SIZE = 75000
-const skipNodes = [VNodeKind.iframe, audio, canvas, embed, video, img, VNodeKind.head, svg]
+const skipNodes = [VNodeKind.iframe, audio, canvas, embed, video, img,
+    VNodeKind.head, svg]
 const skipNodesXml = ["iframe", "audio", "canvas", "embed", "video", "img",
         "head", "svg", "document"]
 
@@ -191,14 +192,34 @@ proc parseNode(node: VNode): XmlNode =
 #   debug "amprem: el now is {$el}"
 
 
+const globalAttrs = ["accessKey", "class", "contenteditable", "dir",
+    "draggable", "hidden", "id", "lang", "spellcheckl", "style", "tabindex",
+    "title", "translate"].toHashSet
+const aTagAttrs = ["download", "href", "hreflang", "media", "ping",
+    "referrerpolicy", "rel", "target", "type"].toHashSet
 template processAttrs(el: VNode): untyped {.dirty.} =
   el.delAttr("onclick")
   case el.kind:
     of VNodeKind.a:
-      if el.hasAttr("target"): # `target` attr can only be _blank
-        el.setAttr("target", "_blank")
-      if el.hasAttr("alt"): # Can't have `alt` attributes
-        el.delAttr("alt")
+      var attrs: seq[string]
+      for (k, v) in el.attrs:
+        case k:
+          of "target":
+            attrs.add [k, "_blank"] # `target` attr can only be _blank
+          of "href":
+            if v.startsWith("javascript:"):
+              continue
+            else:
+              attrs.add [k, v]
+          else:
+            if (k.startsWith("on") and k.len > 2) or
+               k.startsWith("xml") or
+               k.startsWith("i-amp-"):
+              continue
+            elif k notin aTagAttrs or k notin globalAttrs:
+              continue
+            attrs.add [k, v]
+      el.attrs = attrs
     else: discard
 
 template processAttrs(el: XmlNode): untyped {.dirty.} =
@@ -252,7 +273,8 @@ proc processBody(inEl, outBody, outHead: VNode, lv = false) {.async.} =
       if el.kind == VNodeKind.verbatim:
         var processed: string
         let xEl = parseHtml($el)
-        if xEl.kind == xnElement and xEl.tag == "document": # verbatim included a list of tags, process each one singularly
+        if xEl.kind == xnElement and xEl.tag ==
+            "document": # verbatim included a list of tags, process each one singularly
           for k in xEl:
             processAttrs(k)
             let vnK = k.toVNode

@@ -349,7 +349,7 @@ proc buildFooter*(topic = "", pagenum = ""): Future[VNode] {.async.} =
 proc postTitle(a: Article): Future[VNode] {.async.} =
   return buildHtml(tdiv(class = "title-wrap")):
     h1(class = "post-title", id = "main"):
-      a(href = a.slug):
+      a(href = getArticleUrl(a)):
         text a.title
     tdiv(class = "post-info"):
       blockquote(class = "post-desc"):

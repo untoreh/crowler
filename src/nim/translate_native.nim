@@ -76,7 +76,7 @@ proc asyncTransHandler() {.async.} =
 
 proc transHandler() = waitFor asyncTransHandler()
 
-proc translate*(text, src, trg: string): Future[string] {.async.} =
+proc translate*(text, src, trg: string): Future[string] {.async, raises: [].} =
   var res: string
   let tkey = (text, src, trg)
   await transIn[].put(tkey)

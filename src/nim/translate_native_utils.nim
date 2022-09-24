@@ -77,8 +77,8 @@ proc init*[T: TranslateObj](_: typedesc[T], timeout: Duration = 7.seconds,
   result.session =
     new(HttpSessionRef,
     connectTimeout = timeout,
-    headersTimeout = timeout,
-    proxyTimeout = timeout,
+    headersTimeout = timeout.div(2),
+    proxyTimeout = timeout.div(3),
     proxy = if useProxies: PROXY_EP else: "",
     flags = if useProxies: {HttpClientFlag.NoVerifyHost,
         HttpClientFlag.NoVerifyServerName} else: {}

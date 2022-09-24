@@ -104,8 +104,8 @@ proc buildRelated*(a: Article): Future[VNode] {.async.} =
       entry.add link
       result.add entry
       c += 1
-    if c >= cfg.N_RELATED:
-      return
+      if c >= cfg.N_RELATED:
+        return
 
 import xmltree
 import html_entities

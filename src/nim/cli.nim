@@ -7,6 +7,8 @@ import os,
        chronos,
        karax/vdom,
        strutils
+when compileOption("profiler"):
+  import nimprof
 import
   cfg,
   types,

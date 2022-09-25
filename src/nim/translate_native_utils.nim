@@ -71,7 +71,7 @@ template sendReq*(req): HttpClientResponseRef =
       raiseTranslateError "Translation request failed."
     resp
 
-proc init*[T: TranslateObj](_: typedesc[T], timeout: Duration = 7.seconds,
+proc init*[T: TranslateObj](_: typedesc[T], timeout: Duration = 3.seconds,
                             useProxies = true): T =
   result.maxQuerySize = 5000
   result.session =

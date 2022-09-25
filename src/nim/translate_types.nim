@@ -71,18 +71,17 @@ macro getHtml*(code: untyped, kind: static[FcKind], ): untyped =
 proc `html=`*(fc: ptr FileContext, data: XmlNode) = fc.xhtml = data
 proc `html=`*(fc: ptr FileContext, data: vdom.VNode) = fc.vhtml = data
 
-proc initFileContext*(data: static[XmlNode | VNode], file_path, url_path, pair, t_path: auto): ptr FileContext =
+proc initFileContext*(data: XmlNode | VNode; file_path, url_path, pair, t_path: auto): ptr FileContext =
+    result = create(FileContext)
     if not result.isnil:
-        result = create(FileContext)
-        if not result.isnil:
-            result[] = FileContext(kind: (if data is XmlNode: xml else: dom))
-            result.html = data
-            result.file_path = file_path
-            result.url_path = url_path
-            result.pair = pair
-            result.t_path = t_path
-        else:
-          assert false, "failed to create file context."
+        result[] = FileContext(kind: (if data is XmlNode: xml else: dom))
+        result.html = data
+        result.file_path = file_path
+        result.url_path = url_path
+        result.pair = pair
+        result.t_path = t_path
+    else:
+        assert false, "Failed to create file context."
 
 const
     default_service* = base_translator

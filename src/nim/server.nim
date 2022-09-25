@@ -433,7 +433,7 @@ template abort() =
 
 {.pop dirty.}
 
-proc handleGet(ctx: Request) {.gcsafe, async.} =
+proc handleGet(ctx: Request): Future[void] {.gcsafe, async.} =
   initThread()
   # doassert ctx.parseRequestLine
   var
@@ -547,7 +547,7 @@ proc handleGet(ctx: Request) {.gcsafe, async.} =
     # reset(reqCtx.rq)
 
 proc callback(ctx: Request) {.async.} =
-  asyncSpawn handleGet(ctx)
+  await handleGet(ctx)
 
 template wrapInit(code: untyped): proc() =
   proc task(): void =

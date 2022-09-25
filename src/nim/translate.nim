@@ -83,6 +83,7 @@ macro defIfDom*(kind: static[FcKind]): untyped =
 
 template translateEnv*(kind: static[FcKind] = xml) {.dirty.} =
     debug "html: initializing vars "
+    checkNil(fc)
     let
         file_path = fc.file_path
         url_path = fc.url_path

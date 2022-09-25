@@ -47,7 +47,7 @@ var
 proc addJob(els: seq[XmlNode], q: QueueXml, batches: seq[seq[string]]) = jobsQueueX.add (els, q, batches)
 proc addJob(els: seq[VNode], q: QueueDom, batches: seq[seq[string]]) = jobsQueueV.add (els, q, batches)
 
-let splitCache = initLockLRUCache[string, seq[string]](1000)
+let splitCache = initLockLRUCache[string, seq[string]](32)
 
 proc checkBatchedTranslation(sents: seq[string], query = "", tr: auto) =
     if len(tr) != len(sents):
@@ -79,7 +79,7 @@ proc doQuery(q: auto, sents: seq[string]): Future[seq[string]] {.async.} =
         if len(result) == len(sents):
             debug "query: translation successful."
             return
-        glueTracker[itr].inc
+        glueTracker[itr - 1].inc
         debug "query: translation failed ({len(result)}, {len(sents)}), trying new glue ({itr})"
         itr += 1
     checkBatchedTranslation(sents, query, result)
@@ -109,9 +109,10 @@ proc elUpdate(q, el, srv: auto) =
         batches: seq[seq[string]]
     sentsIn.size = 0
     let txt = el.getText
-    elSents.add if txt in splitCache:
-                    splitCache[txt]
-                else: splitSentences(txt)
+    block:
+      let v = splitCache.lcheckOrPut(txt):
+        splitSentences(txt)
+      elSents.add v
     # debug "elupdate: translating"
     for s in elSents:
         if reachedBufSize(sentsIn.sents, sentsIn.len + s.len, q.bufsize):

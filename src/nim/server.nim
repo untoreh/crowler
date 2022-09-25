@@ -111,8 +111,8 @@ proc initThread*() {.gcsafe.} =
   except:
     qdebug "failed to init translate"
 
-  reqCtxCache = initLockLruCache[string, ref ReqContext](1000)
-  urlCache = initLockLruCache[string, ref Uri](1000)
+  reqCtxCache = initLockLruCache[string, ref ReqContext](32)
+  urlCache = initLockLruCache[string, ref Uri](32)
   reqCompleteEQ = create(AsyncEventQueue[ref ReqContext])
   reqCompleteEQ[] = newAsyncEventQueue[ref ReqContext]()
   reqEventQK = create(EventQueueKey)

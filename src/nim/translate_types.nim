@@ -176,7 +176,7 @@ let defaultGlues = [
     (" #|#|# ", re"\s?#\s?\|\s?#\s?\|\s?#\s?")
     ]
 
-var glueTracker*: array[4, string]
+var glueTracker*: array[4, int]
 
 proc initGlues*() {.gcsafe.} =
   {.cast(gcsafe).}:

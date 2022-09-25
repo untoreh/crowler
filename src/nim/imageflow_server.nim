@@ -20,7 +20,7 @@ import
 
 const rxPathImg = "/([0-9]{1,3})x([0-9]{1,3})/\\?(.+)(?=/|$)"
 
-let imgCache = initLockLruCache[string, string](1024)
+let imgCache = initLockLruCache[string, string](32)
 
 proc imgData(imgurl: string): Future[string] {.inline, gcsafe, async.} =
   try:

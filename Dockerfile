@@ -55,7 +55,7 @@ VOLUME ["/site/data"]
 
 FROM siteenv AS sitedeps1
 # install nimterop separately
-ARG CLEARCACHE=0
+ARG CLEARCACHE=1
 RUN curl http://ftp.de.debian.org/debian/pool/main/o/openssl/libssl1.1_1.1.1n-0+deb11u3_amd64.deb --output libssl.deb && \
     dpkg -i libssl.deb && \
     rm libssl.deb

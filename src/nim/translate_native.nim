@@ -88,12 +88,12 @@ proc translate*(text, src, trg: string): Future[string] {.async, raises: [].} =
   return res
 
 proc startTranslator*() =
-  createThread(transThread, transHandler)
   transIn = create(AsyncQueue[Query])
   transIn[] = newAsyncQueue[Query](1024 * 16)
   transOut = initLockTable[Query, string]()
   transEvent = create(AsyncEvent)
   transEvent[] = newAsyncEvent()
+  createThread(transThread, transHandler)
 
 when isMainModule:
   proc test() {.async.} =

@@ -119,7 +119,6 @@ proc asyncLshHandler() {.async.} =
 proc lshHandler() = waitFor asyncLshHandler()
 
 proc startLsh*() =
-  createThread(lshThread, lshHandler)
   lshIn = create(AsyncQueue[(PublishedArticles, Article)])
   lshIn[] = newAsyncQueue[(PublishedArticles, Article)](256)
   lshOut = initLockTable[PublishedArticles, bool]()
@@ -127,6 +126,7 @@ proc startLsh*() =
   lshEvent[] = newAsyncEvent()
   lshLock = create(AsyncLock)
   lshLock[] = newAsyncLock()
+  createThread(lshThread, lshHandler)
 
 when isMainModule:
   startLsh()

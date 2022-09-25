@@ -122,13 +122,6 @@ proc startImgFlow*() =
     warn "Could not init imageflow! \n {e[]}"
     quit()
 
-# import chronos
-# var iflThread: Thread[(string, string)]
-# createThread()
-# proc iflHandler*() =
-
-
-
 # import guildenstern/ctxheader
 # proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
 #     assert ctx.parseRequestLine

@@ -433,7 +433,7 @@ template abort() =
 
 {.pop dirty.}
 
-proc handleGet(ctx: Request): Future[bool] {.gcsafe, async.} =
+proc handleGet(ctx: Request) {.gcsafe, async.} =
   initThread()
   # doassert ctx.parseRequestLine
   var
@@ -477,7 +477,6 @@ proc handleGet(ctx: Request): Future[bool] {.gcsafe, async.} =
     except CatchableError as e:
       debug "cache: aborting {e[]}"
       abort()
-    return true
   try:
     let capts = uriTuple(reqCtx.url.path)
     case capts:
@@ -548,7 +547,7 @@ proc handleGet(ctx: Request): Future[bool] {.gcsafe, async.} =
     # reset(reqCtx.rq)
 
 proc callback(ctx: Request) {.async.} =
-  discard await handleGet(ctx)
+  asyncSpawn handleGet(ctx)
 
 template wrapInit(code: untyped): proc() =
   proc task(): void =

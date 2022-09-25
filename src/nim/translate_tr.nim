@@ -58,7 +58,6 @@ proc checkBatchedTranslation(sents: seq[string], query = "", tr: auto) =
             err.add t
         err.add "\nmismatching batched translation query result: "
         err.add fmt"req: {sents.len}, resp: {tr.len}"
-        err.add "glueFailures: {glueTracker}"
         raise newException(ValueError, err)
 
 proc doQuery(q: auto, sents: seq[string]): Future[seq[string]] {.async.} =
@@ -81,6 +80,7 @@ proc doQuery(q: auto, sents: seq[string]): Future[seq[string]] {.async.} =
             return
         glueTracker[itr - 1].inc
         debug "query: translation failed ({len(result)}, {len(sents)}), trying new glue ({itr})"
+        debug "glueFailures: {glueTracker}"
         itr += 1
     checkBatchedTranslation(sents, query, result)
 

@@ -198,8 +198,8 @@ template handle301*(loc: string = $WEBSITE_URL) =
 template handle404*(loc = $WEBSITE_URL) =
   await reqCtx.doReply($Http404, rqid, scode = Http404)
 
-template handle501*(loc = $WEBSITE_URL) =
-  await reqCtx.doReply($Http501, rqid, scode = Http501)
+template handle502*(loc = $WEBSITE_URL) =
+  await reqCtx.doReply($Http502, rqid, scode = Http502)
 
 template handleHomePage(relpath: string, capts: UriCaptures,
     ctx: Request) =
@@ -325,7 +325,7 @@ template handleArticle(capts: auto, ctx: Request) =
       await reqCtx.doReply(page, rqid, )
     except ValueError:
       debug "article: redirecting to topic because page is empty"
-      handle501()
+      handle502()
       # handle301($(WEBSITE_URL / capts.amp / capts.lang / capts.topic))
   else:
     handle404()
@@ -429,7 +429,7 @@ template abort() =
 
   let e = getCurrentException()[]
   sdebug "Router failed, Exception: \n {e}"
-  handle501()
+  handle502()
 
 {.pop dirty.}
 

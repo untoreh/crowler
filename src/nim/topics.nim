@@ -50,9 +50,10 @@ proc loadTopicsIndex*(): PyObject =
     if "shape is None" in m:
       sdebug "Couldn't load topics, is data dir present?"
 
-proc isEmptyTopic*(topic: string): Future[bool] {.async.} =
+proc isEmptyTopic*(topic: string): Future[bool] {.async, gcsafe.} =
   withPyLock:
-    let isEmptyTopicPy {.global.} = site[].getattr("is_empty")
+    var isEmptyTopicPy {.threadvar.}: PyObject
+    isEmptyTopicPy = site[].getattr("is_empty")
     result = isEmptyTopicPy(topic).to(bool)
 
 type TopicTuple* = (string, string, int)

@@ -30,7 +30,9 @@ proc getArticleUrl*(a: Article): string = $(WEBSITE_URL / getArticlePath(a))
 proc getArticleUrl*(a: Article, lang: string): string {.inline.} = $(WEBSITE_URL / lang /
         getArticlePath(a))
 
-proc isValidArticlePy*(py: PyObject): bool = ut.is_valid_article(py).to(bool)
+proc isValidArticlePy*(py: PyObject): bool =
+  {.locks: [pyGil].}:
+    ut[].is_valid_article(py).to(bool)
 
 proc getArticles*(topic: string, n = 3, pagenum: int = -1): Future[(int, seq[Article])] {.async.} =
     let arts = await topicArticles(topic)

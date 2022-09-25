@@ -12,7 +12,6 @@ import strutils,
 
 from unicode import runeSubStr, validateUtf8
 
-import threading/channels
 import std/isolation
 
 import

@@ -17,7 +17,7 @@ type
   TranslateFunc* = proc(text, src, trg: string): Future[string] {.gcsafe.}
   TranslateObj* = object of RootObj
     session*: HTtpSessionRef
-    translateImpl*: TranslateFunc
+    translateImpl* {.cursor.}: TranslateFunc
     maxQuerySize*: int
   Translate* = ref TranslateObj
   TranslatePtr* = ptr TranslateObj

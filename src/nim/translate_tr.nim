@@ -66,12 +66,12 @@ proc doQuery(q: auto, sents: seq[string]): Future[seq[string]] {.async.} =
         itr = 1
         query = ""
 
+    var res: string
     for (sep, splitsep) in q.glues:
         query = join(sents, sep)
         assert query.len < q.bufsize, fmt"mmh: {sents.len}, {query.len}"
         # debug "query: calling translation function, bucket: {q.bucket.len()}, query: {query.len}"
-        let res = await callTranslator(query, q.pair)
-        # let res = q.doCall(query)
+        res = await callTranslator(query, q.pair)
         logall "query: response size: {res.len}"
         result = res.split(splitsep)
         logall "query: split translations"

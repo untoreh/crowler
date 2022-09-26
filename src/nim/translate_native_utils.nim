@@ -15,14 +15,16 @@ proc raiseTranslateError*(msg: string) =
 type
   Query* = tuple[text: string, src: string, trg: string]
   TranslateFunc* = proc(text, src, trg: string): Future[string] {.gcsafe.}
+  Service* = enum google, bing, yandex
   TranslateObj* = object of RootObj
+    kind*: Service
     session*: HTtpSessionRef
     translateImpl*: TranslateFunc
     maxQuerySize*: int
-  Translate* = ref TranslateObj
-  TranslatePtr* = ptr TranslateObj
+  Translate*[T: TranslateObj] = ref T
+  TranslatePtr*[T: TranslateOBj] = ptr T
 
-proc doReq*(self: TranslateObj, uri: Uri, retries = 10): Future[
+proc doReq*[T: TranslateObj](self: T, uri: Uri, retries = 10): Future[
     string] {.async.} =
   for r in 0..<retries:
     try:
@@ -33,6 +35,7 @@ proc doReq*(self: TranslateObj, uri: Uri, retries = 10): Future[
     except CatchableError:
       continue
   raiseTranslateError "Translation request failed."
+  discard
 
 macro ensureClosed*(objs: varargs[untyped]): untyped =
   let stmt = newNimNode(nnkStmtList)

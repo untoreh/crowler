@@ -200,6 +200,7 @@ proc init*(_: typedesc[BingTranslateObj],
     timeout = DEFAULT_TIMEOUT): BingTranslateObj =
   let base = init(TranslateObj, timeout = timeout)
   var srv = BingTranslateObj()
+  srv.kind = bing
   srv.session = base.session
   srv.maxQuerySize = 1000
   srv.config = new(BingConfig)

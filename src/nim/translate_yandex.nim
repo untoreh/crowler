@@ -110,6 +110,7 @@ proc init*(_: typedesc[YandexTranslateObj],
     timeout = DEFAULT_TIMEOUT): YandexTranslateObj =
   let base = init(TranslateObj, timeout = timeout)
   var srv = YandexTranslateObj()
+  srv.kind = yandex
   srv.session = base.session
   srv.maxQuerySize = base.maxQuerySize
   srv.ucid = CachedUUID()

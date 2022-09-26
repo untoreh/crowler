@@ -83,6 +83,7 @@ proc translate*(self: GoogleTranslateObj, text, src, trg: string): Future[
 proc init*(_: typedesc[GoogleTranslateObj], timeout = DEFAULT_TIMEOUT): GoogleTranslateObj =
   let base = init(TranslateObj, timeout=timeout)
   var srv = GoogleTranslateObj()
+  srv.kind = google
   srv.session = base.session
   srv.maxQuerySize = base.maxQuerySize
   proc fn(text, src, trg: string): Future[string] {.async.} =

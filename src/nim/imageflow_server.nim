@@ -38,11 +38,12 @@ proc parseImgUrl*(relpath: string): (string, string, string) =
       height = imgCapts[1].get
   return (url, width, height)
 
-var iflThread: Thread[void]
-var imgIn*: ptr AsyncQueue[(string, string, string)]
-var imgOut*: LockTable[(string, string, string), (string, string)]
-var imgEvent*: ptr AsyncEvent
-var imgLock*: ptr AsyncLock
+var
+  iflThread: Thread[void]
+  imgIn: ptr AsyncQueue[(string, string, string)]
+  imgOut: LockTable[(string, string, string), (string, string)]
+  imgEvent: ptr AsyncEvent
+  imgLock: ptr AsyncLock
 
 proc handleImg*(relpath: string): Future[(string, string)] {.async.} =
   let (url, width, height) = parseImgUrl(relpath)
@@ -68,7 +69,8 @@ proc handleImg*(relpath: string): Future[(string, string)] {.async.} =
 
 template submitImg(val: untyped = ("", "")) {.dirty.} =
   imgOut[imgKey] = val
-  imgEvent[].fire; imgEvent[].clear
+  imgEvent[].fire()
+  imgEvent[].clear()
 
 proc processImgData(imgKey: (string, string, string)) {.async.} =
   # push img to imageflow context
@@ -92,7 +94,6 @@ proc processImgData(imgKey: (string, string, string)) {.async.} =
     return
   finally:
     imgLock[].release
-
 
 proc asyncImgHandler() {.async.} =
   try:

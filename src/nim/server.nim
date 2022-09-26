@@ -94,7 +94,6 @@ proc initThread*() {.gcsafe.} =
     return
   initThreadBase()
   initHtml()
-  addLocks()
   initLDJ()
   initFeed()
   startImgFlow()
@@ -224,11 +223,15 @@ template handleAsset() =
     reqCtx.mime = mimePath(reqCtx.file)
     try:
       page = pageCache[].get(reqCtx.key)
+      await reqCtx.doReply(page, rqid, )
     except KeyError:
       try:
         page = await readFileAsync(reqCtx.file)
         if page != "":
           pageCache[reqCtx.key] = page
+          await reqCtx.doReply(page, rqid, )
+        else:
+          handle404()
       except:
         handle404()
   else:
@@ -236,9 +239,9 @@ template handleAsset() =
     try:
       reqCtx.mime = mimePath(reqCtx.file)
       page = await readFileAsync(reqCtx.file)
+      await reqCtx.doReply(page, rqid, )
     except:
       handle404()
-  await reqCtx.doReply(page, rqid, )
 
 template dispatchImg() =
   var mime: string
@@ -564,6 +567,18 @@ proc doServe*(address: string, callback: ScorperCallback): Future[
   await server.join()
   return server
 
+proc runScorper(address, callback: auto) =
+  var srv: Scorper
+  try:
+    srv = waitFor doServe(address, callback)
+  except:
+    let e = getCurrentException()[]
+    warn "server: {e} \n restarting server..."
+  finally:
+    if not srv.isnil:
+      waitFor srv.join()
+      reset(srv)
+
 proc startServer*(doclear = false, port = 0, loglevel = "info") =
 
   let serverPort = if port == 0:
@@ -592,14 +607,10 @@ proc startServer*(doclear = false, port = 0, loglevel = "info") =
   # scorper
   let address = "0.0.0.0:" & $serverPort
 
-  var srv: Scorper
   while true:
-    try:
-      srv = waitFor doServe(address, callback)
-    except:
-      let e = getCurrentException()[]
-      warn "server: {e} \n restarting server..."
-      sleep 500
+    # Wrap scorper into a proc, to make sure its memory is freed after crashes
+    runScorper(address, callback)
+    sleep 500
   # httpbeast
   # var settings = initSettings(port = Port(serverPort), bindAddr = "0.0.0.0")
   # run(callback, settings = settings)

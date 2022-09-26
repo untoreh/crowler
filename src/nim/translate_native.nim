@@ -10,31 +10,44 @@ import
   translate_bing,
   translate_yandex
 
+const enabledTranslators = [google, yandex]
 type
   TranslateRotatorObj = object
-    services: seq[TranslateObj]
+    services: tuple[google: GoogleTranslate, bing: BingTranslate,
+        yandex: YandexTranslate]
     idx: int
   TranslateRotatorPtr = ptr TranslateRotatorObj
+  AnyTranslate = GoogleTranslate | BingTranslate | YandexTranslate
 
 var
-  transIn*: ptr AsyncQueue[Query]
-  transOut*: LockTable[Query, string]
-  transEvent*: ptr AsyncEvent
+  transIn: ptr AsyncQueue[Query]
+  transOut: LockTable[Query, string]
+  transEvent: ptr AsyncEvent
   transThread: Thread[void]
   rotator: TranslateRotatorPtr
 
 proc initRotator(timeout = 3.seconds): TranslateRotatorObj =
-  result.services.add init(GoogleTranslateObj, timeout=timeout)
+  result.services.google = new(GoogleTranslateObj)
+  result.services.google[] = init(GoogleTranslateObj, timeout = timeout)
   # result.services.add init(BingTranslateObj, timeout=timeout)
-  result.services.add init(YandexTranslateObj, timeout=timeout)
+  result.services.yandex = new(YandexTranslateObj)
+  result.services.yandex[] = init(YandexTranslateObj, timeout = timeout)
 
-proc getService(): TranslateObj =
+proc getService(): ref TranslateObj =
   if unlikely(rotator.isnil):
     rotator = create(TranslateRotatorObj)
     rotator[] = initRotator()
-  if rotator.idx >= rotator.services.len:
+  if rotator.idx >= enabledTranslators.len:
     rotator.idx = 0
-  result = rotator.services[rotator.idx]
+  let kind = enabledTranslators[rotator.idx]
+  result =
+    case kind:
+      of google:
+        rotator.services.google
+      of bing:
+        rotator.services.bing
+      of yandex:
+        rotator.services.yandex
   rotator.idx.inc
 
 proc translateTask(text, src, trg: string) {.async.} =
@@ -46,23 +59,26 @@ proc translateTask(text, src, trg: string) {.async.} =
       try:
         let srv = getService()
         if text.len > srv.maxQuerySize:
-          warn "trans: text of size {text.len} exceeds maxQuerysize of {srv.maxQuerySize} for service {srv}."
+          warn "trans: text of size {text.len} exceeds maxQuerysize of {srv.maxQuerySize} for service {srv.kind}."
           continue
         let translated = await srv.translateImpl(text, src, trg)
         transOut[query] = translated
-        transEvent[].fire; transEvent[].clear
+        transEvent[].fire
+        transEvent[].clear
         success = true
         return
       except CatchableError:
         if tries > 3:
           break
         tries.inc
-  except:
+  except Exception as e:
+    echo e[]
     warn "trans: job failed, {src} -> {trg}."
   finally:
     if unlikely(not success):
       transOut[query] = ""
-      transEvent[].fire; transEvent[].clear
+      transEvent[].fire
+      transEvent[].clear
 
 proc asyncTransHandler() {.async.} =
   try:
@@ -81,7 +97,7 @@ proc translate*(text, src, trg: string): Future[string] {.async, raises: [].} =
   let tkey = (text, src, trg)
   await transIn[].put(tkey)
   while true:
-    await wait(transEvent[])
+    await transEvent[].wait
     if tkey in transOut:
       discard transOut.pop(tkey, res)
       break
@@ -99,11 +115,8 @@ when isMainModule:
   proc test() {.async.} =
     var text = """This was a fine day."""
     discard await translate(text, "en", "it")
-    echo "translate_native.nim:94"
     text = """This was better plan."""
-    echo "translate_native.nim:96"
     discard await translate(text, "en", "it")
-    echo "translate_native.nim:98"
     text = """The sun in the sky is yellow."""
     discard await translate(text, "en", "it")
   startTranslator()

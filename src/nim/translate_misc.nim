@@ -5,7 +5,6 @@ import
     sugar,
     sets,
     os,
-    nre,
     strutils,
     algorithm,
     tables

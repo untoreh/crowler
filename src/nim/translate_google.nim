@@ -86,9 +86,6 @@ proc init*(_: typedesc[GoogleTranslateObj], timeout = DEFAULT_TIMEOUT): GoogleTr
   srv.kind = google
   srv.session = base.session
   srv.maxQuerySize = base.maxQuerySize
-  proc fn(text, src, trg: string): Future[string] {.async.} =
-    return await srv.translate(text, src, trg)
-  srv.translateImpl = fn
   return srv
 
 when isMainModule:

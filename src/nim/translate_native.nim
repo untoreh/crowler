@@ -10,6 +10,7 @@ import
   translate_bing,
   translate_yandex
 
+
 const enabledTranslators = [google, yandex]
 type
   TranslateRotatorObj = object
@@ -33,22 +34,31 @@ proc initRotator(timeout = 3.seconds): TranslateRotatorObj =
   result.services.yandex = new(YandexTranslateObj)
   result.services.yandex[] = init(YandexTranslateObj, timeout = timeout)
 
-proc getService(): ref TranslateObj =
+proc callService(text, src, trg: string): Future[string] {.async.} =
   if unlikely(rotator.isnil):
     rotator = create(TranslateRotatorObj)
     rotator[] = initRotator()
   if rotator.idx >= enabledTranslators.len:
     rotator.idx = 0
   let kind = enabledTranslators[rotator.idx]
-  result =
-    case kind:
-      of google:
-        rotator.services.google
-      of bing:
-        rotator.services.bing
-      of yandex:
-        rotator.services.yandex
-  rotator.idx.inc
+  template callTrans(srv: untyped): untyped =
+    if text.len > srv.maxQuerySize:
+      let s {.inject.} = srv
+      warn "trans: text of size {text.len} exceeds maxQuerysize of {s.maxQuerySize} for service {s.kind}."
+      ""
+    else:
+      await srv[].translate(text, src, trg)
+  try:
+    result =
+      case kind:
+        of google:
+          callTrans rotator.services.google
+        of bing:
+          callTrans rotator.services.bing
+        of yandex:
+          callTrans rotator.services.yandex
+  finally:
+    rotator.idx.inc
 
 proc translateTask(text, src, trg: string) {.async.} =
   let query = (text: text, src: src, trg: trg)
@@ -57,11 +67,9 @@ proc translateTask(text, src, trg: string) {.async.} =
   try:
     for _ in 0..3:
       try:
-        let srv = getService()
-        if text.len > srv.maxQuerySize:
-          warn "trans: text of size {text.len} exceeds maxQuerysize of {srv.maxQuerySize} for service {srv.kind}."
+        let translated = await callService(text, src, trg)
+        if translated.len == 0:
           continue
-        let translated = await srv.translateImpl(text, src, trg)
         transOut[query] = translated
         transEvent[].fire
         transEvent[].clear

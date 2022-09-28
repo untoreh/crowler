@@ -6,7 +6,7 @@ from cfg import PROXY_EP
 export PROXY_EP
 
 const
-  DEFAULT_TIMEOUT* = 5.seconds
+  DEFAULT_TIMEOUT* = 3.seconds
 
 type TranslateError* = object of ValueError
 proc raiseTranslateError*(msg: string) =
@@ -19,7 +19,6 @@ type
   TranslateObj* = object of RootObj
     kind*: Service
     session*: HTtpSessionRef
-    translateImpl*: TranslateFunc
     maxQuerySize*: int
   Translate*[T: TranslateObj] = ref T
   TranslatePtr*[T: TranslateOBj] = ptr T
@@ -74,7 +73,7 @@ template sendReq*(req): HttpClientResponseRef =
       raiseTranslateError "Translation request failed."
     resp
 
-proc init*[T: TranslateObj](_: typedesc[T], timeout: Duration = 3.seconds,
+proc init*[T: TranslateObj](_: typedesc[T], timeout: Duration = DEFAULT_TIMEOUT,
                             useProxies = true): T =
   result.maxQuerySize = 5000
   result.session =
@@ -84,7 +83,8 @@ proc init*[T: TranslateObj](_: typedesc[T], timeout: Duration = 3.seconds,
     proxyTimeout = timeout.div(3),
     proxy = if useProxies: PROXY_EP else: "",
     flags = if useProxies: {HttpClientFlag.NoVerifyHost,
-        HttpClientFlag.NoVerifyServerName} else: {}
+                             HttpClientFlag.NoVerifyServerName,
+                             NewConnectionAlways} else: {}
     # proxyAuth=proxyAuth("user", "pass")
     )
 
@@ -94,8 +94,3 @@ proc parseCookies*(resp: HttpClientResponseRef): string =
     if len(cks) > 0:
       result.add cks[0]
       result.add "; "
-
-template setTranslateClosure*() =
-  proc fn(text, src, trg: string): Future[string] {.async.} =
-    return await srv.translate(text, src, trg)
-  srv.translateImpl = fn

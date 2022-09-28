@@ -1,4 +1,4 @@
-import std/[parsexml, streams, uri, httpcore, nre, strformat, strutils, json]
+import std/[parsexml, streams, uri, httpcore, strformat, strutils, json]
 import std/times except seconds, milliseconds
 import chronos/apps/http/httpclient
 import chronos
@@ -116,7 +116,6 @@ proc init*(_: typedesc[YandexTranslateObj],
   srv.ucid = CachedUUID()
   srv.ucidStr = new(string)
   srv.cookie = new(string)
-  setTranslateClosure()
   return srv
 
 when isMainModule:

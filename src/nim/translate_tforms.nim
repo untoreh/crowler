@@ -6,8 +6,7 @@ import locks,
        karax/vdom,
        macros,
        uri,
-       strutils,
-       nre
+       strutils
 
 import
     cfg,

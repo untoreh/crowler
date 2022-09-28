@@ -18,8 +18,10 @@ import os,
        normalize,
        chronos
 
-
 import translate_types
+import locktpl
+lockedStore(Table)
+export nre, tables
 
 static: echo "loading utils..."
 
@@ -34,7 +36,7 @@ macro withLocks*(l: untyped, def: untyped): untyped =
   let body = def.body
   let lockedBody = newNimNode(nnkStmtList)
   lockedBody.add quote do:
-    {.locks: `l`}:
+    {.locks: `l`.}:
       `body`
   def.body = lockedBody
   return def
@@ -56,36 +58,36 @@ template withWaitLock*(l: AsyncLock, code) =
 template procName*(): string = strutils.split(getStacktrace())[^2]
 
 template lgetOrPut*[T, K](c: T, k: K, v: untyped): untyped =
-    ## Lazy `mgetOrPut`
-    mixin get, put
-    try:
-        c.get(k)
-    except KeyError:
-        c.put(k, v)
+  ## Lazy `mgetOrPut`
+  mixin get, put
+  try:
+    c.get(k)
+  except KeyError:
+    c.put(k, v)
 
 template lcheckOrPut*[T, K](c: T, k: K, v: untyped): untyped =
-    ## Lazy `mgetOrPut`
-    mixin get, contains, put, `[]`, `[]=`
-    if k in c:
-        c[k]
-    else:
-        c[k] = v
-        c[k]
+  ## Lazy `mgetOrPut`
+  mixin get, contains, put, `[]`, `[]=`
+  if k in c:
+    c[k]
+  else:
+    c[k] = v
+    c[k]
 
 template alcheckOrPut*[T, K](c: T, k: K, v: untyped): untyped {.dirty.} =
-    ## Lazy async `mgetOrPut`
-    mixin get, contains, put, `[]`, `[]=`
-    if (await (k in c)):
-        await c[k]
-    else:
-        await c.put(k, v)
-        await c[k]
+  ## Lazy async `mgetOrPut`
+  mixin get, contains, put, `[]`, `[]=`
+  if (await (k in c)):
+    await c[k]
+  else:
+    await c.put(k, v)
+    await c[k]
 
 template logstring(code: untyped): untyped =
-    when not compileOption("threads"):
-        procName() & " " & fmt code
-    else:
-        fmt"{getThreadId()} - " & fmt code
+  when not compileOption("threads"):
+    procName() & " " & fmt code
+  else:
+    fmt"{getThreadId()} - " & fmt code
 
 template debug*(code: untyped; dofmt = true): untyped =
   when not defined(release) and logLevelMacro <= lvlDebug:
@@ -99,21 +101,21 @@ template logall*(code: untyped): untyped =
 
 
 template sdebug*(code) =
-    try: debug code
-    except CatchableError: discard
+  try: debug code
+  except CatchableError: discard
 
 template qdebug*(code) =
-    try: debug code
-    except CatchableError: quit()
+  try: debug code
+  except CatchableError: quit()
 
 template warn*(code: untyped): untyped =
-    when logLevelMacro <= lvlWarn:
-        withLock(loggingLock):
-          logger[].log lvlWarn, logstring(`code`)
+  when logLevelMacro <= lvlWarn:
+    withLock(loggingLock):
+      logger[].log lvlWarn, logstring(`code`)
 
 template swarn*(code) =
-    try: warn code
-    except CatchableError: discard
+  try: warn code
+  except CatchableError: discard
 
 template info*(code: untyped): untyped =
   when logLevelMacro <= lvlInfo:
@@ -125,8 +127,8 @@ macro checkNil*(v; code: untyped) =
   let message = fmt"{`name`} cannot be nil"
   quote do:
     if `v`.isnil:
-        debug `message`
-        raise newException(ValueError, `message`)
+      debug `message`
+      raise newException(ValueError, `message`)
     else:
       `code`
 
@@ -137,14 +139,14 @@ template checkNil*(v; msg: string) = checkNil(v, msg): discard
 macro checkNil*(v; msg: string, code: untyped) =
   quote do:
     if `v`.isnil:
-        debug `msg`, false
-        raise newException(ValueError, `msg`)
+      debug `msg`, false
+      raise newException(ValueError, `msg`)
     else:
       `code`
 
 template checkTrue*(stmt: untyped, msg: string) =
-    if not (stmt):
-        raise newException(ValueError, msg)
+  if not (stmt):
+    raise newException(ValueError, msg)
 
 proc `!!`*(stmt: bool) {.inline.} =
   const loc = fmt"{instantiationInfo().filename}:{instantiationInfo().line}"
@@ -153,37 +155,44 @@ proc `!!`*(stmt: bool) {.inline.} =
     raise newException(ValueError, message)
 
 macro toggle*(flag: static[bool], code: untyped): untyped =
-    if flag == true:
-        quote do:
-            `code`
-    else:
-        quote do:
-            discard
+  if flag == true:
+    quote do:
+      `code`
+  else:
+    quote do:
+      discard
 
 macro apply*(fun, args: typed): untyped =
-    result = newCall(fun)
-    var funArgLen = getType(fun).len - 2
-    case args.kind:
-        of nnkBracket:
-            for a in args:
-                result.add a
-        of nnkPrefix:
-            if args[0].repr == "@":
-                for a in args[1]:
-                    result.add a
-        of nnkTupleConstr:
-            for a in args:
-                result.add a
-        of nnkSym:
-            for i in 0..<funArgLen:
-                var b = newTree(nnkBracketExpr)
-                b.add args
-                b.add newLit(i)
-                result.add b
-        else:
-            error("unsupported kind: " & $args.kind & ", " & args.repr)
-            discard
+  result = newCall(fun)
+  var funArgLen = getType(fun).len - 2
+  case args.kind:
+    of nnkBracket:
+      for a in args:
+        result.add a
+    of nnkPrefix:
+      if args[0].repr == "@":
+        for a in args[1]:
+          result.add a
+    of nnkTupleConstr:
+      for a in args:
+        result.add a
+    of nnkSym:
+      for i in 0..<funArgLen:
+        var b = newTree(nnkBracketExpr)
+        b.add args
+        b.add newLit(i)
+        result.add b
+    else:
+      error("unsupported kind: " & $args.kind & ", " & args.repr)
+      discard
 
+let regexTable = initLockTable[string, Regex]()
+proc get*(t: LockTable[string, Regex], k: string): Regex = t[k]
+proc put*(t: LockTable[string, Regex], k: string, v: Regex): Regex = (t[k] = v; v)
+proc sre*(pattern: static[string]): Regex {.gcsafe, inline.} =
+  ## Cached regex expression (should be replaced by compile time nim-regex)
+  lgetOrPut(regexTable, pattern):
+    re(pattern)
 
 type StringSet = HashSet[string]
 
@@ -191,141 +200,142 @@ converter asStringSet(v: openarray[string]): StringSet = to_hashset[string](v)
 const exts = [".htm", ".html"]
 
 proc fileExtension(path: string): string {.inline.} =
-    let pos = searchExtPos(path)
-    if pos != -1:
-        result = path[pos..^1]
+  let pos = searchExtPos(path)
+  if pos != -1:
+    result = path[pos..^1]
 
 iterator filterFiles*(root: string;
                    exts: Stringset = exts.asStringSet;
                    exclDirs: StringSet = [];
                    topDirs: StringSet = [];
                   ): string {.closure.} =
-    ## A directory iterator:
-    ## `exts`: which file extensions should be included
-    ## `exclDirs`: directory names that are skipped on every node (blacklist)
-    ## `topDirs`: directory names that are included only at top node (subnodes only respect `exclDirs`)
-    let rootAbs = expandFilename(root)
-    var
-        path: string
-        kind: PathComponent
-        topfiles = collect:
-            for p in walkDir(rootAbs):
-                if p.kind == pcDir or p.kind == pcLinkToDir:
-                    let n = p.path.absolutePath.lastPathPart
-                    if (not (n in exclDirs)) and (len(topDirs) == 0 or n in topDirs):
-                        p
-                elif p.path.fileExtension in exts:
-                    p
-        files = topfiles.toDeque
-        processed: StringSet
-    while len(files) > 0:
-        (kind, path) = files.popFirst
-        path = absolutePath(path)
-        # this allows to skip symlinks
-        if path in processed:
-            continue
-        if kind == pcDir:
-            if path.lastPathPart in exclDirs:
-                continue
-            else:
-                for f in walkDir(path):
-                    files.addlast(f)
-        # only follow symlinked dirs if they don't point inside the root directory
-        elif kind == pcLinkToDir:
-            if rootAbs in path:
-                continue
-            else:
-                for f in walkDir(path):
-                    files.addlast(f)
-        elif path.fileExtension in exts:
-            yield path
-            processed.incl(path)
+  ## A directory iterator:
+  ## `exts`: which file extensions should be included
+  ## `exclDirs`: directory names that are skipped on every node (blacklist)
+  ## `topDirs`: directory names that are included only at top node (subnodes only respect `exclDirs`)
+  let rootAbs = expandFilename(root)
+  var
+    path: string
+    kind: PathComponent
+    topfiles = collect:
+      for p in walkDir(rootAbs):
+        if p.kind == pcDir or p.kind == pcLinkToDir:
+          let n = p.path.absolutePath.lastPathPart
+          if (not (n in exclDirs)) and (len(topDirs) == 0 or n in topDirs):
+            p
+        elif p.path.fileExtension in exts:
+          p
+    files = topfiles.toDeque
+    processed: StringSet
+  while len(files) > 0:
+    (kind, path) = files.popFirst
+    path = absolutePath(path)
+    # this allows to skip symlinks
+    if path in processed:
+      continue
+    if kind == pcDir:
+      if path.lastPathPart in exclDirs:
+        continue
+      else:
+        for f in walkDir(path):
+          files.addlast(f)
+    # only follow symlinked dirs if they don't point inside the root directory
+    elif kind == pcLinkToDir:
+      if rootAbs in path:
+        continue
+      else:
+        for f in walkDir(path):
+          files.addlast(f)
+    elif path.fileExtension in exts:
+      yield path
+      processed.incl(path)
 
 proc findnil*(tree: VNode) =
-    for el in items(tree):
-        if el.isnil:
-            stdout.write "NIL\n"
-        else:
-            stdout.write $el.kind & "\n"
-            if len(el) > 0:
-                findnil(el)
+  for el in items(tree):
+    if el.isnil:
+      stdout.write "NIL\n"
+    else:
+      stdout.write $el.kind & "\n"
+      if len(el) > 0:
+        findnil(el)
 
 
 iterator preorder*(tree: XmlNode): XmlNode =
-    ## Iterator, skipping tags in `skip_nodes`
-    ## also skipping comments, entities, CDATA and zero-length text nodes
-    var stack = @[tree]
-    while stack.len > 0:
-        var node = stack.pop()
-        case node.kind:
-            of xnComment, xnEntity, xnCData:
+  ## Iterator, skipping tags in `skip_nodes`
+  ## also skipping comments, entities, CDATA and zero-length text nodes
+  var stack = @[tree]
+  while stack.len > 0:
+    var node = stack.pop()
+    case node.kind:
+      of xnComment, xnEntity, xnCData:
+        continue
+      of xnText, xnVerbatimText:
+        if len(node.text) == 0:
+          continue
+        else:
+          yield node
+      of xnElement:
+        case node.tag:
+          of skip_nodes:
+            continue
+          else:
+            if (not node.attrs.isnil) and node.attrs.haskey("class"):
+              var cls = false
+              let nodeClasses = node.attrs["class"].split().toHashSet
+              for class in skip_class:
+                if class in nodeClasses:
+                  cls = true
+                  break
+              if cls:
                 continue
-            of xnText, xnVerbatimText:
-                if len(node.text) == 0:
-                    continue
-                else:
-                    yield node
-            of xnElement:
-                case node.tag:
-                    of skip_nodes:
-                        continue
-                    else:
-                        if (not node.attrs.isnil) and node.attrs.haskey("class"):
-                            var cls = false
-                            let nodeClasses = node.attrs["class"].split().toHashSet
-                            for class in skip_class:
-                                if class in nodeClasses:
-                                    cls = true
-                                    break
-                            if cls:
-                                continue
-                        for c in mitems(node):
-                            stack.add(c)
-                        yield node
+            for c in mitems(node):
+              stack.add(c)
+            yield node
 
 
 proc findel*(tree: XmlNode, t: string): XmlNode =
-    for el in preorder(tree):
-        if el.tag == t:
-            return el
+  for el in preorder(tree):
+    if el.tag == t:
+      return el
 
 
 proc key*(s: string): array[5, byte] =
-    case s.len
-        of 0: result = default(array[5, byte])
-        else:
-            let ln = s.len
-            result = cast[array[5, byte]]([s[0], s[ln /% 4], s[ln /% 3], s[ln /% 2], s[ln - 1]])
+  case s.len
+    of 0: result = default(array[5, byte])
+    else:
+      let ln = s.len
+      result = cast[array[5, byte]]([s[0], s[ln /% 4], s[ln /% 3], s[ln /% 2],
+          s[ln - 1]])
 
 
 proc getParam*(q: string, param: string): string =
-    for (k, v) in q.decodeQuery():
-        if k == param:
-            return v
+  for (k, v) in q.decodeQuery():
+    if k == param:
+      return v
 
 proc mergeUri*(dst: ref Uri, src: Uri): ref Uri =
-    ## Assign parts of `src` Uri over to `dst` Uri.
-    type UrifIelds = enum scheme, username, password, hostname, port, path
-    template take(field) =
-        shallowCopy dst.field, src.field
-    take scheme
-    take username
-    take password
-    take hostname
-    take port
-    take path
-    var query = initTable[string, string]()
-    for (k, v) in dst.query.decodeQuery:
-        query[k] = v
-    for (k, v) in src.query.decodeQuery:
-        query[k] = v
-    dst.query = encodeQuery(collect(for k, v in query.pairs(): (k, v)))
-    # dst.query = encodeQuery(convert(seq[(string, string)], query))
-    dst.anchor = src.anchor
-    dst.opaque = src.opaque
-    # FIXME: should this be assigned ?
-    # src.isIpv6 = dst.isIpv6
-    dst
+  ## Assign parts of `src` Uri over to `dst` Uri.
+  type UrifIelds = enum scheme, username, password, hostname, port, path
+  template take(field) =
+    shallowCopy dst.field, src.field
+  take scheme
+  take username
+  take password
+  take hostname
+  take port
+  take path
+  var query = initTable[string, string]()
+  for (k, v) in dst.query.decodeQuery:
+    query[k] = v
+  for (k, v) in src.query.decodeQuery:
+    query[k] = v
+  dst.query = encodeQuery(collect(for k, v in query.pairs(): (k, v)))
+  # dst.query = encodeQuery(convert(seq[(string, string)], query))
+  dst.anchor = src.anchor
+  dst.opaque = src.opaque
+  # FIXME: should this be assigned ?
+  # src.isIpv6 = dst.isIpv6
+  dst
 
 proc `==`*(a: string, b: XmlNode): bool {.inline.} = a == b.tag
 proc `==`*(a: XmlNode, b: string): bool {.inline.} = b == a
@@ -333,64 +343,64 @@ proc `==`*(a: XmlNode, b: string): bool {.inline.} = b == a
 proc `add`*(n: XmlNode, s: string) = n.add newText(s)
 
 iterator preorder*(tree: VNode, withStyles: static[bool] = false): VNode =
-    ## Iterator, skipping tags in `skip_nodes`
-    ## also skipping comments, entities, CDATA and zero-length text nodes
-    var stack = @[tree]
-    while stack.len > 0:
-        var node = stack.pop()
-        case node.kind:
-            of VNodeKind.text:
-                if len(node.text) == 0:
-                    continue
-                else:
-                    yield node
-            of skip_vnodes:
-                continue
-            else:
-                when withStyles:
-                  if node.kind == VNodeKind.style:
-                    yield node
-                else:
-                  if node.kind == VNodeKind.style:
-                    continue
+  ## Iterator, skipping tags in `skip_nodes`
+  ## also skipping comments, entities, CDATA and zero-length text nodes
+  var stack = @[tree]
+  while stack.len > 0:
+    var node = stack.pop()
+    case node.kind:
+      of VNodeKind.text:
+        if len(node.text) == 0:
+          continue
+        else:
+          yield node
+      of skip_vnodes:
+        continue
+      else:
+        when withStyles:
+          if node.kind == VNodeKind.style:
+            yield node
+        else:
+          if node.kind == VNodeKind.style:
+            continue
 
-                var cls = false
-                for class in skip_class:
-                    if class in node.class:
-                        cls = true
-                        break
-                if cls: continue
-                for c in node.items():
-                    stack.add(c)
-                yield node
+        var cls = false
+        for class in skip_class:
+          if class in node.class:
+            cls = true
+            break
+        if cls: continue
+        for c in node.items():
+          stack.add(c)
+        yield node
 
 proc last*(node: VNode, kind: VNodeKind): VNode =
-    for n in node.preorder():
-        if n.kind == kind:
-            return n
-    return node
+  for n in node.preorder():
+    if n.kind == kind:
+      return n
+  return node
 
 proc clear*(node: VNode) =
-    privateAccess(VNode)
-    node.kids.setlen(0)
-    node.attrs.setlen(0)
+  privateAccess(VNode)
+  node.kids.setlen(0)
+  node.attrs.setlen(0)
 
 proc clearAttrs*(node: VNode) {.inline.} =
-    privateAccess(VNode)
-    node.attrs.setlen(0)
+  privateAccess(VNode)
+  node.attrs.setlen(0)
 
 proc `attrs=`*(node: VNode, v: seq[kstring]) {.inline.} =
-    privateAccess(VNode)
-    node.attrs.setLen(0)
-    node.attrs.add v
+  privateAccess(VNode)
+  node.attrs.setLen(0)
+  node.attrs.add v
 
 proc clearChildren*(node: VNode) {.inline.} =
-    privateAccess(VNode)
-    node.kids.setlen(0)
+  privateAccess(VNode)
+  node.kids.setlen(0)
 
 proc clear*(node: XmlNode) {.inline.} =
-    privateAccess(XmlNode)
-    node.s.setLen 0
+  privateAccess(XmlNode)
+  node.s.setLen 0
 
 proc delAttr*(n: VNode, k: auto) =
   privateAccess(VNode)
@@ -406,60 +416,61 @@ proc delAttr*(n: XmlNode, k: auto) =
     n.attrs.del(k)
 
 proc lenAttr*(n: VNode): int =
-    privateAccess(VNode)
-    n.attrs.len /% 2
+  privateAccess(VNode)
+  n.attrs.len /% 2
 
 iterator flatorder*(tree: var XmlNode): XmlNode {.closure, gcsafe.} =
-    for el in mitems(tree):
-        if len(el) > 0:
-            let po = flatorder
-            for e in po(el):
-                yield e
-        yield el
+  for el in mitems(tree):
+    if len(el) > 0:
+      let po = flatorder
+      for e in po(el):
+        yield e
+    yield el
 
-iterator filter*(tree: var XmlNode, tag = "", kind = xnElement): XmlNode {.gcsafe.} =
-    if kind == xnElement:
-        for node in tree.flatorder():
-            if node.kind == xnElement and (tag == "" or node.tag == tag):
-                yield node
-    else:
-        for node in tree.flatorder():
-            if node.kind == kind:
-                yield node
+iterator filter*(tree: var XmlNode, tag = "",
+    kind = xnElement): XmlNode {.gcsafe.} =
+  if kind == xnElement:
+    for node in tree.flatorder():
+      if node.kind == xnElement and (tag == "" or node.tag == tag):
+        yield node
+  else:
+    for node in tree.flatorder():
+      if node.kind == kind:
+        yield node
 
 
 
 
 iterator vflatorder*(tree: VNode): VNode {.closure.} =
-    for el in items(tree):
-        if len(el) > 0:
-            let po = vflatorder
-            {.cast(gcsafe).}:
-                for e in po(el):
-                    yield e
-        yield el
+  for el in items(tree):
+    if len(el) > 0:
+      let po = vflatorder
+      {.cast(gcsafe).}:
+        for e in po(el):
+          yield e
+    yield el
 
 
 proc first*(node: VNode, kind: VNodeKind): VNode {.gcsafe.} =
-    for n in node.vflatorder():
-        if n.kind == kind:
-            return n
-    return node
+  for n in node.vflatorder():
+    if n.kind == kind:
+      return n
+  return node
 
 proc hasAttr*(el: VNode, k: string): bool =
-    for (i, v) in el.attrs:
-        if k == i:
-            return true
-    return false
+  for (i, v) in el.attrs:
+    if k == i:
+      return true
+  return false
 
 template find*(node: VNode, kind: VNodeKind): VNode = first(node, kind)
 proc find*(node: VNode, kind: VNodeKind, attr: (string, string)): VNode =
-    for n in node.vflatorder():
-        if n.kind == kind and
-        n.hasAttr(attr[0]) and
-        n.getAttr(attr[0]) == attr[1]:
-            return n
-    return node
+  for n in node.vflatorder():
+    if n.kind == kind and
+    n.hasAttr(attr[0]) and
+    n.getAttr(attr[0]) == attr[1]:
+      return n
+  return node
 
 proc initStyle*(path: static[string]): VNode {.gcsafe.} =
   let sty {.global.} = create(string)
@@ -468,98 +479,94 @@ proc initStyle*(path: static[string]): VNode {.gcsafe.} =
   result = tree(VNodeKind.style, verbatim(sty[]))
 
 proc initStyleStr*(s: sink string): VNode =
-    result = tree(VNodeKind.style, verbatim(s))
+  result = tree(VNodeKind.style, verbatim(s))
 
-proc xmlHeader*(version: static[string] = "1.0", encoding: static[string] = "UTF-8"): string =
-    fmt"""<?xml version="{version}" encoding="{encoding}" ?>"""
+proc xmlHeader*(version: static[string] = "1.0", encoding: static[
+    string] = "UTF-8"): string =
+  fmt"""<?xml version="{version}" encoding="{encoding}" ?>"""
 
 proc toXmlString*(node: XmlNode): string =
-    result.add xmlHeader()
-    result.add "\n"
-    result.add $node
+  result.add xmlHeader()
+  result.add "\n"
+  result.add $node
 
 proc getText*(el: XmlNode): string =
-    case el.kind:
-        of xnText, xnVerbatimText:
-            result = el.text
-        else:
-            result = el.attrs.getOrDefault("alt", "")
-            if result == "":
-                result = el.attrs.getOrDefault("title", "")
+  case el.kind:
+    of xnText, xnVerbatimText:
+      result = el.text
+    else:
+      result = el.attrs.getOrDefault("alt", "")
+      if result == "":
+        result = el.attrs.getOrDefault("title", "")
 
 proc getText*(el: VNode): string =
-    case el.kind:
-        of VNodeKind.text:
-            result = el.text
-        else:
-            result = el.getAttr("alt")
-            if result == "":
-                result = el.getAttr("title")
+  case el.kind:
+    of VNodeKind.text:
+      result = el.text
+    else:
+      result = el.getAttr("alt")
+      if result == "":
+        result = el.getAttr("title")
 
 proc setText*(el: XmlNode, v: auto) =
-    case el.kind:
-        of xnText, xnVerbatimText:
-            el.text = v
-        else:
-            if hasKey(el.attrs, "alt"):
-                el.attrs["alt"] = v
-            else:
-                el.attrs["title"] = v
+  case el.kind:
+    of xnText, xnVerbatimText:
+      el.text = v
+    else:
+      if hasKey(el.attrs, "alt"):
+        el.attrs["alt"] = v
+      else:
+        el.attrs["title"] = v
 
 proc setText*(el: VNode, v: auto) =
-    case el.kind:
-        of VNodeKind.text:
-            el.text = v
-        else:
-            if el.getAttr("alt") != "":
-                el.setAttr("alt", v)
-            else:
-                el.setAttr("title", v)
+  case el.kind:
+    of VNodeKind.text:
+      el.text = v
+    else:
+      if el.getAttr("alt") != "":
+        el.setAttr("alt", v)
+      else:
+        el.setAttr("title", v)
 
 {.push inline.}
 
-proc hasAttr*(el: XmlNode, k: string): bool = (not el.attrs.isnil) and el.attrs.haskey k
+proc hasAttr*(el: XmlNode, k: string): bool = (not el.attrs.isnil) and
+    el.attrs.haskey k
 proc getAttr*(el: XmlNode, k: string): lent string = el.attrs[k]
 proc getAttr*(el: XmlNode, k: string, v: string): auto =
-    if el.hasAttr(k):
-        el.getAttr(k)
-    else:
-        v
+  if el.hasAttr(k):
+    el.getAttr(k)
+  else:
+    v
 proc setAttr*(el: XmlNode, k: string, v: sink auto) = el.attrs[k] = v
 proc findclass*(tree: XmlNode, cls: string): XmlNode =
-    for el in preorder(tree):
-        if el.kind == xnElement and cls in el.getAttr("class", ""):
-            return el
+  for el in preorder(tree):
+    if el.kind == xnElement and cls in el.getAttr("class", ""):
+      return el
 {.pop inline.}
 
 import std/[genasts]
 
 macro threadVars*(args: varargs[untyped]) =
-    result = newStmtList()
-    for i, arg in args:
-        for name in arg[0..^2]:
-            result.add:
-                genast(name, typ = arg[^1]):
-                    var name {.threadVar.}: typ
+  result = newStmtList()
+  for i, arg in args:
+    for name in arg[0..^2]:
+      result.add:
+        genast(name, typ = arg[^1]):
+          var name {.threadVar.}: typ
 
 macro pragmaVars*(tp, pragma: untyped, vars: varargs[untyped]): untyped =
-    ## Apply a pragma to multiple variables (push/pop doesn't work in nim 1.6.4)
-    let prg = nnkPragma.newTree(pragma)
-    let idefs = nnkIdentDefs.newTree()
-    for varIdent in vars:
-        idefs.add nnkPragmaExpr.newTree(
-            varIdent,
-            prg
-        )
-    idefs.add tp
-    idefs.add newEmptyNode()
-    result = nnkVarSection.newTree(idefs)
-
-proc sre*(pattern: static string): Regex {.gcsafe.} =
-    ## Static regex expression
-    var rx {.threadvar.}: Regex
-    rx = re(pattern)
-    return rx
+  ## Apply a pragma to multiple variables (push/pop doesn't work in nim 1.6.4)
+  let prg = nnkPragma.newTree(pragma)
+  let idefs = nnkIdentDefs.newTree()
+  for varIdent in vars:
+    idefs.add nnkPragmaExpr.newTree(
+        varIdent,
+        prg
+    )
+  idefs.add tp
+  idefs.add newEmptyNode()
+  result = nnkVarSection.newTree(idefs)
 
 
 type Link* = enum canonical, stylesheet, amphtml, jscript = "script", alternate, preload
@@ -569,24 +576,24 @@ proc isLink*(el: VNode, tp: Link): bool {.inline.} = el.getAttr("rel") == $tp
 
 proc isSomething*(s: string): bool {.inline.} = not s.isEmptyOrWhitespace
 proc something*[T](arr: varargs[T]): T =
-    for el in arr:
-        if el != default(T):
-            return el
+  for el in arr:
+    if el != default(T):
+      return el
 
 proc replaceTilNoChange(input: var auto, pattern, repl: auto): string =
-    while pattern in input:
-        input = input.replace(pattern, repl)
-    input
+  while pattern in input:
+    input = input.replace(pattern, repl)
+  input
 
 
-pragmaVars(Regex, threadvar, sentsRgx1, sentsRgx2, sentsRgx3, sentsRgx4, sentsRgx5, sentsRgx6,
-        sentsRgx7, sentsRgx8, sentsRgx9, sentsRgx10, sentsRgx11, sentsRgx12, sentsRgx13, sentsRgx14,
-        sentsRgx15, sentsRgx16, sentsRgx17, sentsRgx18, sentsRgx19, sentsRgx20, sentsRgx21,
-        sentsRgx22, sentsRgx23, sentsRgx24, sentsRgx25, sentsRgx26, sentsRgx27, sentsRgx28,
-        sentsRgx29, sentsRgx30, sentsRgx31, sentsRgx32, sentsRgx33, sentsRgx34, sentsRgx35,
-        sentsRgx36, sentsRgx37, sentsRgx38, sentsRgx39, sentsRgx40, sentsRgx41, sentsRgx42,
-        sentsRgx43, sentsRgx44, sentsRgx45, sentsRgx46, sentsRgx47, sentsRgx48, sentsRgx49,
-        sentsRgx50, sentsRgx51, sentsRgx52, sentsRgx53, sentsRgx54)
+# pragmaVars(Regex, threadvar, sentsRgx1, sentsRgx2, sentsRgx3, sentsRgx4, sentsRgx5, sentsRgx6,
+#         sentsRgx7, sentsRgx8, sentsRgx9, sentsRgx10, sentsRgx11, sentsRgx12, sentsRgx13, sentsRgx14,
+#         sentsRgx15, sentsRgx16, sentsRgx17, sentsRgx18, sentsRgx19, sentsRgx20, sentsRgx21,
+#         sentsRgx22, sentsRgx23, sentsRgx24, sentsRgx25, sentsRgx26, sentsRgx27, sentsRgx28,
+#         sentsRgx29, sentsRgx30, sentsRgx31, sentsRgx32, sentsRgx33, sentsRgx34, sentsRgx35,
+#         sentsRgx36, sentsRgx37, sentsRgx38, sentsRgx39, sentsRgx40, sentsRgx41, sentsRgx42,
+#         sentsRgx43, sentsRgx44, sentsRgx45, sentsRgx46, sentsRgx47, sentsRgx48, sentsRgx49,
+#         sentsRgx50, sentsRgx51, sentsRgx52, sentsRgx53, sentsRgx54)
 
 # proc initSentsRgx*() =
 #     if sentsRgx1.isnil:
@@ -646,98 +653,98 @@ pragmaVars(Regex, threadvar, sentsRgx1, sentsRgx2, sentsRgx3, sentsRgx4, sentsRg
 #         sentsRgx54 = re"\n"
 
 proc splitSentences*(text: string): seq[string] =
-    var sents = text.replace(sre"([?!.])\s", "$1\n")
-    sents = sents.replace(sre"\r", "")
-    sents = sents.replace(sre"\b([a-z]+\?) ([A-Z][a-z]+)\b", "$1\n$2")
-    sents = sents.replace(sre"\b([a-z]+ \.) ([A-Z][a-z]+)\b", "$1\n$2")
-    sents = sents.replace(sre"\n([.!?]+)\n", "$1\n")
+  var sents = text.replace(sre"([?!.])\s", "$1\n")
+  sents = sents.replace(sre"\r", "")
+  sents = sents.replace(sre"\b([a-z]+\?) ([A-Z][a-z]+)\b", "$1\n$2")
+  sents = sents.replace(sre"\b([a-z]+ \.) ([A-Z][a-z]+)\b", "$1\n$2")
+  sents = sents.replace(sre"\n([.!?]+)\n", "$1\n")
 
-    sents = replaceTilNoChange(sents, sre"\[([^\[\]\(\)]*)\n([^\[\]\(\)]*)\]", "[$1 $2]")
-    sents = replaceTilNoChange(sents, sre"\(([^\[\]\(\)]*)\n([^\[\]\(\)]*)\)", "[$1 $2]")
+  sents = replaceTilNoChange(sents, sre"\[([^\[\]\(\)]*)\n([^\[\]\(\)]*)\]", "[$1 $2]")
+  sents = replaceTilNoChange(sents, sre"\(([^\[\]\(\)]*)\n([^\[\]\(\)]*)\)", "[$1 $2]")
 
-    sents = replaceTilNoChange(sents, sre"\[([^\[\]]{0,250})\n([^\[\]]{0,250})\]", "[$1 $2]")
-    sents = replaceTilNoChange(sents, sre"\(([^\(\)]{0,250})\n([^\(\)]{0,250})\)", "($1 $2)")
+  sents = replaceTilNoChange(sents, sre"\[([^\[\]]{0,250})\n([^\[\]]{0,250})\]", "[$1 $2]")
+  sents = replaceTilNoChange(sents, sre"\(([^\(\)]{0,250})\n([^\(\)]{0,250})\)", "($1 $2)")
 
-    sents = replaceTilNoChange(sents, sre"\[((?:[^\[\]]|\[[^\[\]]*\]){0,250})\n((?:[^\[\]]|\[[^\[\]]*\]){0,250})\]", "[$1 $2]")
-    sents = replaceTilNoChange(sents, sre"\(((?:[^\(\)]|\([^\(\)]*\)){0,250})\n((?:[^\(\)]|\([^\(\)]*\)){0,250})\)", "($1 $2)")
+  sents = replaceTilNoChange(sents, sre"\[((?:[^\[\]]|\[[^\[\]]*\]){0,250})\n((?:[^\[\]]|\[[^\[\]]*\]){0,250})\]", "[$1 $2]")
+  sents = replaceTilNoChange(sents, sre"\(((?:[^\(\)]|\([^\(\)]*\)){0,250})\n((?:[^\(\)]|\([^\(\)]*\)){0,250})\)", "($1 $2)")
 
-    sents = replace(sents, sre"\.\n([a-z]{3}[a-z-]{0,}[ \.\:\,])", ". $1")
+  sents = replace(sents, sre"\.\n([a-z]{3}[a-z-]{0,}[ \.\:\,])", ". $1")
 
-    sents = replace(sents, sre"(\b[A-HJ-Z]\.)\n", "$1 ")
+  sents = replace(sents, sre"(\b[A-HJ-Z]\.)\n", "$1 ")
 
-    sents = replace(sents, sre"\n(and )", " $1")
-    sents = replace(sents, sre"\n(or )", " $1")
-    sents = replace(sents, sre"\n(but )", " $1")
-    sents = replace(sents, sre"\n(nor )", " $1")
-    sents = replace(sents, sre"\n(yet )", " $1")
-    # or IN. (this is nothing like a "complete" list...)
-    sents = replace(sents, sre"\n(of )", " $1")
-    sents = replace(sents, sre"\n(in )", " $1")
-    sents = replace(sents, sre"\n(by )", " $1")
-    sents = replace(sents, sre"\n(as )", " $1")
-    sents = replace(sents, sre"\n(on )", " $1")
-    sents = replace(sents, sre"\n(at )", " $1")
-    sents = replace(sents, sre"\n(to )", " $1")
-    sents = replace(sents, sre"\n(via )", " $1")
-    sents = replace(sents, sre"\n(for )", " $1")
-    sents = replace(sents, sre"\n(with )", " $1")
-    sents = replace(sents, sre"\n(that )", " $1")
-    sents = replace(sents, sre"\n(than )", " $1")
-    sents = replace(sents, sre"\n(from )", " $1")
-    sents = replace(sents, sre"\n(into )", " $1")
-    sents = replace(sents, sre"\n(upon )", " $1")
-    sents = replace(sents, sre"\n(after )", " $1")
-    sents = replace(sents, sre"\n(while )", " $1")
-    sents = replace(sents, sre"\n(during )", " $1")
-    sents = replace(sents, sre"\n(within )", " $1")
-    sents = replace(sents, sre"\n(through )", " $1")
-    sents = replace(sents, sre"\n(between )", " $1")
-    sents = replace(sents, sre"\n(whereas )", " $1")
-    sents = replace(sents, sre"\n(whether )", " $1")
+  sents = replace(sents, sre"\n(and )", " $1")
+  sents = replace(sents, sre"\n(or )", " $1")
+  sents = replace(sents, sre"\n(but )", " $1")
+  sents = replace(sents, sre"\n(nor )", " $1")
+  sents = replace(sents, sre"\n(yet )", " $1")
+  # or IN. (this is nothing like a "complete" list...)
+  sents = replace(sents, sre"\n(of )", " $1")
+  sents = replace(sents, sre"\n(in )", " $1")
+  sents = replace(sents, sre"\n(by )", " $1")
+  sents = replace(sents, sre"\n(as )", " $1")
+  sents = replace(sents, sre"\n(on )", " $1")
+  sents = replace(sents, sre"\n(at )", " $1")
+  sents = replace(sents, sre"\n(to )", " $1")
+  sents = replace(sents, sre"\n(via )", " $1")
+  sents = replace(sents, sre"\n(for )", " $1")
+  sents = replace(sents, sre"\n(with )", " $1")
+  sents = replace(sents, sre"\n(that )", " $1")
+  sents = replace(sents, sre"\n(than )", " $1")
+  sents = replace(sents, sre"\n(from )", " $1")
+  sents = replace(sents, sre"\n(into )", " $1")
+  sents = replace(sents, sre"\n(upon )", " $1")
+  sents = replace(sents, sre"\n(after )", " $1")
+  sents = replace(sents, sre"\n(while )", " $1")
+  sents = replace(sents, sre"\n(during )", " $1")
+  sents = replace(sents, sre"\n(within )", " $1")
+  sents = replace(sents, sre"\n(through )", " $1")
+  sents = replace(sents, sre"\n(between )", " $1")
+  sents = replace(sents, sre"\n(whereas )", " $1")
+  sents = replace(sents, sre"\n(whether )", " $1")
 
-    # no sentence breaks in the middle of specific abbreviations
-    sents = replace(sents, sre"(\be\.)\n(g\.)", "$1 $2")
-    sents = replace(sents, sre"(\bi\.)\n(e\.)", "$1 $2")
-    sents = replace(sents, sre"(\bi\.)\n(v\.)", "$1 $2")
+  # no sentence breaks in the middle of specific abbreviations
+  sents = replace(sents, sre"(\be\.)\n(g\.)", "$1 $2")
+  sents = replace(sents, sre"(\bi\.)\n(e\.)", "$1 $2")
+  sents = replace(sents, sre"(\bi\.)\n(v\.)", "$1 $2")
 
-    # no sentence break after specific abbreviations
-    sents = replace(sents, sre"(\be\. ?g\.)\n", "$1 ")
-    sents = replace(sents, sre"(\bi\. ?e\.)\n", "$1 ")
-    sents = replace(sents, sre"(\bi\. ?v\.)\n", "$1 ")
-    sents = replace(sents, sre"(\bvs\.)\n", "$1 ")
-    sents = replace(sents, sre"(\bcf\.)\n", "$1 ")
-    sents = replace(sents, sre"(\bDr\.)\n", "$1 ")
-    sents = replace(sents, sre"(\bMr\.)\n", "$1 ")
-    sents = replace(sents, sre"(\bMs\.)\n", "$1 ")
-    sents = replace(sents, sre"(\bMrs\.)\n", "$1 ")
+  # no sentence break after specific abbreviations
+  sents = replace(sents, sre"(\be\. ?g\.)\n", "$1 ")
+  sents = replace(sents, sre"(\bi\. ?e\.)\n", "$1 ")
+  sents = replace(sents, sre"(\bi\. ?v\.)\n", "$1 ")
+  sents = replace(sents, sre"(\bvs\.)\n", "$1 ")
+  sents = replace(sents, sre"(\bcf\.)\n", "$1 ")
+  sents = replace(sents, sre"(\bDr\.)\n", "$1 ")
+  sents = replace(sents, sre"(\bMr\.)\n", "$1 ")
+  sents = replace(sents, sre"(\bMs\.)\n", "$1 ")
+  sents = replace(sents, sre"(\bMrs\.)\n", "$1 ")
 
-    sents.split(sre"\n")
+  sents.split(sre"\n")
 
 proc readBytes*(f: string): seq[uint8] =
-    let s = open(f)
-    defer: s.close()
-    result.setLen(s.getFileSize())
-    discard readBytes(s, result, 0, result.len)
+  let s = open(f)
+  defer: s.close()
+  result.setLen(s.getFileSize())
+  discard readBytes(s, result, 0, result.len)
 
 proc toString*(bytes: openarray[byte | char]): string =
-    result = newString(bytes.len)
-    copyMem(result[0].addr, bytes[0].unsafeAddr, bytes.len)
+  result = newString(bytes.len)
+  copyMem(result[0].addr, bytes[0].unsafeAddr, bytes.len)
 
 template toOA*(p: ptr uint8, len: int): openarray[byte] =
-    let ua = cast[ptr UncheckedArray[byte]](p)
-    ua.toOpenArray(0, len - 1)
+  let ua = cast[ptr UncheckedArray[byte]](p)
+  ua.toOpenArray(0, len - 1)
 
 proc toString*(p: ptr uint8, len: int): string =
-    p.toOA(len).toString
+  p.toOA(len).toString
 
 import unicode
 const stripchars = ["-".runeAt(0), "_".runeAt(0)]
 proc slugify*(value: string): string =
-    ## Slugifies an unicode string
+  ## Slugifies an unicode string
 
-    result = toNFKC(value).toLower()
-    result = result.replace(sre("[^\\w\\s-]"), "")
-    result = result.replace(sre("[-\\s]+"), "-").strip(runes = stripchars)
+  result = toNFKC(value).toLower()
+  result = result.replace(sre("[^\\w\\s-]"), "")
+  result = result.replace(sre("[-\\s]+"), "-").strip(runes = stripchars)
 
 proc hasScheme*(url: string): bool {.inline.} =
   ## Check if url string has scheme (eg. "http://") in it
@@ -758,11 +765,11 @@ proc rewriteUrl*(el, rewritePath: auto, hostname = WEBSITE_DOMAIN) =
   uriVar.path = uriVar.path.replace(sre("^\\.?\\.?"), "")
   if uriVar.hostname == "" or (uriVar.hostname == hostname and
       uriVar.path.startsWith("/")):
-      uriVar.path = joinpath(rewritePath, uriVar.path)
+    uriVar.path = joinpath(rewritePath, uriVar.path)
   el.setAttr("href",
              # `parseUri` doesn't keep the scheme, if it is relative ("//")
-             # so we have to add it back
-             if uriVar.scheme == "" and url.hasScheme:
+               # so we have to add it back
+    if uriVar.scheme == "" and url.hasScheme:
                "//" & $uriVar
              else:
                $uriVar)
@@ -771,16 +778,16 @@ proc rewriteUrl*(el, rewritePath: auto, hostname = WEBSITE_DOMAIN) =
 
 import faststreams/[inputs, outputs]
 proc readFileAsync*(file: string): Future[string] {.async.} =
-    var data: seq[byte]
-    let handler = memFileInput(file)
-    data.setLen(handler.s.len.get())
-    discard Async(handler).readInto(data)
-    return data.toString
+  var data: seq[byte]
+  let handler = memFileInput(file)
+  data.setLen(handler.s.len.get())
+  discard Async(handler).readInto(data)
+  return data.toString
 
 proc writeFileAsync*[T](path: string, data: T) {.async.} =
-    let handler = fileOutput(path)
-    defer: handler.close()
-    handler.write(data)
+  let handler = fileOutput(path)
+  defer: handler.close()
+  handler.write(data)
 
 proc innerText*(n: VNode): string =
   if result.len > 0: result.add '\L'

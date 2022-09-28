@@ -4,12 +4,15 @@ import
   std / osproc,
   sets, locks,
   lrucache,
-  chronos
+  chronos,
+  nre
+
 import pyutils
 export pyutils
 
 # Generics
 proc put*[T, K, V](t: T, k: K, v: V): V = (t[k] = v; v)
+
 
 type
   TS = enum
@@ -131,8 +134,9 @@ import
 proc get*[K, V](t: OrderedTable[K, V] | Table[K, V], k: K): V = t[
     k] # the table module doesn't have this
 
-lockedStore(Table)
+# lockedStore(Table) # defined in utils
 lockedStore(LruCache)
+
 
 export tables,
        locks

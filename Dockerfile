@@ -55,7 +55,7 @@ VOLUME ["/site/data"]
 
 FROM siteenv AS sitedeps1
 # install nimterop separately
-ARG CLEARCACHE=1
+ARG CLEARCACHE=2
 RUN curl http://ftp.de.debian.org/debian/pool/main/o/openssl/libssl1.1_1.1.1n-0+deb11u3_amd64.deb --output libssl.deb && \
     dpkg -i libssl.deb && \
     rm libssl.deb
@@ -103,6 +103,19 @@ ARG LIBPYTHON_PATH /usr/lib/x86_64-linux-gnu/libpython3.10d.so
 # RUN apt -y install libssl1.1
 RUN /site/scripts/switchdebug.sh /site
 CMD ./cli
+
+# FROM siteBase as site
+# RUN apt update -y; apt install -y autotools-dev automake
+# RUN cd /tmp && \
+#     git clone --depth=1 git://sourceware.org/git/valgrind.git && \
+#     cd valgrind && \
+#     ./autogen.sh && \
+#     ./configure && \
+#     make -j $(nproc) && \
+#     make install && \
+#     cd - && \
+#     rm /tmp/valgrind -rf
+# RUN apt -y install massif-visualizer
 
 FROM site AS wsl
 ENV CONFIG_NAME wsl

@@ -3,7 +3,6 @@ import
     uri,
     os,
     lruCache,
-    httpclient,
     strformat,
     hashes,
     chronos,

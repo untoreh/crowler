@@ -6,13 +6,13 @@ import
   std/uri,
   hashes,
   os,
-  chronos,
-  chronos/apps/http/httpclient
+  chronos
 
 import
   cfg,
   utils,
-  lazyjson
+  lazyjson,
+  pyhttp
 
 const
   IF_VERSION_MAJOR: uint32 = 3
@@ -168,7 +168,8 @@ proc addImg*(img: string): bool =
 proc getImg*(src: string, kind: Source): Future[string] {.async.} =
   return case kind:
     of urlsrc:
-      (await fetch(HttpSessionRef.new(), parseUri(src))).data.bytesToString
+      await pyReqGet(src)
+      # (await fetch(HttpSessionRef.new(), parseUri(src))).data.bytesToString
     elif fileExists(src):
       await readFileAsync(src)
     else:

@@ -1,10 +1,7 @@
-import std/uri
-import macros
-import chronos
-import chronos/apps/http/httpclient
+import chronos/timer
+from std/times import fromUnix, inZone, local, format, getTime
 import uuids
 export uuids
-from std/times import fromUnix, inZone, local, format, getTime
 
 type
   CachedUUID* = ref object

@@ -11,11 +11,11 @@ import tables,
        uri,
        lrucache,
        chronos,
-       chronos/apps/http/httpclient,
        chronos/asyncsync
 
 import cfg,
        utils,
+       pyhttp,
        html_misc,
        html_entities,
        ads
@@ -63,8 +63,9 @@ proc getFile(path: string): Future[string] {.async.} =
     else:
       shallowCopy url, path
     debug "getfile: getting file content from {url}"
-    filesCache[path] = (await fetch(HttpSessionRef.new(), parseUri(
-        url))).data.bytesToString
+    filesCache[path] = await pyReqGet(url)
+    # filesCache[path] = (await fetch(HttpSessionRef.new(), parseUri(
+    #     url))).data.bytesToString
     result = filesCache[path]
 
 

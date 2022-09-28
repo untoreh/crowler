@@ -9,7 +9,6 @@ import
   uri,
   normalize,
   unicode,
-  nre,
   json,
   hashes,
   chronos,

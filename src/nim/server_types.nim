@@ -1,4 +1,4 @@
-import nimpy, std/[options, nre, strutils, strformat, os, enumerate, mimetypes,
+import nimpy, std/[options, strutils, strformat, os, enumerate, mimetypes,
     uri], scorper/http/httpcore
 import cfg, quirks, utils
 

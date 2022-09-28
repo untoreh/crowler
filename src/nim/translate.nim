@@ -6,7 +6,6 @@ import nimpy,
        sugar,
        sets,
        pathnorm,
-       nre,
        htmlparser,
        xmltree,
        options,
@@ -36,7 +35,7 @@ export translate_types
 
 static: echo "loading translate..."
 
-export sugar, translate_types, translate_srv, sets, nre
+export sugar, translate_types, translate_srv, sets
 
 const excluded_dirs = to_hashset[string](collect(for lang in TLangs: lang.code))
 const included_dirs = to_hashset[string]([])
@@ -46,7 +45,7 @@ var vbtmcache* {.threadvar.}: LruCache[array[5, byte], XmlNode]
 var rxcache {.threadvar.}: LruCache[string, Regex]
 let trOut* = initLockTable[string, VNode]()
 
-func get*[K, V](c: LruCache[K, V], k: K): V = c[k]
+proc get*[K, V](c: LruCache[K, V], k: K): V = c[k]
 
 proc getDirRx*(dir: string): Regex =
     try:

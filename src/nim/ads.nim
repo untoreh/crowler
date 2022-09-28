@@ -1,7 +1,6 @@
 import karax/[vdom, karaxdsl], strformat, locks, sugar, strutils, uri, parsexml,
     streams, std/algorithm
 import chronos, chronos/asyncsync, htmlparser, xmltree
-import nre
 import os
 import sets
 import cfg

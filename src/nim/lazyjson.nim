@@ -6,8 +6,7 @@ import
     faststreams/inputs,
     std/enumerate,
     strutils,
-    std/options,
-    nre
+    std/options
 
 import utils
 

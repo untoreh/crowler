@@ -205,7 +205,6 @@ proc init*(_: typedesc[BingTranslateObj],
   srv.maxQuerySize = 1000
   srv.config = new(BingConfig)
   srv.config.lock = newAsyncLock()
-  setTranslateClosure()
   return srv
 
 when isMainModule:

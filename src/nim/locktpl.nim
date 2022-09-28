@@ -1,6 +1,5 @@
 import locks
 export locks
-import utils
 
 template lockedStore*(name: untyped): untyped {.dirty.} =
     type
@@ -86,4 +85,4 @@ when isMainModule:
     # x["a"] = "123"
     # echo x["a"]
     # echo typeof(x)
-    echo c.lcheckorput("asd", "pls")
+    # echo c.lcheckorput("asd", "pls")

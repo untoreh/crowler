@@ -1,6 +1,5 @@
 import
     xmltree,
-    nre,
     strutils,
     strformat,
     tables,

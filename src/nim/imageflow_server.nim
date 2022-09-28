@@ -1,6 +1,5 @@
 import
     httpcore,
-    nre,
     uri,
     os,
     lruCache,

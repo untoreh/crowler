@@ -106,7 +106,7 @@ template sdebug*(code) =
 
 template qdebug*(code) =
   try: debug code
-  except CatchableError: quit()
+  except: quit()
 
 template warn*(code: untyped): untyped =
   when logLevelMacro <= lvlWarn:
@@ -736,6 +736,9 @@ template toOA*(p: ptr uint8, len: int): openarray[byte] =
 
 proc toString*(p: ptr uint8, len: int): string =
   p.toOA(len).toString
+
+proc toString*[T](p: ptr UncheckedArray[T], len: int): string =
+  p.toOpenArray(0, len - 1).toString
 
 import unicode
 const stripchars = ["-".runeAt(0), "_".runeAt(0)]

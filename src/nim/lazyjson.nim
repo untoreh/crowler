@@ -12,6 +12,7 @@ import utils
 
 export options, nre, strutils, json_serialization
 
+## Me not giving a f about abstractions
 type
     Octet = byte | char | uint8
     Buffer = seq[Octet] | openarray[Octet] | string | ptr[Octet] | UncheckedArray[Octet]

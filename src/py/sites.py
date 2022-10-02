@@ -554,24 +554,13 @@ class Site:
         for n, a in enumerate(arts):
             if a is not dict or a.get("topic", "") != topic:
                 arts[n] = None
-            # if a is not int or a.get("topic", "") != topic:
-            #     valid_unpub.append(a)
-        # if len(arts) > len(valid_unpub):
-        #     self.save_articles(valid_unpub, topic=topic, reset=True)
 
-        # published
         done = self.load_done(topic)
-        top_idx = len(done) - 1
-        for n in range(top_idx):
-            # valid_pub = []
+        for n in range(len(done)):
             page_arts = done[n]
             for n, a in enumerate(page_arts):
                 if a is not dict or a.get("topic", "") != topic:
                     page_arts[n] = None
-                # if isinstance(a, dict):
-                #     valid_pub.append(a)
-            # if len(done[n]) > len(valid_pub):
-            #     save_zarr(valid_pub, k=ZarrKey.done, subk=n, root=self.topic_dir(topic))
 
     def topics_watcher(self):
         while True:

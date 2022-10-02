@@ -1,5 +1,5 @@
 import nimpy, std/[options, strutils, strformat, os, enumerate, mimetypes,
-    uri], scorper/http/httpcore
+    uri, locks], scorper/http/httpcore
 import cfg, quirks, utils
 
 const
@@ -39,20 +39,23 @@ proc join*(tup: UriCaptures, sep = "/", n = 0): string =
       c += 1
   s.join(sep)
 
-var mimes {.threadvar.}: MimeDB
+var mimes: ptr MimeDB
+var mimeLock: Lock
 proc mimePath*(url: string): string {.gcsafe.} =
   let ext = url.splitFile.ext
-  let mimetype = getMimetype(
-      mimes,
-      if ext.len > 0: ext[1..^1]
-        else: ""
-    )
-  mimetype
-
+  withLock(mimeLock):
+    result = getMimetype(
+        mimes[],
+        if ext.len > 0: ext[1..^1] else: ""
+      )
 
 proc initMimes*() =
-  reset(mimes)
-  mimes = newMimetypes()
+  withLock(mimeLock):
+    if mimes.isnil:
+      mimes = create(MimeDb)
+    else:
+      reset(mimes[])
+    mimes[] = newMimetypes()
 
 proc format*(headers: seq[string]): string =
   for h in headers[0..^2]:

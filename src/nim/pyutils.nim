@@ -210,7 +210,10 @@ let site* = create(PyObject)
 site[] = pyImport("sites").Site(WEBSITE_NAME)
 doassert not pyisnone(site[])
 # let pySched* = pyImport("scheduler")
-pyObjPtrExp((pySched, pyImport("scheduler")))
+pyObjPtrExp(
+    (pySched, pyImport("scheduler")),
+    (pySchedApply, pySched[].getAttr("apply"))
+)
 doassert not pyisnone(pySched[])
 discard pySched[].initPool()
 pygil.release()

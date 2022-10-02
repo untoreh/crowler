@@ -2,6 +2,7 @@ import
     httpcore,
     uri,
     os,
+    locks,
     lruCache,
     strformat,
     hashes,
@@ -42,6 +43,7 @@ var
   imgOut: LockTable[(string, string, string), (string, string)]
   imgEvent: ptr AsyncEvent
   imgLock: ptr AsyncLock
+  imgLockLock: Lock
 
 proc handleImg*(relpath: string): Future[(string, string)] {.async.} =
   let (url, width, height) = parseImgUrl(relpath)
@@ -57,8 +59,11 @@ proc handleImg*(relpath: string): Future[(string, string)] {.async.} =
       assert not imgIn.isnil
       let imgKey = (decodedUrl, width, height)
       await imgIn[].put(imgKey)
+      var event: AsyncEvent
       while true:
-        await wait(imgEvent[])
+        withLock(imgLockLock):
+          event = imgEvent[]
+        await wait(event)
         if imgKey in imgOut:
           doassert imgOut.pop(imgKey, respMime)
           return respMime
@@ -67,19 +72,24 @@ proc handleImg*(relpath: string): Future[(string, string)] {.async.} =
 
 template submitImg(val: untyped = ("", "")) {.dirty.} =
   imgOut[imgKey] = val
-  imgEvent[].fire()
-  imgEvent[].clear()
+  var event: AsyncEvent
+  withLock(imgLockLock):
+    event = imgEvent[]
+  event.fire()
+  event.clear()
 
 proc processImgData(imgKey: (string, string, string)) {.async.} =
   # push img to imageflow context
   let (decodedUrl, width, height) = imgKey
+  var lock: AsyncLock
   let data = (await decodedUrl.imgData)
   if data.len == 0:
     submitImg()
     return
   try:
-
-    await imgLock[].acquire
+    withLock(imgLockLock):
+      lock = imgLock[]
+    await lock.acquire
     if not addImg(data):
       return
     let query = fmt"width={width}&height={height}&mode=max&format=webp"
@@ -91,7 +101,7 @@ proc processImgData(imgKey: (string, string, string)) {.async.} =
     submitImg()
     return
   finally:
-    imgLock[].release
+    lock.release
 
 proc asyncImgHandler() {.async.} =
   try:

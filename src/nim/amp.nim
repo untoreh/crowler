@@ -348,7 +348,7 @@ proc ampDir(target: string) {.error: "not implemented".} =
     raise newException(OSError, fmt"Supplied target directory {target} does not exists.")
 
 
-proc initAmp*() =
+proc initAmpImpl() =
   ampLock = create(AsyncLock)
   ampLock[] = newAsyncLock()
   vbtmcache = newLruCache[array[5, byte], XmlNode](32)
@@ -389,6 +389,13 @@ proc initAmp*() =
   styleElCustom.setAttr("amp-custom", "")
   styleElCustom.setAttr("type", "text/css")
   styleElCustom.add newVNode(VNodeKind.text)
+
+proc initAmp*() =
+  try:
+    initAmpImpl()
+  except:
+    qdebug "server: failed to initAmp"
+
 
 initAmp()
 

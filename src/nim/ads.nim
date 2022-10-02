@@ -30,27 +30,9 @@ var locksInitialized: bool
 var adsFirstRead*, assetsFirstRead*: bool
 var adsHeadLock, adsHeaderLock, adsSidebarLock, adsFooterLock,
   adsFooterLinksLock, adsLinksLock, adsArticlesLock, adsRelatedLock,
-    adsSeparatorLock: ptr AsyncLock
+    adsSeparatorLock: Lock
 
 var adsLinksCount, adsLinksIdx, adsFooterLinksCount, adsFooterLinksIdx: int
-
-template withSyncLock(l: AsyncLock, code) =
-  try:
-    waitFor l.acquire()
-    code
-  finally:
-    l.release()
-
-
-import macros
-macro initLocks(syms: varargs[untyped]) =
-  result = newNimNode(nnkStmtList)
-  for sym in syms:
-    result.add quote do:
-      `sym` = create(AsyncLock)
-      `sym`[] = newAsyncLock()
-  result.add quote do:
-    locksInitialized = true
 
 template initLinks(name, data) =
   if fileExists(`name File`):
@@ -66,51 +48,48 @@ template initLinks(name, data) =
       `name Count` = 1
 
 proc readAdsConfig*() =
-  if unlikely(not locksInitialized):
-    initLocks adsHeadLock, adsHeaderLock, adsSidebarLock, adsFooterLock,
-        adsFooterLinksLock, adsLinksLock, adsArticlesLock, adsRelatedLock, adsSeparatorLock
 
-  withSyncLock(adsHeadLock[]):
+  withLock(adsHeadLock):
     let adsHeadFile = DATA_ADS_PATH / "head.html"
     if fileExists(adsHeadFile):
       ADS_HEAD[] = loadHtml(adsHeadFile)
-  withSyncLock(adsHeaderLock[]):
+  withLock(adsHeaderLock):
     let adsHeaderFile = DATA_ADS_PATH / "header.html"
     if fileExists(adsHeaderFile):
       ADS_HEADER[] = loadHtml(adsHeaderFile)
-  withSyncLock(adsSidebarLock[]):
+  withLock(adsSidebarLock):
     let adsSidebarFile = DATA_ADS_PATH / "sidebar.html"
     if fileExists(adsSidebarFile):
       ADS_SIDEBAR[] = loadHtml(adsSidebarFile)
-  withSyncLock(adsFooterLock[]):
+  withLock(adsFooterLock):
     let adsFooterFile = DATA_ADS_PATH / "footer.html"
     if fileExists(adsFooterFile):
       ADS_FOOTER[] = loadHtml(adsFooterFile)
   # Footer links
-  withSyncLock(adsFooterLinksLock[]):
+  withLock(adsFooterLinksLock):
     let adsFooterLinksFile = DATA_ADS_PATH / "footerlinks.txt"
     initLinks adsFooterLinks, ADS_FOOTERLINKS
   # Links
-  withSyncLock(adsLinksLock[]):
+  withLock(adsLinksLock):
     let adsLinksFile = DATA_ADS_PATH / "links.txt"
     initLinks adsLinks, ADS_LINKS
-  withSyncLock(adsArticlesLock[]):
+  withLock(adsArticlesLock):
     let adsArticlesFile = DATA_ADS_PATH / "articles.html"
     if fileExists(adsArticlesFile):
       ADS_ARTICLES[] = loadHtml(adsArticlesFile)
-  withSyncLock(adsRelatedLock[]):
+  withLock(adsRelatedLock):
     let adsRelatedFile = DATA_ADS_PATH / "related.html"
     if fileExists(adsRelatedFile):
       ADS_RELATED[] = loadHtml(adsRelatedFile)
-  withSyncLock(adsSeparatorLock[]):
+  withLock(adsSeparatorLock):
     let adsSeparatorFile = DATA_ADS_PATH / "separator.html"
     if fileExists(adsSeparatorFile):
       ADS_SEPARATOR[] = loadHtml(adsSeparatorFile)
 
 template nextLink(name, data) =
   checkNil(data):
-    checkNil `name Lock`
-    withASyncLock(`name Lock`[]):
+    # checkNil `name Lock`
+    withLock(`name Lock`):
       if unlikely(`name Idx` == 0):
         result = data[][0]
         `name Idx` += 1

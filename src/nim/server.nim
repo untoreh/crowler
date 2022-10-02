@@ -1,5 +1,6 @@
 import strformat,
        sugar,
+       fusion/matching,
        strutils,
        tables,
        nimpy,
@@ -10,7 +11,6 @@ import strformat,
        karax/vdom,
        strtabs,
        options,
-       fusion/matching,
        uri,
        lrucache,
        zip/zlib,
@@ -99,15 +99,10 @@ proc initThread*() {.gcsafe.} =
   startLsh()
   initSonic()
   initMimes()
-  try:
-    initAmp()
-  except:
-    qdebug "server: failed to initAmp"
+
+  initAmp()
   initOpg()
-  try:
-    translate.initThread()
-  except:
-    qdebug "failed to init translate"
+  initTranslate()
 
   reqCtxCache = initLockLruCache[string, ref ReqContext](32)
   urlCache = initLockLruCache[string, ref Uri](32)

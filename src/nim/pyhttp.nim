@@ -33,7 +33,8 @@ template pyReqGetImpl(url: string): string =
   var res: string
   var j: PyObject
   withPyLock:
-    j = pySched[].apply(PyReqGet, url)
+    {.cast(gcsafe).}:
+      j = pySched[].apply(PyReqGet, url)
   let resp = await pywait(j)
   defer:
     withPyLock:
@@ -42,7 +43,7 @@ template pyReqGetImpl(url: string): string =
     res = resp.content.to(string)
   res
 
-proc pyReqGet*(url: string): Future[string] {.async.} =
+proc pyReqGet*(url: string): Future[string] {.async, gcsafe.} =
   result =
     httpCache.lcheckOrPut(url):
       pyReqGetImpl(url)

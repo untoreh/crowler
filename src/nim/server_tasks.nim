@@ -17,7 +17,8 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
     var backoff = 1
     # start the topic sync thread from python
     withPyLock:
-      discard pysched[].getattr("apply")(site[].topics_watcher)
+      let watcher = site[].getAttr("topics_watcher")
+      discard pySchedApply[](watcher)
 
     while len(topicsCache) == 0:
       debug "pubtask: waiting for topics to be created..."

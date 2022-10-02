@@ -50,11 +50,12 @@ proc loadTopicsIndex*(): PyObject =
     if "shape is None" in m:
       sdebug "Couldn't load topics, is data dir present?"
 
+pygil.globalAcquire()
+pyObjPtrExp((isEmptyTopicPy, site[].getAttr("is_empty")))
+pygil.release()
 proc isEmptyTopic*(topic: string): Future[bool] {.async, gcsafe.} =
   withPyLock:
-    var isEmptyTopicPy {.threadvar.}: PyObject
-    isEmptyTopicPy = site[].getattr("is_empty")
-    result = isEmptyTopicPy(topic).to(bool)
+    result = isEmptyTopicPy[](topic).to(bool)
 
 type TopicTuple* = (string, string, int)
 proc loadTopics*(force = false): Future[PySequence[TopicTuple]] {.async.} =
@@ -145,7 +146,9 @@ proc topicPage*(topic: string, page = -1): Future[PyObject] {.async.} =
 
 proc topicArticles*(topic: string): Future[PyObject] {.async.} =
   withPyLock:
-    return site[].topic_group(topic)[$topicData.articles]
+    checkNil(site)
+    let tg = site[].topic_group(topic)
+    return tg[$topicData.articles]
 
 proc publishedArticles*[V](topic: string, attr: string = ""): Future[seq[(
     PyObject, V)]] {.async.} =

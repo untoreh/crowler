@@ -300,7 +300,8 @@ when defined(weaveRuntime):
             translateFile(file, rx_file, langpairs, target_path = target_path)
             info "file: translation successful for path: {file}"
 
-proc initThread*() =
+proc initTranslate*() =
+  try:
     initPunctRgx()
     if vbtmcache.isnil:
         vbtmcache = newLRUCache[array[5, byte], XmlNode](32)
@@ -309,7 +310,9 @@ proc initThread*() =
     initSlations()
     initTforms()
     when nativeTranslator:
-      startTranslator()
+      startTranslate()
+  except:
+    qdebug "Failed to init translate."
 
 proc exitThread() =
     saveToDB(force = true)

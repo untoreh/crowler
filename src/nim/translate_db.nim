@@ -58,7 +58,7 @@ var trans*: LRUTrans
 var tLock*: Lock # FIXME: this lock should be inside the `LRUTrans` object
 initLock(tLock)
 # Slations holds python objects, it must be unmanaged memory
-var slations* {.threadvar.}: ptr Table[int64, string]
+var slations*: LockTable[int64, string] # {.threadvar.}: ptr Table[int64, string]
 
 proc openDB*(t: var LRUTrans, kt = IntegerKeys) {.gcsafe.} =
     if DB_PATH[].len == 0:
@@ -86,8 +86,9 @@ proc initLRUTrans*(comp = true): LRUTrans =
 
 proc initSlations*(comp = true) {.gcsafe.} =
     if slations.isnil:
-        slations = create(Table[int64, string])
-        slations[] = initTable[int64, string]()
+      slations = initLockTable[int64, string]()
+        # slations = create(Table[int64, string])
+        # slations[] = initTable[int64, string]()
 
 trans = initLRUTrans()
 openDB(trans)
@@ -161,7 +162,7 @@ proc clear*(t: LRUTrans) {.gcsafe.} =
 proc delete*(t: LRUTrans) = removeDir(t.db.path)
 proc path*(t: LRUTrans): string = t.db.path
 
-proc save*(t: LRUTrans, c: Table[int64, string]) {.gcsafe.} =
+proc save*(t: LRUTrans, c: LockTable[int64, string]) {.gcsafe.} =
     withLock(tLock):
         # compress outside the closure..
         logall "db: length of translations is {c.len}"
@@ -181,7 +182,7 @@ proc save*(t: LRUTrans, c: Table[int64, string]) {.gcsafe.} =
                     ct[k] = v
             ct.commit()
 
-proc save*[T: not int64](t: LRUTrans, c: Table[T, string]) {.gcsafe.} =
+proc save*[T: not int64](t: LRUTrans, c: LockTable[T, string]) {.gcsafe.} =
     t.save((for (k, v) in c.pairs(): (hash(k).int64, v)))
 
 proc setFromDB*(pair: langPair, el: auto): (bool, int) =
@@ -191,8 +192,8 @@ proc setFromDB*(pair: langPair, el: auto): (bool, int) =
 
     assert not slations.isnil, "setfromdb: slations should not be nil"
     # try temp cache before db
-    if k in slations[]:
-        setText(el, slations[][k])
+    if k in slations:
+        setText(el, slations[k])
         (true, txt.len)
     else:
         let t = trans[k]
@@ -204,12 +205,12 @@ proc setFromDB*(pair: langPair, el: auto): (bool, int) =
 
 proc saveToDB*(tr = trans, slations = slations,
         force = false) {.gcsafe.} =
-    logall "slations: {slations[].len} - force: {force}"
-    if slations[].len > 0 and (force or slations[].len > MAX_CACHE_ENTRIES):
+    logall "slations: {slations.len} - force: {force}"
+    if slations.len > 0 and (force or slations.len > MAX_CACHE_ENTRIES):
         logall "db: saving to db"
-        tr.save(slations[])
-        debug "db: clearing slations ({slations[].len})"
-        slations[].clear()
+        tr.save(slations)
+        debug "db: clearing slations ({slations.len})"
+        slations.clear()
     logall "db: finish save"
 
 template cursIter(c: Collection, what: untyped): untyped =

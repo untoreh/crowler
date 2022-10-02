@@ -32,6 +32,7 @@ proc doReq*[T: TranslateObj](self: T, uri: Uri, retries = 10): Future[
         continue
       return bytesToString resp.data
     except CatchableError:
+      # echo getCurrentException()[]
       continue
   raiseTranslateError "Translation request failed."
   discard

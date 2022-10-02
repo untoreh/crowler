@@ -1,4 +1,4 @@
-import std/[parsexml, streams, uri]
+import std/[parsexml, streams, uri, hashes]
 import chronos/apps/http/httpclient
 import chronos
 
@@ -22,9 +22,10 @@ type
 
 var
   transIn: ptr AsyncQueue[Query]
-  transOut: LockTable[Query, string]
-  transEvent: ptr AsyncEvent
-  transThread: Thread[void]
+  transOut*: LockTable[string, string]
+  transEvent*: ptr AsyncEvent
+  transThread*: Thread[void]
+  transLock*: Lock
   rotator: TranslateRotatorPtr
 
 proc initRotator(timeout = 3.seconds): TranslateRotatorObj =
@@ -34,7 +35,7 @@ proc initRotator(timeout = 3.seconds): TranslateRotatorObj =
   result.services.yandex = new(YandexTranslateObj)
   result.services.yandex[] = init(YandexTranslateObj, timeout = timeout)
 
-proc callService(text, src, trg: string): Future[string] {.async.} =
+proc callService*(text, src, trg: string): Future[string] {.async.} =
   if unlikely(rotator.isnil):
     rotator = create(TranslateRotatorObj)
     rotator[] = initRotator()
@@ -60,72 +61,100 @@ proc callService(text, src, trg: string): Future[string] {.async.} =
   finally:
     rotator.idx.inc
 
-proc translateTask(text, src, trg: string) {.async.} =
-  let query = (text: text, src: src, trg: trg)
-  var tries: int
-  var success: bool
-  try:
-    for _ in 0..3:
-      try:
-        let translated = await callService(text, src, trg)
-        if translated.len == 0:
-          continue
-        transOut[query] = translated
+template waitTrans*(): string =
+  block:
+    var event: AsyncEvent
+    var res: string
+    let tkey = $(hash (text, src, trg))
+    while true:
+      withLock(transLock):
+        event = transEvent[]
+      await event.wait
+      if tkey in transOut:
+        discard transOut.pop(tkey, res)
+        break
+    res
+
+template setNil*(id, val) =
+  if id.isnil:
+    id = val
+
+template ifNil*(id, val) =
+  if id.isnil:
+    val
+
+template maybeCreate*(id, tp; force: static[bool] = false) =
+  when force:
+    id = create(tp)
+  else:
+    if id.isnil:
+      id = create(tp)
+  reset(id[])
+
+proc setupTranslate*() =
+  transIn.setNil:
+    create(AsyncQueue[Query])
+  reset(transIn[])
+  transIn[] = newAsyncQueue[Query](1024 * 16)
+  transOut.setNil:
+    initLockTable[string, string]()
+  transEvent.setNil:
+    create(AsyncEvent)
+  transEvent[] = newAsyncEvent()
+
+when not defined(translateProc):
+  proc translateTask(text, src, trg: string) {.async.} =
+    var tries: int
+    var success: bool
+    var translated: string
+    try:
+      for _ in 0..3:
+        try:
+          translated.add await callService(text, src, trg)
+          if translated.len == 0:
+            continue
+          success = true
+          break
+        except CatchableError:
+          if tries > 3:
+            break
+          tries.inc
+    except CatchableError:
+      warn "trans: job failed, {src} -> {trg}."
+    finally:
+      let id = hash (text, src, trg)
+      transOut[$id] = translated
+      withLock(transLock):
         transEvent[].fire
         transEvent[].clear
-        success = true
-        return
-      except CatchableError:
-        if tries > 3:
-          break
-        tries.inc
-  except Exception as e:
-    echo e[]
-    warn "trans: job failed, {src} -> {trg}."
-  finally:
-    if unlikely(not success):
-      transOut[query] = ""
-      transEvent[].fire
-      transEvent[].clear
 
-proc asyncTransHandler() {.async.} =
-  try:
-    while true:
-      let (text, src, trg) = await transIn[].get()
-      asyncSpawn translateTask(text, src, trg)
-  except: # If we quit we can catch defects too.
-    let e = getCurrentException()[]
-    warn "trans: trans handler crashed. {e}"
-    quit()
+  proc asyncTransHandler() {.async.} =
+    try:
+      while true:
+        let (text, src, trg) = await transIn[].get()
+        asyncSpawn translateTask(text, src, trg)
+    except: # If we quit we can catch defects too.
+      let e = getCurrentException()[]
+      warn "trans: trans handler crashed. {e}"
+      quit()
 
-proc transHandler() = waitFor asyncTransHandler()
+  proc transHandler() = waitFor asyncTransHandler()
 
-proc translate*(text, src, trg: string): Future[string] {.async, raises: [].} =
-  var res: string
-  let tkey = (text, src, trg)
-  await transIn[].put(tkey)
-  while true:
-    await transEvent[].wait
-    if tkey in transOut:
-      discard transOut.pop(tkey, res)
-      break
-  return res
+  proc startTranslate*() =
+    setupTranslate()
+    createThread(transThread, transHandler)
 
-proc startTranslator*() =
-  transIn = create(AsyncQueue[Query])
-  transIn[] = newAsyncQueue[Query](1024 * 16)
-  transOut = initLockTable[Query, string]()
-  transEvent = create(AsyncEvent)
-  transEvent[] = newAsyncEvent()
-  createThread(transThread, transHandler)
+  proc translate*(text, src, trg: string): Future[string] {.async, raises: [].} =
+    await transIn[].put (text, src, trg)
+    return waitTrans()
 
 when isMainModule:
   proc test() {.async.} =
     var text = """This was a fine day."""
-    discard await translate(text, "en", "it")
+    echo await translate(text, "en", "it")
     text = """This was better plan."""
-    discard await translate(text, "en", "it")
+    echo await translate(text, "en", "it")
     text = """The sun in the sky is yellow."""
-    discard await translate(text, "en", "it")
-  startTranslator()
-  waitFor test()
+    echo await translate(text, "en", "it")
+  startTranslate()
+  # waitFor test()

@@ -90,7 +90,7 @@ proc toSeq(sentsIn: splitSent): seq[string] =
 
 proc setEl(q, el: auto, t: string) =
     # debug "slations: saving translation"
-    discard slations[].hasKeyOrPut(hash((q.pair, el.getText)).int64, t)
+    discard slations.lcheckOrPut(hash((q.pair, el.getText)).int64): t
     # debug "slations: setting element"
     el.setText(t)
 

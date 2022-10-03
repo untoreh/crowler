@@ -1,6 +1,6 @@
 import karax/[vdom, karaxdsl], strformat, locks, sugar, strutils, uri, parsexml,
     streams, std/algorithm
-import chronos, chronos/asyncsync, htmlparser, xmltree
+import macros, chronos, chronos/asyncsync, htmlparser, xmltree
 import os
 import sets
 import cfg
@@ -155,6 +155,9 @@ proc insertAd*(name: ptr XmlNode): seq[VNode] {.gcsafe.} =
 proc replaceLinks*(str: string, chunksize = 250): Future[string] {.async.} =
   ## chunksize is the number of chars between links
 
+  checkNil(ADS_LINKS):
+    if len(ADS_LINKS[]) == 0 or ADS_LINKS[][0] == "":
+      return str
   var maxsize = str.len
   var chunkpos = if chunksize >= maxsize: maxsize.div(2)
                 else: chunksize
@@ -183,8 +186,21 @@ proc replaceLinks*(str: string, chunksize = 250): Future[string] {.async.} =
         strpos = x.offsetBase + x.bufpos - txtStop
         # add processed non text data starting from previous point
         if strpos > prevstrpos:
-          result.add str[prevstrpos..strpos]
-        strpos += txtStop # add the current text to the current string position
+          let tail = str[prevstrpos..strpos - 1]
+          # FIXME: The xmlparser never appears to output `xmlEntity` events
+          # and deals with entities in a strange way
+          if (tail & ";").isEntity:
+            doassert txt[0] != str[strpos + 1]
+            result.add tail
+            result.add ';' # the xmlparser skips the semicolon
+            strpos += 1
+            continue
+          else:
+            result.add tail
+            if str[strpos] == '>': # FIXME: this shouldn't be required...
+               result.add '>'
+               strpos += 1
+        strpos += txtStop  # add the current text to the current string position
 
         if unlikely(positions.len == 0):
           result.add txt

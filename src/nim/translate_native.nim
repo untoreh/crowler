@@ -21,11 +21,9 @@ type
   AnyTranslate = GoogleTranslate | BingTranslate | YandexTranslate
 
 var
-  transIn: ptr AsyncQueue[Query]
+  transIn: LockList[Query]
   transOut*: LockTable[string, string]
-  transEvent*: ptr AsyncEvent
-  transThread*: Thread[void]
-  transLock*: Lock
+  transWorker*: ptr Future[void]
   rotator: TranslateRotatorPtr
 
 proc initRotator(timeout = 3.seconds): TranslateRotatorObj =
@@ -63,16 +61,9 @@ proc callService*(text, src, trg: string): Future[string] {.async.} =
 
 template waitTrans*(): string =
   block:
-    var event: AsyncEvent
     var res: string
     let tkey = $(hash (text, src, trg))
-    while true:
-      withLock(transLock):
-        event = transEvent[]
-      await event.wait
-      if tkey in transOut:
-        discard transOut.pop(tkey, res)
-        break
+    transOut.popWait(tkey, res)
     res
 
 
@@ -86,14 +77,9 @@ template maybeCreate*(id, tp; force: static[bool] = false) =
 
 proc setupTranslate*() =
   transIn.setNil:
-    create(AsyncQueue[Query])
-  reset(transIn[])
-  transIn[] = newAsyncQueue[Query](1024 * 16)
+    initLockDeque[Query]()
   transOut.setNil:
     initLockTable[string, string]()
-  transEvent.setNil:
-    create(AsyncEvent)
-  transEvent[] = newAsyncEvent()
 
 when not defined(translateProc):
   proc translateTask(text, src, trg: string) {.async.} =
@@ -124,21 +110,21 @@ when not defined(translateProc):
   proc asyncTransHandler() {.async.} =
     try:
       while true:
-        let (text, src, trg) = await transIn[].get()
+        let (text, src, trg) = await transIn.popFirstWait()
         asyncSpawn translateTask(text, src, trg)
     except: # If we quit we can catch defects too.
       let e = getCurrentException()[]
       warn "trans: trans handler crashed. {e}"
       quit()
 
-  proc transHandler() = waitFor asyncTransHandler()
-
   proc startTranslate*() =
     setupTranslate()
-    createThread(transThread, transHandler)
+    transWorker.setNil:
+      create(Future[void])
+    transWorker[] = asyncTransHandler()
 
   proc translate*(text, src, trg: string): Future[string] {.async, raises: [].} =
-    await transIn[].put (text, src, trg)
+    transIn.addLast (text, src, trg)
     return waitTrans()
 
 when isMainModule:

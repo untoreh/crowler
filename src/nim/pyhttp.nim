@@ -1,14 +1,11 @@
 import nimpy
 import chronos
 import chronos/timer
-import utils, quirks
-import types
+
+import types, pyutils, quirks, utils
 
 pygil.globalAcquire()
-let
-  httpCache = initLockLruCache[string, string](32)
-  requests = pyImport("requests")
-  PyReqGet = requests.getAttr("get")
+pyObjPtr((fetchData, ut[].getAttr("fetch_data")))
 pygil.release()
 
 proc pywait(j: PyObject): Future[PyObject] {.async, gcsafe.} =
@@ -28,25 +25,51 @@ proc pywait(j: PyObject): Future[PyObject] {.async, gcsafe.} =
       else:
         raise newException(ValueError, "Python job failed.")
 
-template pyReqGetImpl(url: string): string =
+proc pyReqGet(url: string): Future[string] {.async.} =
   var rdy: bool
   var res: string
   var j: PyObject
   withPyLock:
     {.cast(gcsafe).}:
-      j = pySched[].apply(PyReqGet, url)
+      j = pySched[].apply(fetchData[], url)
   let resp = await pywait(j)
-  defer:
-    withPyLock:
-      discard resp.getAttr("close")
-  withPylock:
-    res = resp.content.to(string)
-  res
+  withPyLock:
+    result = resp.to(string)
 
-proc pyReqGet*(url: string): Future[string] {.async, gcsafe.} =
-  result =
-    httpCache.lcheckOrPut(url):
-      pyReqGetImpl(url)
+var queue: LockDeque[string]
+var httpResults: LockTable[string, string]
+var handler: ptr Future[void]
+
+proc requestTask(url: string) {.async.} =
+  let v = await pyReqGet(url)
+  httpResults[url] = v
+
+
+import locktplutils
+proc requestHandler() {.async.} =
+  var url: string
+  while true:
+    try:
+      while true:
+        url = await queue.popFirstWait()
+        asyncSpawn requestTask(url)
+    except Exception as e:
+      warn "PyRequests handler crashed, restarting. {e[]}"
+      await sleepAsync(1.seconds)
+
+proc initPyHttp*() {.gcsafe.} =
+  setNil(queue):
+    initLockDeque[string]()
+  setNil(httpResults):
+    initLockTable[string, string]()
+  setNil(handler):
+    create(Future[void])
+  handler[] = requestHandler()
+
+proc httpGet*(url: string): Future[string] {.async.} =
+  queue.addLast(url)
+  return await httpResults.getWait(url)
 
 when isMainModule:
-  echo waitFor pyReqGet("https://google.com")
+  initPyHttp()
+  echo waitFor httpGet("https://google.com")

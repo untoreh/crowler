@@ -9,6 +9,9 @@ import server_types,
 
 proc pubTask*(): Future[void] {.gcsafe, async.} =
   var n, prevSize: int
+  when false:
+    while true:
+      await sleepAsync(100.seconds)
   try:
     await syncTopics()
     # Give some time to services to warm up

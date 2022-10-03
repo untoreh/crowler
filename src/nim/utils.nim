@@ -21,6 +21,8 @@ import os,
 import translate_types
 import locktpl
 lockedStore(Table)
+lockedList(Deque)
+include ./locktplutils
 export nre, tables
 
 static: echo "loading utils..."
@@ -143,6 +145,14 @@ macro checkNil*(v; msg: string, code: untyped) =
       raise newException(ValueError, `msg`)
     else:
       `code`
+
+template setNil*(id, val) =
+  if id.isnil:
+    id = val
+
+template ifNil*(id, val) =
+  if id.isnil:
+    val
 
 template checkTrue*(stmt: untyped, msg: string) =
   if not (stmt):

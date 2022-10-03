@@ -82,6 +82,101 @@ template lockedStore*(name: untyped): untyped {.dirty.} =
         withLock(tbl.lock):
             result = tbl.storage.pop(k, v)
 
+template lockedList*(name: untyped): untyped {.dirty.} =
+    type
+        `Lock name Obj`[T] = object
+            lock: Lock
+            storage {.guard: lock.}: name[T]
+        `Lock name`*[T] = ptr `Lock name Obj`[T]
+
+    proc `lock name Impl`*[T](store: name[T]): `Lock name`[T] =
+        result = createShared(`Lock name Obj`[T])
+        initLock(result.lock)
+        withLock(result.lock):
+            result.storage = store
+
+    template `init Lock name`*[T](args: varargs[untyped]): `Lock name`[T] =
+        var store: name[T] # FIXME: this is incompatible with `notnil` pragma
+        store = when compiles(`init name`):
+                    when varargsLen(args) > 0:
+                        `init name`[T](args)
+                    else:
+                        `init name`[T]()
+                elif compiles(`new name`):
+                    when varargsLen(args) > 0:
+                        `new name`[T](args)
+                    else:
+                        `new name`[T]()
+                else:
+                    `name`[T]()
+        `lock name Impl`[T](store)
+
+    iterator items*[T](tbl: `Lock name`[T]): T =
+        withLock(tbl.lock):
+            for v in tbl.storage:
+                yield v
+
+    proc `[]=`*[T](tbl: `Lock name`[T], idx: Natural, v: T) =
+        withLock(tbl.lock):
+            tbl.storage[idx] = v
+
+    proc `[]`*[T](tbl: `Lock name`[T], idx: Natural): T =
+        withLock(tbl.lock):
+            result = tbl.storage[idx]
+
+    proc contains*[T](tbl: `Lock name`[T], v: T): bool =
+        withLock(tbl.lock):
+            result = v in tbl.storage
+
+    proc clear*[T](tbl: `Lock name`[T]) =
+        withLock(tbl.lock):
+            clear(tbl.storage)
+
+    proc len*[T](tbl: `Lock name`[T]): int =
+        withLock(tbl.lock):
+            result = tbl.storage.len
+
+    proc get*[T](tbl: `Lock name`[T], idx: Natural, def: T): T =
+        withLock(tbl.lock):
+            result = tbl.storage.getOrDefault(k, def)
+
+    proc get*[T](tbl: `Lock name`[T], idx: Natural): T =
+        withLock(tbl.lock):
+            result = tbl.storage.get(idx)
+
+    proc del*(tbl: `Lock name`, idx: Natural) =
+      withLock(tbl.lock):
+        {.cast(gcsafe).}:
+          tbl.storage.del(k)
+
+    proc pop*[T](tbl: var `Lock name`, idx: Natural, v: var T): bool =
+        withLock(tbl.lock):
+            result = tbl.storage.pop(idx, v)
+
+    proc add*[T](tbl: var `Lock name`[T], v: T) =
+      withLock(tbl.lock):
+        tbl.storage.add v
+
+    proc addFirst*[T](tbl: var `Lock name`[T], v: T) =
+      withLock(tbl.lock):
+        tbl.storage.addFirst v
+
+    proc addLast*[T](tbl: var `Lock name`[T], v: T) =
+      withLock(tbl.lock):
+        tbl.storage.addLast v
+
+    proc popFirst*[T](tbl: `Lock name`[T]): T =
+      withLock(tbl.lock):
+        result = tbl.storage.popFirst
+
+    proc popLast*[T](tbl: `Lock name`[T]): T =
+      withLock(tbl.lock):
+        result = tbl.storage.popLast
+
+    proc `$`*(tbl: `Lock name`): string =
+      withLock(tbl.lock):
+        result = $tbl.storage
+
 when isMainModule:
     import tables, lrucache
     lockedStore(LruCache)

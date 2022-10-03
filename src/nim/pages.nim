@@ -182,13 +182,14 @@ proc processPage*(lang, amp: string, tree: VNode not nil,
 
 proc pageFromTemplate*(tpl, lang, amp: string): Future[string] {.async.} =
   var txt = await readfileAsync(ASSETS_PATH / "templates" / tpl & ".html")
-  let (vars, title, desc) = case tpl:
-    of "dmca": (tplRep, "DMCA", fmt"dmca compliance for {WEBSITE_DOMAIN}")
-    of "tos": (ppRep, "Terms of Service",
-        fmt"Terms of Service for {WEBSITE_DOMAIN}")
-    of "privacy-policy": (ppRep, "Privacy Policy",
-        fmt"Privacy Policy for {WEBSITE_DOMAIN}")
-    else: (tplRep, tpl, "")
+  let (vars, title, desc) =
+    case tpl:
+      of "dmca": (tplRep, "DMCA", fmt"dmca compliance for {WEBSITE_DOMAIN}")
+      of "tos": (ppRep, "Terms of Service",
+          fmt"Terms of Service for {WEBSITE_DOMAIN}")
+      of "privacy-policy": (ppRep, "Privacy Policy",
+          fmt"Privacy Policy for {WEBSITE_DOMAIN}")
+      else: (tplRep, tpl, "")
   txt = multiReplace(txt, vars)
   let
     slug = slugify(title)

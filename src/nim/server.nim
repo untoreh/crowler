@@ -27,6 +27,7 @@ import strformat,
 
 import
   pyutils,
+  pyhttp,
   quirks,
   cfg,
   types,
@@ -92,6 +93,7 @@ proc initThread*() {.gcsafe.} =
   if threadInitialized:
     return
   initThreadBase()
+  initPyHttp()
   initHtml()
   initLDJ()
   initFeed()
@@ -565,13 +567,12 @@ proc runScorper(address, callback: auto) =
   var srv: Scorper
   try:
     srv = waitFor doServe(address, callback)
-  except:
-    let e = getCurrentException()[]
-    warn "server: {e} \n restarting server..."
-  finally:
+  except CatchableError as e:
+    warn "server: {e[]} \n restarting server..."
     if not srv.isnil:
       waitFor srv.join()
-      reset(srv)
+  except Defect:
+    quit()
 
 proc startServer*(doclear = false, port = 0, loglevel = "info") =
 

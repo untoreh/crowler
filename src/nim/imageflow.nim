@@ -168,7 +168,7 @@ proc addImg*(img: string): bool =
 proc getImg*(src: string, kind: Source): Future[string] {.async.} =
   return case kind:
     of urlsrc:
-      await pyReqGet(src)
+      await httpGet(src)
       # (await fetch(HttpSessionRef.new(), parseUri(src))).data.bytesToString
     elif fileExists(src):
       await readFileAsync(src)

@@ -63,7 +63,7 @@ proc getFile(path: string): Future[string] {.async.} =
     else:
       shallowCopy url, path
     debug "getfile: getting file content from {url}"
-    filesCache[path] = await pyReqGet(url)
+    filesCache[path] = await httpGet(url)
     # filesCache[path] = (await fetch(HttpSessionRef.new(), parseUri(
     #     url))).data.bytesToString
     result = filesCache[path]

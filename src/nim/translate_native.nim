@@ -75,13 +75,6 @@ template waitTrans*(): string =
         break
     res
 
-template setNil*(id, val) =
-  if id.isnil:
-    id = val
-
-template ifNil*(id, val) =
-  if id.isnil:
-    val
 
 template maybeCreate*(id, tp; force: static[bool] = false) =
   when force:

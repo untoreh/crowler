@@ -201,9 +201,6 @@ proc transForwarderAsync() {.async.} =
         let id = await outputRecvIpc[].read()
         let trans = await outputRecvIpc[].read()
         transOut[$id] = trans
-        withLock(transLock):
-          transEvent[].fire
-          transEvent[].clear
       except AsyncTimeoutError:
         continue
   except:

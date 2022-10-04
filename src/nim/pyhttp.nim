@@ -20,7 +20,7 @@ proc pywait(j: PyObject): Future[PyObject] {.async, gcsafe.} =
     await sleepAsync(250.milliseconds)
   withPyLock:
     result =
-      if (not res.isnil) and (not ($res in ["<NULL>", "None"])):
+      if (not res.isnil) and (not res.pyisnone) and $res != "<NULL>":
         res
       else:
         raise newException(ValueError, "Python job failed.")
@@ -41,7 +41,11 @@ var httpResults: LockTable[string, string]
 var handler: ptr Future[void]
 
 proc requestTask(url: string) {.async.} =
-  let v = await pyReqGet(url)
+  var v: string
+  try:
+    v = await pyReqGet(url)
+  except CatchableError:
+    discard
   httpResults[url] = v
 
 
@@ -66,9 +70,9 @@ proc initPyHttp*() {.gcsafe.} =
     create(Future[void])
   handler[] = requestHandler()
 
-proc httpGet*(url: string): Future[string] {.async.} =
+proc httpGet*(url: string): Future[string] {.async, raises: [Defect].} =
   queue.addLast(url)
-  return await httpResults.getWait(url)
+  return await httpResults.popWait(url)
 
 when isMainModule:
   initPyHttp()

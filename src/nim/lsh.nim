@@ -76,7 +76,7 @@ proc loadLS*(topic: string): Future[PublishedArticles] {.async.} =
     return initLS()
 
 # these should be generalized since it's the same from `imageflow_server`
-var lshIn*: LockDeque[(MonoTime, PublishedArticles, Article)]
+var lshIn*: LockDeque[(MonoTime, PublishedArticles, string)]
 var lshOut*: LockTable[(MonoTime, PublishedArticles), bool]
 
 proc addArticle*(lsh: PublishedArticles, content: string): Future[bool] {.async.} =

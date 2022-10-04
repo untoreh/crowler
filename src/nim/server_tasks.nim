@@ -11,6 +11,7 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
   var n, prevSize: int
   when false:
     while true:
+      warn "PUBLISHING DISABLED"
       await sleepAsync(100.seconds)
   try:
     await syncTopics()

@@ -112,7 +112,7 @@ proc filterDuplicates(topic: string, lsh: PublishedArticles, pagenum: int,
     return false
   clear(pageset)
   for a in arts:
-    if await addArticle(lsh, a):
+    if await addArticle(lsh, a.content):
       # make sure article titles/slugs are unique
       var u = 1
       var uslug = a.slug

@@ -79,19 +79,17 @@ proc loadLS*(topic: string): Future[PublishedArticles] {.async.} =
 var lshIn*: LockDeque[(MonoTime, PublishedArticles, Article)]
 var lshOut*: LockTable[(MonoTime, PublishedArticles), bool]
 
-proc addArticle*(lsh: PublishedArticles, a: Article): Future[bool] {.async.} =
+proc addArticle*(lsh: PublishedArticles, content: string): Future[bool] {.async.} =
   let t = getMonoTime()
-  lshIn.addLast (t, lsh, a)
+  lshIn.addLast (t, lsh, content)
   return await lshOut.popWait((t, lsh))
 
-proc checkAndAddArticle(t: MonoTime, lsh: PublishedArticles, a: Article) {.async.} =
+proc checkAndAddArticle(t: MonoTime, lsh: PublishedArticles, content: string) {.async.} =
   let k = (t, lsh)
   try:
-    if not isDuplicate(lsh[], a.content):
+    if not isDuplicate(lsh[], content):
       let id = $(len(lsh.fingerprints) + 1)
-      shallow a.content
-      let cnt = a.content
-      lsh[].add(cnt, id)
+      lsh[].add(content, id)
       lshOut[k] = true
     else:
       lshOut[k] = false
@@ -102,9 +100,9 @@ proc checkAndAddArticle(t: MonoTime, lsh: PublishedArticles, a: Article) {.async
 proc asyncLshHandler() {.async.} =
   try:
     while true:
-      let (t, lsh, ar) = await lshIn.popFirstwait
+      let (t, lsh, content) = await lshIn.popFirstwait
       checkNil(lsh):
-        asyncSpawn checkAndAddArticle(t, lsh, ar)
+        asyncSpawn checkAndAddArticle(t, lsh, content)
   except: # If we quit we can catch defects too.
     let e = getCurrentException()[]
     warn "lsh: lsh handler crashed. {e}"
@@ -114,7 +112,7 @@ proc lshHandler() = waitFor asyncLshHandler()
 
 proc startLsh*() =
   setNil(lshIn):
-    initLockDeque[(MonoTime, PublishedArticles, Article)]()
+    initLockDeque[(MonoTime, PublishedArticles, string)]()
   setNil(lshOut):
     initLockTable[(MonoTime, PublishedArticles), bool]()
   createThread(lshThread, lshHandler)
@@ -124,8 +122,8 @@ when isMainModule:
   let lsh = initLS()
   var a = Article()
   a.content = "test"
-  echo waitFor lsh.addArticle(a)
-  echo waitFor lsh.addArticle(a)
-  echo waitFor lsh.addArticle(a)
+  echo waitFor lsh.addArticle(a.content)
+  echo waitFor lsh.addArticle(a.content)
+  echo waitFor lsh.addArticle(a.content)
   lsh[].remove("1")
   # echo id

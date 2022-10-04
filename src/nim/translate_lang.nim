@@ -21,7 +21,8 @@ template translateVbtm(node: VNode, q: QueueDom) =
   let
     s = $node
     tree = vbtmcache.lgetOrPut(s.key): parseHtml(s)
-  if tree.tag == "document": tree.tag = "div"
+  if tree.kind == xnElement and tree.tag == "document":
+    tree.tag = "div"
   takeOverFields(tree.toVNode, node)
   translateIter(node, vbtm = false)
 

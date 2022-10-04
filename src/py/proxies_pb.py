@@ -135,7 +135,7 @@ def set_socket_timeout(timeout):
 
 
 def select_proxy(proxy):
-    if proxy is None or proxy == 0:
+    if proxy is None or proxy <= 0:
         sel = None
     elif proxy == 1:
         sel = get_proxy(static=True)

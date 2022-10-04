@@ -18,7 +18,8 @@ import numpy as np
 import zarr as za
 from cachetools import LRUCache
 from numcodecs import Blosc
-from trafilatura import fetch_url as _fetch_url
+from trafilatura.downloads import fetch_url, _handle_response, RawResponse
+from trafilatura.settings import DEFAULT_CONFIG as traf_config
 from zict import LRU, Func
 
 import config as cfg
@@ -51,18 +52,33 @@ def somekey(d, *keys):
             break
     return v
 
+
 slash_rgx = re.compile(r"/+")
+from pathlib import Path
+
+
+def fetch(url, depth):
+    with pb.http_opts(proxy=depth):
+        # use ssl only when without proxy
+        resp = fetch_url(url, no_ssl=(depth > 0), decode=False)
+    if isinstance(resp, RawResponse):
+        # We assume status codes in this range the request succeeded but was empty (e.g. url is dead)
+        if 300 <= resp.status <= 404:
+            return
+        return _handle_response(url, resp, decode=True, config=traf_config)
+
+
 def fetch_data(url, *args, delay=0.3, backoff=0.3, depth=0, fromcache=True, **kwargs):
     if fromcache:
-        cachekey = re.sub(slash_rgx, "/", url)
+        # cachekey = re.sub(slash_rgx, "/", url)
         if url in LRU_CACHE:
-            data = LRU_CACHE[cachekey]
+            data = LRU_CACHE[Path(url)]
         else:
-            with pb.http_opts(proxy=depth):
-                data = _fetch_url(url)
+            data = fetch(url, depth)
     else:
-        with pb.http_opts(proxy=depth):
-            data = _fetch_url(url)
+        # with (depth - 1) we ensure that if cached data was `None`
+        # the first trial is always performed without proxy
+        data = fetch(url, depth - 1)
     if data is None and depth < 4:
         # try an http request 2 times
         if depth == 2:
@@ -70,8 +86,8 @@ def fetch_data(url, *args, delay=0.3, backoff=0.3, depth=0, fromcache=True, **kw
         sleep(delay)
         data = fetch_data(url, delay=delay + backoff, depth=depth + 1, fromcache=False)
         try:
-            cachekey = re.sub(slash_rgx, "/", url)
-            LRU_CACHE[cachekey] = data
+            # cachekey = re.sub(slash_rgx, "/", url)
+            LRU_CACHE[Path(url)] = data
         except:
             pass
     return data

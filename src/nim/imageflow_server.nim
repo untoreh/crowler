@@ -61,13 +61,14 @@ template submitImg(val: untyped = ("", "")) {.dirty.} = imgOut[imgKey] = val
 proc processImgData(imgKey: (MonoTime, string, string, string)) {.async.} =
   # push img to imageflow context
   let (id, decodedUrl, width, height) = imgKey
-  var lock: AsyncLock
+  var acquired: bool
   let data = (await decodedUrl.imgData)
   if data.len == 0:
     submitImg()
     return
   try:
     await imgLock[].acquire
+    acquired = true
     if not addImg(data):
       return
     let query = fmt"width={width}&height={height}&mode=max&format=webp"
@@ -79,7 +80,8 @@ proc processImgData(imgKey: (MonoTime, string, string, string)) {.async.} =
     submitImg()
     return
   finally:
-    lock.release
+    if acquired:
+      imgLock[].release
 
 proc asyncImgHandler() {.async.} =
   try:

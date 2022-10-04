@@ -5,6 +5,8 @@ import locktpl
 
 template sleep() = await sleepAsync(1.milliseconds)
 
+# NOTE: When using locktables and locklists for producer/consumer, ensure that the keys are unique.
+# (e.g. instead of `k = 123` do `k = (getMonoTime(), 123)` )
 when declared(LockTable):
   proc getWait*[K, V](tbl: LockTable[K, V], k: K): Future[V] {.async.} =
     while true:
@@ -13,10 +15,10 @@ when declared(LockTable):
       else:
         sleep()
 
-  proc popWait*[K, V](tbl: LockTable[K, V], k: K, v: var V) {.async.} =
+  proc popWait*[K, V](tbl: LockTable[K, V], k: K): Future[V] {.async.} =
     while true:
       if k in tbl:
-        tbl.pop(k, v)
+        assert tbl.pop(k, result)
         break
       else:
         sleep()

@@ -1,4 +1,4 @@
-import std/[importutils, strutils, marshal, tables, algorithm, os, strformat], chronos,
+import std/[importutils, strutils, marshal, tables, algorithm, os, monotimes, strformat], chronos,
     minhash {.all.}
 
 import cfg, types, utils
@@ -76,41 +76,35 @@ proc loadLS*(topic: string): Future[PublishedArticles] {.async.} =
     return initLS()
 
 # these should be generalized since it's the same from `imageflow_server`
-var lshIn*: ptr AsyncQueue[(PublishedArticles, Article)]
-var lshOut*: LockTable[PublishedArticles, bool]
-var lshEvent*: ptr AsyncEvent
-var lshLock*: ptr AsyncLock
+var lshIn*: LockDeque[(MonoTime, PublishedArticles, Article)]
+var lshOut*: LockTable[(MonoTime, PublishedArticles), bool]
 
 proc addArticle*(lsh: PublishedArticles, a: Article): Future[bool] {.async.} =
-  await lshIn[].put((lsh, a))
-  while true:
-    await wait(lshEvent[])
-    if lsh in lshOut:
-      discard lshOut.pop(lsh, result)
-      break
+  let t = getMonoTime()
+  lshIn.addLast (t, lsh, a)
+  return await lshOut.popWait((t, lsh))
 
-proc checkAndAddArticle(lsh: PublishedArticles, a: Article) {.async.} =
+proc checkAndAddArticle(t: MonoTime, lsh: PublishedArticles, a: Article) {.async.} =
+  let k = (t, lsh)
   try:
     if not isDuplicate(lsh[], a.content):
       let id = $(len(lsh.fingerprints) + 1)
       shallow a.content
       let cnt = a.content
       lsh[].add(cnt, id)
-      lshOut[lsh] = true
+      lshOut[k] = true
     else:
-      lshOut[lsh] = false
+      lshOut[k] = false
   except CatchableError as e:
     warn "lsh: error adding article {e[]}."
-    lshOut[lsh] = false
-
-  lshEvent[].fire; lshEvent[].clear
+    lshOut[k] = false
 
 proc asyncLshHandler() {.async.} =
   try:
     while true:
-      let (lsh, ar) = await lshIn[].get()
+      let (t, lsh, ar) = await lshIn.popFirstwait
       checkNil(lsh):
-        asyncSpawn lsh.checkAndAddArticle(ar)
+        asyncSpawn checkAndAddArticle(t, lsh, ar)
   except: # If we quit we can catch defects too.
     let e = getCurrentException()[]
     warn "lsh: lsh handler crashed. {e}"
@@ -119,13 +113,10 @@ proc asyncLshHandler() {.async.} =
 proc lshHandler() = waitFor asyncLshHandler()
 
 proc startLsh*() =
-  lshIn = create(AsyncQueue[(PublishedArticles, Article)])
-  lshIn[] = newAsyncQueue[(PublishedArticles, Article)](256)
-  lshOut = initLockTable[PublishedArticles, bool]()
-  lshEvent = create(AsyncEvent)
-  lshEvent[] = newAsyncEvent()
-  lshLock = create(AsyncLock)
-  lshLock[] = newAsyncLock()
+  setNil(lshIn):
+    initLockDeque[(MonoTime, PublishedArticles, Article)]()
+  setNil(lshOut):
+    initLockTable[(MonoTime, PublishedArticles), bool]()
   createThread(lshThread, lshHandler)
 
 when isMainModule:

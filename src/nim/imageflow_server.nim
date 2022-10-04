@@ -1,11 +1,6 @@
 import
-    httpcore,
-    uri,
-    os,
-    locks,
+    std/[os, monotimes, locks, uri, httpcore, strformat, hashes],
     lruCache,
-    strformat,
-    hashes,
     chronos,
     chronos/asyncloop
 
@@ -25,7 +20,8 @@ proc imgData(imgurl: string): Future[string] {.inline, gcsafe, async.} =
   try:
     result = imgCache.lgetOrPut(imgurl):
       await getImg(imgurl, kind=urlsrc)
-  except: discard
+  except:
+    discard
 
 proc parseImgUrl*(relpath: string): (string, string, string) =
   let
@@ -39,15 +35,12 @@ proc parseImgUrl*(relpath: string): (string, string, string) =
 
 var
   iflThread: Thread[void]
-  imgIn: ptr AsyncQueue[(string, string, string)]
-  imgOut: LockTable[(string, string, string), (string, string)]
-  imgEvent: ptr AsyncEvent
+  imgIn: LockDeque[(MonoTime, string, string, string)]
+  imgOut: LockTable[(MonoTime, string, string, string), (string, string)]
   imgLock: ptr AsyncLock
-  imgLockLock: Lock
 
 proc handleImg*(relpath: string): Future[(string, string)] {.async.} =
   let (url, width, height) = parseImgUrl(relpath)
-  var respMime: (string, string)
   var resp, decodedUrl, mime: string
   if url.isSomething:
     decodedUrl = url.asBString.toString(true)
@@ -57,39 +50,24 @@ proc handleImg*(relpath: string): Future[(string, string)] {.async.} =
       resp = await decodedUrl.imgData
     else:
       assert not imgIn.isnil
-      let imgKey = (decodedUrl, width, height)
-      await imgIn[].put(imgKey)
-      var event: AsyncEvent
-      while true:
-        withLock(imgLockLock):
-          event = imgEvent[]
-        await wait(event)
-        if imgKey in imgOut:
-          doassert imgOut.pop(imgKey, respMime)
-          return respMime
-          debug "ifl server: img processed"
+      let imgKey = (getMonoTime(), decodedUrl, width, height)
+      imgIn.addLast imgKey
+      return await imgOut.popWait(imgKey)
+      debug "ifl server: img processed"
   return (resp, mime)
 
-template submitImg(val: untyped = ("", "")) {.dirty.} =
-  imgOut[imgKey] = val
-  var event: AsyncEvent
-  withLock(imgLockLock):
-    event = imgEvent[]
-  event.fire()
-  event.clear()
+template submitImg(val: untyped = ("", "")) {.dirty.} = imgOut[imgKey] = val
 
-proc processImgData(imgKey: (string, string, string)) {.async.} =
+proc processImgData(imgKey: (MonoTime, string, string, string)) {.async.} =
   # push img to imageflow context
-  let (decodedUrl, width, height) = imgKey
+  let (id, decodedUrl, width, height) = imgKey
   var lock: AsyncLock
   let data = (await decodedUrl.imgData)
   if data.len == 0:
     submitImg()
     return
   try:
-    withLock(imgLockLock):
-      lock = imgLock[]
-    await lock.acquire
+    await imgLock[].acquire
     if not addImg(data):
       return
     let query = fmt"width={width}&height={height}&mode=max&format=webp"
@@ -106,7 +84,7 @@ proc processImgData(imgKey: (string, string, string)) {.async.} =
 proc asyncImgHandler() {.async.} =
   try:
     while true:
-      let imgKey = await imgIn[].get()
+      let imgKey = await imgIn.popFirstWait
       asyncSpawn processImgData(imgKey)
   except CatchableError:
     let e = getCurrentException()[]
@@ -119,12 +97,13 @@ proc startImgFlow*() =
   try:
     initImageFlow()
     # start img handler thread
-    imgIn = create(AsyncQueue[(string, string, string)])
-    imgIn[] = newAsyncQueue[(string, string, string)](64)
-    imgOut = initLockTable[(string, string, string), (string, string)]()
-    imgEvent = create(AsyncEvent)
-    imgEvent[] = newAsyncEvent()
-    imgLock = create(AsyncLock)
+    setNil(imgIn):
+      initLockDeque[(MonoTime, string, string, string)]()
+    setNil(imgOut):
+      initLockTable[(MonoTime, string, string, string), (string, string)]()
+    setNil(imgLock):
+      create(AsyncLock)
+    reset(imgLock[])
     imgLock[] = newAsyncLock()
     createThread(iflThread, imgHandler)
   except CatchableError as e:

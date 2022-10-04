@@ -1,6 +1,6 @@
 import chronos/apps/http/httpclient
 import chronos/timer
-import std/uri
+import std/[monotimes, uri]
 import macros
 from cfg import PROXY_EP
 export PROXY_EP
@@ -13,7 +13,7 @@ proc raiseTranslateError*(msg: string) =
   raise newException(TranslateError, msg)
 
 type
-  Query* = tuple[text: string, src: string, trg: string]
+  Query* = tuple[id: MonoTime, text: string, src: string, trg: string]
   TranslateFunc* = proc(text, src, trg: string): Future[string] {.gcsafe.}
   Service* = enum google, bing, yandex
   TranslateObj* = object of RootObj

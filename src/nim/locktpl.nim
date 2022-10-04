@@ -78,7 +78,7 @@ template lockedStore*(name: untyped): untyped {.dirty.} =
         {.cast(gcsafe).}:
           tbl.storage.del(k)
 
-    proc pop*[K, V](tbl: var `Lock name`, k: K, v: var V): bool =
+    proc pop*[K, V](tbl: `Lock name`, k: K, v: var V): bool =
         withLock(tbl.lock):
             result = tbl.storage.pop(k, v)
 

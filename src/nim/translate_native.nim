@@ -1,4 +1,4 @@
-import std/[parsexml, streams, uri, hashes]
+import std/[monotimes, parsexml, streams, uri, hashes]
 import chronos/apps/http/httpclient
 import chronos
 
@@ -21,7 +21,7 @@ type
   AnyTranslate = GoogleTranslate | BingTranslate | YandexTranslate
 
 var
-  transIn: LockList[Query]
+  transIn: LockDeque[Query]
   transOut*: LockTable[string, string]
   transWorker*: ptr Future[void]
   rotator: TranslateRotatorPtr
@@ -61,11 +61,8 @@ proc callService*(text, src, trg: string): Future[string] {.async.} =
 
 template waitTrans*(): string =
   block:
-    var res: string
-    let tkey = $(hash (text, src, trg))
-    transOut.popWait(tkey, res)
-    res
-
+    let tkey = $(hash (id, text, src, trg))
+    await transOut.popWait(tkey)
 
 template maybeCreate*(id, tp; force: static[bool] = false) =
   when force:
@@ -82,7 +79,7 @@ proc setupTranslate*() =
     initLockTable[string, string]()
 
 when not defined(translateProc):
-  proc translateTask(text, src, trg: string) {.async.} =
+  proc translateTask(id: MonoTime; text, src, trg: string) {.async.} =
     var tries: int
     var success: bool
     var translated: string
@@ -101,17 +98,14 @@ when not defined(translateProc):
     except CatchableError:
       warn "trans: job failed, {src} -> {trg}."
     finally:
-      let id = hash (text, src, trg)
+      let id = hash (id, text, src, trg)
       transOut[$id] = translated
-      withLock(transLock):
-        transEvent[].fire
-        transEvent[].clear
 
   proc asyncTransHandler() {.async.} =
     try:
       while true:
-        let (text, src, trg) = await transIn.popFirstWait()
-        asyncSpawn translateTask(text, src, trg)
+        let (id, text, src, trg) = await transIn.popFirstWait()
+        asyncSpawn translateTask(id, text, src, trg)
     except: # If we quit we can catch defects too.
       let e = getCurrentException()[]
       warn "trans: trans handler crashed. {e}"
@@ -124,7 +118,8 @@ when not defined(translateProc):
     transWorker[] = asyncTransHandler()
 
   proc translate*(text, src, trg: string): Future[string] {.async, raises: [].} =
-    transIn.addLast (text, src, trg)
+    let id = getMonoTime()
+    transIn.addLast (id, text, src, trg)
     return waitTrans()
 
 when isMainModule:

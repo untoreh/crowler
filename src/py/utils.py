@@ -51,12 +51,13 @@ def somekey(d, *keys):
             break
     return v
 
-
+slash_rgx = re.compile(r"/+")
 def fetch_data(url, *args, delay=0.3, backoff=0.3, depth=0, fromcache=True, **kwargs):
     if fromcache:
-        try:
-            data = LRU_CACHE[url]
-        except KeyError:
+        cachekey = re.sub(slash_rgx, "/", url)
+        if url in LRU_CACHE:
+            data = LRU_CACHE[cachekey]
+        else:
             with pb.http_opts(proxy=depth):
                 data = _fetch_url(url)
     else:
@@ -68,7 +69,11 @@ def fetch_data(url, *args, delay=0.3, backoff=0.3, depth=0, fromcache=True, **kw
             url = url.replace("https://", "http://", 1)
         sleep(delay)
         data = fetch_data(url, delay=delay + backoff, depth=depth + 1, fromcache=False)
-        LRU_CACHE[url] = data
+        try:
+            cachekey = re.sub(slash_rgx, "/", url)
+            LRU_CACHE[cachekey] = data
+        except:
+            pass
     return data
 
 

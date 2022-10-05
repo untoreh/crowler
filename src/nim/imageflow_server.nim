@@ -21,6 +21,7 @@ proc imgData(imgurl: string): Future[string] {.inline, gcsafe, async.} =
     result = imgCache.lgetOrPut(imgurl):
       await getImg(imgurl, kind=urlsrc)
   except:
+    echo getCurrentException()[]
     discard
 
 proc parseImgUrl*(relpath: string): (string, string, string) =
@@ -93,11 +94,12 @@ proc asyncImgHandler() {.async.} =
     warn "imageflow: image handler crashed. {e}"
     quit()
 
-proc imgHandler*() = waitFor asyncImgHandler()
+proc imgHandler*() =
+  initImageFlow() # NOTE: this initializes thread vars
+  waitFor asyncImgHandler()
 
 proc startImgFlow*() =
   try:
-    initImageFlow()
     # start img handler thread
     setNil(imgIn):
       initLockDeque[(MonoTime, string, string, string)]()

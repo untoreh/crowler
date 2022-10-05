@@ -4,8 +4,8 @@ export locks
 template lockedStore*(name: untyped): untyped {.dirty.} =
     type
         `Lock name Obj`[K, V] = object
-            lock: Lock
-            storage {.guard: lock.}: name[K, V]
+            lock*: Lock
+            storage* {.guard: lock.}: name[K, V]
         `Lock name`*[K, V] = ptr `Lock name Obj`[K, V]
 
     proc `lock name Impl`*[K, V](store: name[K, V]): `Lock name`[K, V] =
@@ -85,8 +85,8 @@ template lockedStore*(name: untyped): untyped {.dirty.} =
 template lockedList*(name: untyped): untyped {.dirty.} =
     type
         `Lock name Obj`[T] = object
-            lock: Lock
-            storage {.guard: lock.}: name[T]
+            lock*: Lock
+            storage* {.guard: lock.}: name[T]
         `Lock name`*[T] = ptr `Lock name Obj`[T]
 
     proc `lock name Impl`*[T](store: name[T]): `Lock name`[T] =
@@ -149,19 +149,19 @@ template lockedList*(name: untyped): untyped {.dirty.} =
         {.cast(gcsafe).}:
           tbl.storage.del(k)
 
-    proc pop*[T](tbl: var `Lock name`, idx: Natural, v: var T): bool =
+    proc pop*[T](tbl: `Lock name`, idx: Natural, v: var T): bool =
         withLock(tbl.lock):
             result = tbl.storage.pop(idx, v)
 
-    proc add*[T](tbl: var `Lock name`[T], v: T) =
+    proc add*[T](tbl: `Lock name`[T], v: T) =
       withLock(tbl.lock):
         tbl.storage.add v
 
-    proc addFirst*[T](tbl: var `Lock name`[T], v: T) =
+    proc addFirst*[T](tbl: `Lock name`[T], v: T) =
       withLock(tbl.lock):
         tbl.storage.addFirst v
 
-    proc addLast*[T](tbl: var `Lock name`[T], v: T) =
+    proc addLast*[T](tbl: `Lock name`[T], v: T) =
       withLock(tbl.lock):
         tbl.storage.addLast v
 

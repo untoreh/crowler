@@ -32,7 +32,7 @@ proc pyReqGet(url: string): Future[string] {.async.} =
   var j: PyObject
   withPyLock:
     {.cast(gcsafe).}:
-      j = pySched[].apply(fetchData[], url)
+      j = pySched[].apply(fetchData[], url, decode=false)
   let resp = await pywait(j)
   withPyLock:
     result = resp.to(string)

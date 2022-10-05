@@ -57,7 +57,7 @@ slash_rgx = re.compile(r"/+")
 from pathlib import Path
 
 
-def fetch(url, depth):
+def fetch(url, depth, decode=True):
     with pb.http_opts(proxy=depth):
         # use ssl only when without proxy
         resp = fetch_url(url, no_ssl=(depth > 0), decode=False)
@@ -65,20 +65,23 @@ def fetch(url, depth):
         # We assume status codes in this range the request succeeded but was empty (e.g. url is dead)
         if 300 <= resp.status <= 404:
             return
-        return _handle_response(url, resp, decode=True, config=traf_config)
+        if decode:
+            return _handle_response(url, resp, decode=decode, config=traf_config)
+        else:
+            return resp.data
 
 
-def fetch_data(url, *args, delay=0.3, backoff=0.3, depth=0, fromcache=True, **kwargs):
+def fetch_data(url, *args, delay=0.3, backoff=0.3, depth=0, decode=True, fromcache=True, **kwargs):
     if fromcache:
         # cachekey = re.sub(slash_rgx, "/", url)
-        if url in LRU_CACHE:
+        if False and url in LRU_CACHE:
             data = LRU_CACHE[Path(url)]
         else:
-            data = fetch(url, depth)
+            data = fetch(url, -1, decode=decode)
     else:
         # with (depth - 1) we ensure that if cached data was `None`
         # the first trial is always performed without proxy
-        data = fetch(url, depth - 1)
+        data = fetch(url, depth - 1, decode=decode)
     if data is None and depth < 4:
         # try an http request 2 times
         if depth == 2:

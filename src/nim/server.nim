@@ -53,6 +53,8 @@ import
   stats,
   lsh
 
+from nativehttp import initHttp
+
 # lockedStore(LruCache)
 # lockedStore(Table)
 
@@ -93,6 +95,7 @@ proc initThread*() {.gcsafe.} =
   if threadInitialized:
     return
   initThreadBase()
+  initHttp()
   initPyHttp()
   initHtml()
   initLDJ()

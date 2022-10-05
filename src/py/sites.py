@@ -550,17 +550,28 @@ class Site:
 
     def remove_broken_articles(self, topic):
         # valid_unpub = []
-        arts = self.load_articles(topic=topic)
-        for n, a in enumerate(arts):
-            if a is not dict or a.get("topic", "") != topic:
-                arts[n] = None
-
-        done = self.load_done(topic)
-        for n in range(len(done)):
-            page_arts = done[n]
-            for n, a in enumerate(page_arts):
+        def clear_topic(topic):
+            arts = self.load_articles(topic=topic)
+            for n, a in enumerate(arts):
                 if a is not dict or a.get("topic", "") != topic:
-                    page_arts[n] = None
+                    arts[n] = None
+
+            done = self.load_done(topic)
+            for n in range(len(done)):
+                page_arts = done[n]
+                for n, a in enumerate(page_arts):
+                    if a is not dict or a.get("topic", "") != topic:
+                        page_arts[n] = None
+        try:
+            if topic == "all":
+                for topic in self.load_topics()[1].keys():
+                    clear_topic(topic)
+            else:
+                clear_topic(topic)
+        except:
+            log.warn("Couldn't remove broken articles.")
+
+
 
     def topics_watcher(self):
         while True:

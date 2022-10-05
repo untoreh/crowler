@@ -1,5 +1,4 @@
 import std/[monotimes, parsexml, streams, uri, hashes]
-import chronos/apps/http/httpclient
 import chronos
 
 import
@@ -28,10 +27,10 @@ var
 
 proc initRotator(timeout = 3.seconds): TranslateRotatorObj =
   result.services.google = new(GoogleTranslateObj)
-  result.services.google[] = init(GoogleTranslateObj, timeout = timeout)
-  # result.services.add init(BingTranslateObj, timeout=timeout)
+  result.services.google[] = init(GoogleTranslateObj)
+  # result.services.add init(BingTranslateObj)
   result.services.yandex = new(YandexTranslateObj)
-  result.services.yandex[] = init(YandexTranslateObj, timeout = timeout)
+  result.services.yandex[] = init(YandexTranslateObj)
 
 proc callService*(text, src, trg: string): Future[string] {.async.} =
   if unlikely(rotator.isnil):

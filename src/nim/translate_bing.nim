@@ -1,9 +1,9 @@
-import std/[parsexml, streams, uri, httpcore, nre, strformat, strutils, json]
+import std/[parsexml, streams, uri, httpcore, nre, strformat, strutils, json, httpcore, uri]
 import std/times except seconds, milliseconds
-import chronos/apps/http/httpclient
 import chronos
 import chronos/asyncsync
 from chronos/timer import seconds, milliseconds
+import nativehttp
 
 from cfg import PROXY_EP
 import types
@@ -72,11 +72,10 @@ proc buildReqBody(self: BingTranslateObj, text, src, trg: string;
     body.add ("to", trg)
   return body.encodeQuery
 
-template newReq(): untyped =
-  var headers: seq[HttpHeaderTuple]
-  let url = TRANSLATE_WEBSITE.fmt()
-  headers.add ("user-agent", userAgent)
-  HttpClientRequestRef.new(self.session, url, headers = headers).get
+template newReq(): untyped {.dirty.} =
+  var headers = newHttpHeaders()
+  var url = TRANSLATE_WEBSITE.fmt()
+  headers.add("user-agent", userAgent)
 
 proc fetchBingConfig(self: BingTranslateObj, userAgent = USER_AGENT): Future[
     BingConfig] {.async.} =
@@ -85,58 +84,57 @@ proc fetchBingConfig(self: BingTranslateObj, userAgent = USER_AGENT): Future[
   config.lock = lock
   try:
     var newTld: string
-    var req = newReq()
-    var resp: HttpClientResponseRef
+    newReq()
+    var resp: Response
     while true:
       if newTld != "":
         config.tld = newTld & "."
-      resp = sendReq(req)
-      if resp.status >= 300 and resp.status < 400:
-        let loc = resp.headers.getString("location")
-        let tldMatch = loc.match(sre r"^https?:\/\/(\w+)\.bing\.com")
+      resp = await get(url, headers, redir=false)
+      # if resp.isnil and resp.code.int < 300 or resp.code.int >= 400:
+      #   break
+      if resp.isnil:
+        continue
+      elif resp.code.is3xx:
+        let loc = resp.headers.table.getOrDefault("location")
+        if loc.len == 0:
+          raiseTranslateError("Bing request missing location header.")
+        let tldMatch = loc[0].match(sre r"^https?:\/\/(\w+)\.bing\.com")
         if tldMatch.isnone:
           raiseTranslateError "Bing redirect doesn't match."
-        newTld = loc[tldMatch.get.captureBounds[0]]
-        if req.session.isnil:
-          req.session = self.session
-        let res = req.redirect(parseUri(loc))
-        if res.isErr:
-          raiseTranslateError "Bing redirect failed."
-        else:
-          req = res.get
-          if config.tld != newTld:
-            # override host header if tld changed
-            req.headers.set(HostHeader, req.address.hostname)
+        newTld = loc[0][tldMatch.get.captureBounds[0]]
+
+        if config.tld != newTld:
+          # override host header if tld changed
+          headers["host"] = parseUri(loc[0]).hostname
       else:
         break
 
     # defer: ensureClosed(req, resp)
     # PENDING: optional?
-    for ck in resp.headers.getList("set-cookie"):
-      let cks = ck.split(";")
-      if len(cks) > 0:
-        config.cookie.add cks[0]
-        config.cookie.add "; "
-
-    let body = bytesToString (await getBodyBytes resp)
+    for (k, ck) in resp.headers.pairs:
+      if k == "set-cookie":
+        let cks = ck.split(";")
+        if len(cks) > 0:
+          config.cookie.add cks[0]
+          config.cookie.add "; "
 
     block:
-      let igMatch = body.match(sre r"""(?s).*IG:"([^"]+)""")
+      let igMatch = resp.body.match(sre r"""(?s).*IG:"([^"]+)""")
       if igMatch.isnone:
         raiseTranslateError "Bing IG doesn't match."
-      config.ig = body[igMatch.get.captureBounds[0]]
+      config.ig = resp.body[igMatch.get.captureBounds[0]]
 
     block:
-      let iidMatch = body.match(sre r"""(?s).*data-iid="([^"]+)""")
+      let iidMatch = resp.body.match(sre r"""(?s).*data-iid="([^"]+)""")
       if iidMatch.isnone:
         raiseTranslateError "Bing IID doesn't match."
-      config.iid = body[iidMatch.get.captureBounds[0]]
+      config.iid = resp.body[iidMatch.get.captureBounds[0]]
 
     block:
-      let helperMatch = body.match(sre r"(?s).*params_RichTranslateHelper\s?=\s?([^\]]+\])")
+      let helperMatch = resp.body.match(sre r"(?s).*params_RichTranslateHelper\s?=\s?([^\]]+\])")
       if helperMatch.isnone:
         raiseTranslateError "Bing helper doesn't match."
-      let helper = body[helperMatch.get.captureBounds[0]].parseJson
+      let helper = resp.body[helperMatch.get.captureBounds[0]].parseJson
       config.key = helper[0].to(int)
       config.token = helper[1].to(string)
       config.tokenExpiryInterval = ($helper[2]).parseInt
@@ -162,7 +160,6 @@ proc translate*(self: BingTranslateObj, text, src, trg: string): Future[
     string] {.async.} =
   let config = self.config
   if self.isTokenExpired():
-    echo "translate_bing.nim:165"
     withAsyncLock(self.config.lock):
       if self.isTokenExpired():
         discard await self.fetchBingConfig()
@@ -170,7 +167,6 @@ proc translate*(self: BingTranslateObj, text, src, trg: string): Future[
   let
     src = if src == "auto": "auto-detect" else: src
     uri = self.buildReqUri()
-    address = self.session.getAddress(uri).get
     body = self.buildReqBody(text, src, trg)
     headers = @[
       ("user-agent", USER_AGENT),
@@ -179,35 +175,29 @@ proc translate*(self: BingTranslateObj, text, src, trg: string): Future[
       ("accept", "application/json"),
       ("content-type", "application/x-www-form-urlencoded"),
       ("content-length", $body.len)
-      ]
+      ].newHttpHeaders()
 
-  let req = HttpClientRequestRef.new(
-    session = self.session, ha = address,
-    meth = MethodPost,
-    headers = headers, body = body.toOpenArrayByte(0, body.len - 1))
+  let resp = await post(uri, headers, body)
+  if resp.code != Http200:
+    raiseTranslateError "Bing POST request error, response code {resp.code}".fmt
 
-  let resp = sendReq(req)
-  if resp.status != 200:
-    raiseTranslateError "Bing POST request error, response code {resp.status}".fmt
-
-  let respBody = (bytesToString (await getBodyBytes resp)).parseJson
-  if not validateResponse(respBody):
+  let bodyJson = resp.body.parseJson
+  if not validateResponse(bodyJson):
     raiseTranslateError "Bing translations not found in bing response."
 
-  return respBody[0]["translations"][0]["text"].to(string)
+  return bodyJson[0]["translations"][0]["text"].to(string)
 
-proc init*(_: typedesc[BingTranslateObj],
-    timeout = DEFAULT_TIMEOUT): BingTranslateObj =
-  let base = init(TranslateObj, timeout = timeout)
+proc init*(_: typedesc[BingTranslateObj]): BingTranslateObj =
+  let base = init(TranslateObj)
   var srv = BingTranslateObj()
   srv.kind = bing
-  srv.session = base.session
   srv.maxQuerySize = 1000
   srv.config = new(BingConfig)
   srv.config.lock = newAsyncLock()
   return srv
 
 when isMainModule:
+  initHttp()
   bt = create(BingTranslateObj)
   bt[] = init(BingTranslateObj)
   # let bc = waitFor bt[].fetchBingConfig()

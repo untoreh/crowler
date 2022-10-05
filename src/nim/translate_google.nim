@@ -1,11 +1,11 @@
 import std/[parsexml, streams, uri]
-import chronos/apps/http/httpclient
 import chronos
 
 from cfg import PROXY_EP
 import types
 import utils
 import translate_native_utils
+import nativehttp
 
 type
   GoogleTranslateObj* = object of TranslateObj
@@ -75,20 +75,20 @@ proc translate*(self: GoogleTranslateObj, text, src, trg: string): Future[
   elif text.len > 5000:
     raiseTranslateError "Translation string exceeds max length of 5000 bytes."
   let uri = queryUrl(text, src, trg)
-  let html = await self.doReq(uri)
-  result = getTranslation(html)
+  let resp = await get(uri)
+  result = getTranslation(resp.body)
   if result.len == 0:
     raiseTranslateError "Translation was empty."
 
-proc init*(_: typedesc[GoogleTranslateObj], timeout = DEFAULT_TIMEOUT): GoogleTranslateObj =
-  let base = init(TranslateObj, timeout=timeout)
+proc init*(_: typedesc[GoogleTranslateObj]): GoogleTranslateObj =
+  let base = init(TranslateObj)
   var srv = GoogleTranslateObj()
   srv.kind = google
-  srv.session = base.session
   srv.maxQuerySize = base.maxQuerySize
   return srv
 
 when isMainModule:
+  initHttp()
   let text = """This was a fine day."""
   gt = create(GoogleTranslateObj)
   gt[] = init(GoogleTranslateObj)

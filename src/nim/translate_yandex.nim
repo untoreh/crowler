@@ -1,6 +1,5 @@
 import std/[parsexml, streams, uri, httpcore, strformat, strutils, json]
 import std/times except seconds, milliseconds
-import chronos/apps/http/httpclient
 import chronos
 from chronos/timer import seconds, milliseconds
 
@@ -9,6 +8,7 @@ import types
 import utils
 import translate_native_utils
 import cacheduuid
+import nativehttp
 
 const
   # YANDEX_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.88 Safari/537.36"
@@ -42,34 +42,7 @@ proc buildBody(self: YandexTranslateObj, text, src, trg: string): string =
   return body.encodeQuery
 
 proc fetchCookies(self: YandexTranslateObj) {.async.} =
-  var
-    req = new(HttpClientRequestRef, self.session, YANDEX_URI.getAddress.get)
-    resp: HttpClientResponseRef
-    prevLoc: string
-  for _ in 0..<10:
-    try:
-      resp = req.sendReq
-      if resp.status >= 300 and resp.status < 400:
-        let loc = resp.headers.getString("location")
-        let locUri = parseUri(loc)
-        if loc != prevLoc:
-          if req.session.isnil:
-            req.session = self.session
-          let res = req.redirect(locUri)
-          if res.isErr:
-            raiseTranslateError "Yandex redirect failed."
-          else:
-            req = res.get
-            # req.headers.set HostHeader, loc
-            prevLoc = loc
-        else:
-          break
-      else:
-        break
-    except CatchableError:
-      ensureClosed(req, resp)
-      req = new(HttpClientRequestRef, self.session, YANDEX_URI.getAddress.get)
-  defer: ensureClosed(req, resp)
+  let resp = await get(YANDEX_URI, redir=true)
   if resp.isnil:
     raiseTranslateError "Yandex fetch cookies failed."
   self.cookie[].setLen 0
@@ -82,7 +55,6 @@ proc translate*(self: YandexTranslateObj, text, src, trg: string): Future[
     self.ucidStr[] = ($self.ucid.value).replace("-", "")
   let
     uri = self.buildUri
-    address = self.session.getAddress(uri).get
     body = self.buildBody(text, src, trg)
     headers = @[
       ("user-agent", YANDEX_USER_AGENT),
@@ -90,28 +62,21 @@ proc translate*(self: YandexTranslateObj, text, src, trg: string): Future[
       ("accept", "application/json"),
       ("content-type", "application/x-www-form-urlencoded"),
       ("content-length", $body.len)
-      ]
+      ].newHttpHeaders
 
-  let req = HttpClientRequestRef.new(
-    session = self.session, ha = address,
-    meth = MethodPost,
-    headers = headers, body = body.toOpenArrayByte(0, body.len - 1))
+  let resp = await post(uri, headers, body)
+  if resp.code != Http200:
+    raiseTranslateError "Yandex POST request error, response code {resp.code}".fmt
 
-  let resp = sendReq(req)
-  if resp.status != 200:
-    raiseTranslateError "Yandex POST request error, response code {resp.status}".fmt
-
-  let respJson = (bytesToString (await getBodyBytes resp)).parseJson
+  let respJson = resp.body.parseJson
   if respJson.kind != JObject or "text" notin respJson or respJson["text"].len == 0:
     raiseTranslateError "Yandex respone has no translation."
   return respJson["text"][0].to(string)
 
-proc init*(_: typedesc[YandexTranslateObj],
-    timeout = DEFAULT_TIMEOUT): YandexTranslateObj =
-  let base = init(TranslateObj, timeout = timeout)
+proc init*(_: typedesc[YandexTranslateObj]): YandexTranslateObj =
+  let base = init(TranslateObj)
   var srv = YandexTranslateObj()
   srv.kind = yandex
-  srv.session = base.session
   srv.maxQuerySize = base.maxQuerySize
   srv.ucid = CachedUUID()
   srv.ucidStr = new(string)
@@ -119,6 +84,7 @@ proc init*(_: typedesc[YandexTranslateObj],
   return srv
 
 when isMainModule:
+  initHttp()
   ydx = create(YandexTranslateObj)
   ydx[] = init(YandexTranslateObj)
   let s = "This is a good day."

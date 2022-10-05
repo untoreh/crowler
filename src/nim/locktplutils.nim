@@ -18,7 +18,7 @@ when declared(LockTable):
   proc popWait*[K, V](tbl: LockTable[K, V], k: K): Future[V] {.async.} =
     while true:
       if k in tbl:
-        assert tbl.pop(k, result)
+        doAssert tbl.pop(k, result)
         break
       else:
         sleep()

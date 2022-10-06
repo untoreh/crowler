@@ -553,15 +553,19 @@ class Site:
         def clear_topic(topic):
             arts = self.load_articles(topic=topic)
             for n, a in enumerate(arts):
-                if a is not dict or a.get("topic", "") != topic:
-                    arts[n] = None
+                if a is not dict:
+                    atp = a.get("topic", "")
+                    if atp and atp != topic:
+                        arts[n] = None
 
             done = self.load_done(topic)
             for n in range(len(done)):
                 page_arts = done[n]
                 for n, a in enumerate(page_arts):
-                    if a is not dict or a.get("topic", "") != topic:
-                        page_arts[n] = None
+                    if a is not dict:
+                        atp = a.get("topic", "")
+                        if atp and atp != topic:
+                            page_arts[n] = None
         try:
             if topic == "all":
                 for topic in self.load_topics()[1].keys():

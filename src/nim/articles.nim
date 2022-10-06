@@ -74,6 +74,30 @@ proc getDoneArticles*(topic: string, pagenum: int, rev=true): Future[seq[Article
             else:
               addArt(arts)
 
+iterator allDoneContent*(topic: string): string =
+  ## Iterate over all published content of one topic.
+  let lastPage = waitFor lastPageNum(topic)
+  var grp: PyObject
+  var arts: PyObject
+  syncPyLock:
+    grp = site[].topic_group(topic)
+  for p in 1..lastPage:
+    var pageLen = 0
+    syncPyLock:
+      arts = pyget(grp, $topicData.done / $p, PyNone)
+      if not (arts.isnil or pyisnone(arts)):
+        pageLen = arts.len
+    if pageLen == 0:
+      continue
+    var content: string
+    for n in 0..<pageLen:
+      syncPyLock:
+        let data = arts[n]
+        if data.isValidArticlePy:
+          content = pyget(data, "content", "")
+      if content.len > 0:
+        yield content
+
 
 proc getLastArticles*(topic: string, n = 1): Future[seq[Article]] {.async.} =
   ## Return the latest articles, from newest to oldest (index 0 is newest)
@@ -164,4 +188,6 @@ proc deleteArt*(capts: UriCaptures, cacheOnly=false) {.async, gcsafe.} =
             pageArts[n] = PyNone
 
 when isMainModule:
-  echo waitFor getLastArticles("mini", 3)
+  # echo waitFor getLastArticles("mini", 3)
+  for cnt in allDoneContent("mini"):
+    continue

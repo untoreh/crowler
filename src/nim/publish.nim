@@ -144,6 +144,18 @@ proc filterDuplicates(topic: string, lsh: PublishedArticles, pagenum: int,
     discard site[].save_done(topic, nProcessed, donePy[], pagenum)
   return true
 
+proc ensureLS(topic: string): Future[PublishedArticles] {.async, raises: [].} =
+  try:
+    result = await loadLS(topic)
+  except:
+    warn "Failed to load lsh for topic {topic}. Rebuilding..."
+    result = initLS()
+    try:
+      for cnt in allDoneContent(topic):
+        discard await addArticle(result, cnt)
+    except:
+      warn "Failed to rebuild lsh for topic {topic}. Proceeding anyway."
+
 proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   ##  Generates html for a list of `Article` objects and writes to file.
   withPyLock:
@@ -156,7 +168,7 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   # The subdir (at $pagenum) at this point must be already present on storage
   let pagedir = topic / $pagenum
 
-  let lsh = await loadLS(topic)
+  let lsh = await ensureLS(topic)
   let startTime = getTime()
   var
     posts: seq[(VNode, Article)]

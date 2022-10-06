@@ -81,7 +81,7 @@ iterator allDoneContent*(topic: string): string =
   var arts: PyObject
   syncPyLock:
     grp = site[].topic_group(topic)
-  for p in 1..lastPage:
+  for p in 0..<lastPage:
     var pageLen = 0
     syncPyLock:
       arts = pyget(grp, $topicData.done / $p, PyNone)
@@ -98,6 +98,48 @@ iterator allDoneContent*(topic: string): string =
       if content.len > 0:
         yield content
 
+proc isEmptyPage*(topic: string, pn: int, locked: static[bool]): Future[bool] {.async.} =
+  let pg = await topicPage(topic, pn, locked)
+  withPyLock(locked):
+    if pg.len == 0:
+      result = true
+    else:
+      for a in pg:
+        if a.isValidArticlePy:
+          result = false
+          break
+
+proc nextPageNum*(topic: string, pn: int, last: int): Future[int] {.async.} =
+  if pn < 0 or pn >= last:
+    return pn
+  var next = pn
+  withPyLock:
+    let pages = await topicDonePages(topic, false)
+    while next <= last:
+      next.inc
+      if not (await isEmptyPage(topic, next)):
+        return next
+    return pn
+
+proc nextPageNum*(topic: string, pn: int): Future[int] {.async.} =
+  let last = await lastPageNum(topic)
+  return await nextPageNum(topic, pn, last)
+
+proc prevPageNum*(topic: string, pn: int, last: int): Future[int] {.async.} =
+  if pn <= 0 or pn > last:
+    return last
+  var prev = pn
+  withPyLock:
+    let pages = await topicDonePages(topic, false)
+    while prev >= 0:
+      prev.dec
+      if not (await isEmptyPage(topic, prev)):
+        return prev
+    return pn
+
+proc prevPageNum*(topic: string, pn: int): Future[int] {.async.} =
+  let last = await lastPageNum(topic)
+  return await prevPageNum(topic, pn, last)
 
 proc getLastArticles*(topic: string, n = 1): Future[seq[Article]] {.async.} =
   ## Return the latest articles, from newest to oldest (index 0 is newest)
@@ -189,5 +231,6 @@ proc deleteArt*(capts: UriCaptures, cacheOnly=false) {.async, gcsafe.} =
 
 when isMainModule:
   # echo waitFor getLastArticles("mini", 3)
-  for cnt in allDoneContent("mini"):
-    continue
+  # for cnt in allDoneContent("mini"):
+  #   continue
+  echo waitFor nextPageNum("mini", 2)

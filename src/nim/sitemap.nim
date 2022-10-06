@@ -3,6 +3,7 @@ import strformat,
        uri,
        sugar,
        chronos
+from strutils import parseInt
 
 import cfg,
        types,
@@ -132,7 +133,8 @@ proc buildTopicPagesSitemap*(topic: string): Future[XmlNode] {.async.} =
         # add the most recent articles first (pages with higher idx)
         let pages = pybi[].list(done.keys()).to(seq[string])
         for n in countDown(pages.len - 1, 0):
-          discard sitemapUrl(topic, pages[n]).sitemapEl
+          if not (await isEmptyPage(topic, pages[n].parseInt, false)):
+            discard sitemapUrl(topic, pages[n]).sitemapEl
 
 template addArticleToFeed() =
   template baseUrl(): untyped =
@@ -234,6 +236,7 @@ proc sitemapLinks*(topic="", ar = emptyArt): seq[VNode] =
 when isMainModule:
   initPy()
   initcache()
+  echo waitFor buildTopicPagesSitemap("mini")
   # syncPyLock:
     # echo n
   # pageCache[].

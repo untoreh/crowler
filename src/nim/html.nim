@@ -423,9 +423,9 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): Future[
             a:
               text "Next page >>"
           else:
-            let nextPageNum = pn + 1
-            a(href = (topic_path / (if nextPageNum ==
-                    lpn: "" else: nextPageNum.intToStr))):
+            let npn = await nextPageNum(topic, pn, lpn)
+            a(href = (topic_path / (if npn ==
+                    lpn: "" else: $npn))):
               text "Next page >>"
 
 const pageContent* = postContent

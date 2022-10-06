@@ -36,6 +36,9 @@ proc lastPageNum*(topic: string): Future[int] {.async.} =
   withPyLock:
     result = lastPageNumImpl(topic)
 
+
+
+
 # quirks imported toplevel
 import strutils
 export nimpy
@@ -131,16 +134,16 @@ proc getTopicGroup*(topic: string): Future[ptr PyObject] {.async.} =
     result = create(PyObject)
     result[] = site[].topic_group(topic)
 
-proc topicDonePages*(topic: string): Future[PyObject] {.async.} =
-  withPyLock:
+proc topicDonePages*(topic: string, locked: static[bool] = true): Future[PyObject] {.async.} =
+  withPyLock(locked):
     return site[].topic_group(topic)[$topicData.done]
 
 proc topicPages*(topic: string): Future[PyObject] {.async.} =
   withPyLock:
     return site[].topic_group(topic)[$topicData.pages]
 
-proc topicPage*(topic: string, page = -1): Future[PyObject] {.async.} =
-  withPyLock:
+proc topicPage*(topic: string, page = -1, locked: static[bool] = true): Future[PyObject] {.async.} =
+  withPyLock(locked):
     let pagenum = if page < 0: lastPageNumImpl(topic) else: page
     result = site[].topic_group(topic)[$topicData.done][pagenum]
 
@@ -179,6 +182,7 @@ proc publishedArticles*[V](topic: string, attr: string = ""): Future[seq[(
         else:
           v = default(V)
       result.add (art, v)
+
 
 proc fetch*(t: Topics, k: string): Future[TopicState] {.async.} =
   return t.lgetOrPut(k):
@@ -253,7 +257,10 @@ proc syncTopics*(force = false) {.gcsafe, async.} =
 
 when isMainModule:
   initPy()
-  discard synctopics()
+  waitFor synctopics()
+  let tp = waitFor topicPages("mini")
+  syncpylock:
+    echo tp[1]
   # let v = waitFor topicPage("mini")
   # syncPyLock:
     # echo v[0]

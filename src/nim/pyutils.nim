@@ -50,6 +50,13 @@ template syncPyLock*(code): auto =
         finally:
             pygil.release()
 
+template withPyLock*(flag: static[bool], code) =
+  when flag:
+    withPyLock:
+      code
+  else:
+    code
+
 template fPyLocked*(code) =
     {.locks: [pyGil].}:
       code

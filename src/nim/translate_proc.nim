@@ -225,6 +225,7 @@ proc spawnAndMonitor() {.async.} =
   var loggerThread: Thread[Process]
   proc logger(p: Process) =
     let stream = p.peekableOutputStream
+    defer: stream.close
     while p.running:
       let ln = stream.readLine
       info "translate_proc: {ln}"

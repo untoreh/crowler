@@ -793,14 +793,23 @@ import faststreams/[inputs, outputs]
 proc readFileAsync*(file: string): Future[string] {.async.} =
   var data: seq[byte]
   let handler = memFileInput(file)
+  defer: handler.close()
+
   data.setLen(handler.s.len.get())
-  discard Async(handler).readInto(data)
+  let ahandler = Async(handler)
+  defer: await ahandler.closeAsync()
+
+  discard ahandler.readInto(data)
   return data.toString
 
 proc writeFileAsync*[T](path: string, data: T) {.async.} =
   let handler = fileOutput(path)
   defer: handler.close()
-  handler.write(data)
+
+  let ahandler = Async(handler)
+  defer: await ahandler.closeAsync()
+
+  ahandler.writeAndWait(data)
 
 proc innerText*(n: VNode): string =
   if result.len > 0: result.add '\L'

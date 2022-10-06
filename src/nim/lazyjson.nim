@@ -68,7 +68,9 @@ proc jsonItems[F](r: var JsonReader[F], keys: var seq[JsonNode]): JsonNode =
 
 proc getJsonVal[T](s: Buffer, revkeys: var seq[JsonNode]): T =
     # `revkeys` are supposed to be already reversed since we `pop`
-    var reader = init(JsonReader[DefaultFlavor], s.unsafeMemoryInput)
+    let input = s.unsafeMemoryInput
+    defer: input.close()
+    var reader = init(JsonReader[DefaultFlavor], input)
     return reader.jsonItems(revkeys).to(T)
 
 template getJsonVal*[T](s: auto, keys: static[string]): T =
@@ -87,3 +89,9 @@ template getJsonVal*[T](s: auto, keys: static[string]): T =
 proc getJsonVal*(s: Buffer,
                 keys: static string): JsonNode = getJsonVal[JsonNode](
         s, keys)
+
+when isMainModule:
+  import json
+  let j = newJObject()
+  j["wow"] = %*{"asd": {"nice": "eheh"}}
+  echo getJsonVal[JsonNode]($j, "wow.asd.nice")

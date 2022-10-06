@@ -20,7 +20,6 @@ import strformat,
        scorper/http/[httpcore, httpcommonheaders],
        std/cpuinfo,
        json,
-       faststreams/inputs,
        locktplasync
 
 {.experimental: "caseStmtMacros".}

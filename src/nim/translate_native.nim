@@ -1,4 +1,4 @@
-import std/[monotimes, parsexml, streams, uri, hashes]
+import std/[monotimes, parsexml, uri, hashes]
 import chronos
 
 import

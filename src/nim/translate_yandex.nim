@@ -1,4 +1,4 @@
-import std/[parsexml, streams, uri, httpcore, strformat, strutils, json]
+import std/[parsexml, uri, httpcore, strformat, strutils, json]
 import std/times except seconds, milliseconds
 import chronos
 from chronos/timer import seconds, milliseconds

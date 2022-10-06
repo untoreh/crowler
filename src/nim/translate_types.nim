@@ -170,10 +170,10 @@ var glues {.threadvar.}: seq[(string, Regex)]
 var gluePadding*: int
 
 let defaultGlues = [
+    (" #|#|# ", re"\s?#\s?\|\s?#\s?\|\s?#\s?"),
     (" \n[[...]]\n ", re"\s?\n?\[\[?\.\.\.\]\]?\n?"),
     (" <<...>> ", re"\s?<\s?<\s?\.\s?\.\s?\.\s?>\s?>\s?"),
     (" %¶%¶% ", re"\%\s\¶\s?\%\s?\¶\s?\%\s?"),
-    (" #|#|# ", re"\s?#\s?\|\s?#\s?\|\s?#\s?")
     ]
 
 var glueTracker*: array[4, int]

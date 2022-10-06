@@ -34,7 +34,7 @@ type
           buffersrc = "output_buffer"
 
 when defined(gcDestructors):
-  proc `=destroy`(c: var IFLContext) {.nimcall.} =
+  proc `=destroy`*(c: var IFLContext) {.nimcall.} =
     imageflow_context_destroy(c.p)
 
 const

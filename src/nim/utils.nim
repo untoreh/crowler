@@ -903,7 +903,7 @@ type
   Compressor = ptr CompressorObj
 
 when defined(gcDestructors):
-  proc `=destroy`(c: var CompressorObj) {.nimcall.} =
+  proc `=destroy`*(c: var CompressorObj) {.nimcall.} =
     if not c.zstd_c.isnil:
       discard free_context(c.zstd_c)
     if not c.zstd_d.isnil:

@@ -11,6 +11,11 @@ type
   PublishedArticles* = ptr PublishedArticlesObj
 var lshThread: Thread[void]
 
+proc `destroy=`*(lsh: PublishedArticles) =
+    if not lsh.isnil:
+      reset(lsh[])
+      dealloc(lsh)
+
 proc getLSPath(topic: string): string =
   DATA_PATH / "sites" / WEBSITE_NAME / "topics" / topic / "lsh"
 
@@ -119,11 +124,12 @@ proc startLsh*() =
 
 when isMainModule:
   startLsh()
-  let lsh = initLS()
-  var a = Article()
-  a.content = "test"
-  echo waitFor lsh.addArticle(a.content)
-  echo waitFor lsh.addArticle(a.content)
-  echo waitFor lsh.addArticle(a.content)
-  lsh[].remove("1")
+  let lsh = waitFor loadLS("mini")
+  echo lsh.repr
+  # var a = Article()
+  # a.content = "test"
+  # echo waitFor lsh.addArticle(a.content)
+  # echo waitFor lsh.addArticle(a.content)
+  # echo waitFor lsh.addArticle(a.content)
+  # lsh[].remove("1")
   # echo id

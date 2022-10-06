@@ -38,7 +38,7 @@ converter derefCollection*(c: CollectionNotNil): Collection not nil =
         raise newException(ValueError, "Couldn't convert collection.")
 
 when defined(gcDestructors):
-    proc `=destroy`(t: var LRUTransObj) {.nimcall.} =
+    proc `=destroy`*(t: var LRUTransObj) {.nimcall.} =
         if not t.zstd_c.isnil:
             discard free_context(t.zstd_c)
         if not t.zstd_d.isnil:

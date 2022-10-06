@@ -89,7 +89,7 @@ proc asyncImgHandler() {.async.} =
     while true:
       let imgKey = await imgIn.popFirstWait
       asyncSpawn processImgData(imgKey)
-  except CatchableError:
+  except:
     let e = getCurrentException()[]
     warn "imageflow: image handler crashed. {e}"
     quit()
@@ -110,7 +110,7 @@ proc startImgFlow*() =
     reset(imgLock[])
     imgLock[] = newAsyncLock()
     createThread(iflThread, imgHandler)
-  except CatchableError as e:
+  except Exception as e:
     warn "Could not init imageflow! \n {e[]}"
     quit()
 

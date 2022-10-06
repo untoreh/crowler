@@ -311,7 +311,7 @@ proc pubAllPages(topic: string, clear = true) {.async.} =
 #     # resetTopic("vps")
 #     # resetTopic("dedi")
 #     dopublish(topic)
-#     quit()
+#     quit!()
 #     let
 #         topdir = 0
 #         pagecount = pageSize(topic, topdir)

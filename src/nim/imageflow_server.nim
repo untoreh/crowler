@@ -92,7 +92,7 @@ proc asyncImgHandler() {.async.} =
   except:
     let e = getCurrentException()[]
     warn "imageflow: image handler crashed. {e}"
-    quit()
+    quit!()
 
 proc imgHandler*() =
   initImageFlow() # NOTE: this initializes thread vars
@@ -112,7 +112,7 @@ proc startImgFlow*() =
     createThread(iflThread, imgHandler)
   except Exception as e:
     warn "Could not init imageflow! \n {e[]}"
-    quit()
+    quit!()
 
 # import guildenstern/ctxheader
 # proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =

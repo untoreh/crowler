@@ -27,6 +27,13 @@ export nre, tables
 
 static: echo "loading utils..."
 
+template procName*(): string = strutils.split(getStacktrace())[^2]
+
+template `quit!`() =
+  echo "!!!quitting!!!"
+  echo procName()
+  quti()
+
 type kstring = string
 const baseUri* = initUri()
 
@@ -57,7 +64,6 @@ template withWaitLock*(l: AsyncLock, code) =
   finally:
     l.release()
 
-template procName*(): string = strutils.split(getStacktrace())[^2]
 
 template lgetOrPut*[T, K](c: T, k: K, v: untyped): untyped =
   ## Lazy `mgetOrPut`
@@ -108,7 +114,7 @@ template sdebug*(code) =
 
 template qdebug*(code) =
   try: debug code
-  except: quit()
+  except: quit!()
 
 template warn*(code: untyped): untyped =
   when logLevelMacro <= lvlWarn:

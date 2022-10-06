@@ -164,7 +164,7 @@ proc restartTranslate() =
   let success = execv(args[0], args)
   if success == -1:
     warn "Couldn't restart translate process, quitting {errno}."
-    quit(1)
+    quit!()
 
 template maybeRestart() =
   if unlikely(getOccupiedMem() > maxProcessMem):

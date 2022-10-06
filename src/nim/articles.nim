@@ -100,7 +100,7 @@ iterator allDoneContent*(topic: string): string =
 
 proc isEmptyPage*(topic: string, pn: int, locked: static[bool]): Future[bool] {.async.} =
   let pg = await topicPage(topic, pn, locked)
-  withPyLock(locked):
+  togglePyLock(locked):
     if pg.len == 0:
       result = true
     else:
@@ -113,11 +113,11 @@ proc nextPageNum*(topic: string, pn: int, last: int): Future[int] {.async.} =
   if pn < 0 or pn >= last:
     return pn
   var next = pn
-  withPyLock:
+  togglePyLock(true):
     let pages = await topicDonePages(topic, false)
     while next <= last:
       next.inc
-      if not (await isEmptyPage(topic, next)):
+      if not (await isEmptyPage(topic, next, false)):
         return next
     return pn
 
@@ -129,11 +129,11 @@ proc prevPageNum*(topic: string, pn: int, last: int): Future[int] {.async.} =
   if pn <= 0 or pn > last:
     return last
   var prev = pn
-  withPyLock:
+  togglePyLock(true):
     let pages = await topicDonePages(topic, false)
     while prev >= 0:
       prev.dec
-      if not (await isEmptyPage(topic, prev)):
+      if not (await isEmptyPage(topic, prev, false)):
         return prev
     return pn
 

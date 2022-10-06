@@ -135,7 +135,7 @@ proc getTopicGroup*(topic: string): Future[ptr PyObject] {.async.} =
     result[] = site[].topic_group(topic)
 
 proc topicDonePages*(topic: string, locked: static[bool] = true): Future[PyObject] {.async.} =
-  withPyLock(locked):
+  togglePyLock(locked):
     return site[].topic_group(topic)[$topicData.done]
 
 proc topicPages*(topic: string): Future[PyObject] {.async.} =
@@ -143,7 +143,7 @@ proc topicPages*(topic: string): Future[PyObject] {.async.} =
     return site[].topic_group(topic)[$topicData.pages]
 
 proc topicPage*(topic: string, page = -1, locked: static[bool] = true): Future[PyObject] {.async.} =
-  withPyLock(locked):
+  togglePyLock(locked):
     let pagenum = if page < 0: lastPageNumImpl(topic) else: page
     result = site[].topic_group(topic)[$topicData.done][pagenum]
 

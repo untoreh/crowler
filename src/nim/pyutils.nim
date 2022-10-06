@@ -28,7 +28,7 @@ pygil.globalAcquire()
 let pyGlo* = pyGlobals()
 pygil.release()
 
-template withPyLock*(code): auto =
+template withPyLock*(code): untyped =
     {.locks: [pyGil].}:
         try:
             # echo getThreadId(), " -- ", getCurrentProcessId(), " -- ", procName()
@@ -50,10 +50,9 @@ template syncPyLock*(code): auto =
         finally:
             pygil.release()
 
-template withPyLock*(flag: static[bool], code) =
+template togglePyLock*(flag: static[bool] = true; code): untyped =
   when flag:
-    withPyLock:
-      code
+    withPyLock(code)
   else:
     code
 
@@ -231,7 +230,7 @@ proc initPy*() =
             PyNone = pybi[].getattr("None")
         except:
             echo "Can't initialize PyNone"
-            quit()
+            quit!()
 
 pygil.globalAcquire()
 let pyslice = create(PyObject)

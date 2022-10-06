@@ -121,8 +121,8 @@ proc initTypes*() =
     try:
       let e = getCurrentException()[]
       stdout.write fmt"types: failed to initialize default article {e}\n"
-      quit()
-    except: quit()
+      quit!()
+    except: quit!()
   finally:
     pygil.release()
 

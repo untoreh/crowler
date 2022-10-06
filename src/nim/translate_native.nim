@@ -108,7 +108,7 @@ when not defined(translateProc):
     except: # If we quit we can catch defects too.
       let e = getCurrentException()[]
       warn "trans: trans handler crashed. {e}"
-      quit()
+      quit!()
 
   proc startTranslate*() =
     setupTranslate()

@@ -111,7 +111,7 @@ proc asyncLshHandler() {.async.} =
   except: # If we quit we can catch defects too.
     let e = getCurrentException()[]
     warn "lsh: lsh handler crashed. {e}"
-    quit()
+    quit!()
 
 proc lshHandler() = waitFor asyncLshHandler()
 

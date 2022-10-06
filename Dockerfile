@@ -24,10 +24,10 @@ RUN curl -L https://github.com/ginuerzh/gost/releases/download/v${GOST_V}/gost-l
 
 FROM gost AS nimrt
 RUN apt -y install git lld file
+# This should install nim version 1.6.x
 RUN curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
 RUN echo PATH=/root/.nimble/bin:\$PATH >> /root/.profile
 RUN ln -sr /root/.choosenim/toolchains/*/tools /root/.nimble
-RUN ~/.nimble/bin/choosenim "#version-1-6"
 RUN bash -c "$(curl -fsSL https://gef.blah.cat/sh)"
 # required by gef
 RUN apt update -y; apt -y install locales; \
@@ -55,7 +55,7 @@ VOLUME ["/site/data"]
 
 FROM siteenv AS sitedeps1
 # install nimterop separately
-ARG CLEARCACHE=2
+ARG CLEARCACHE=1
 RUN curl http://ftp.de.debian.org/debian/pool/main/o/openssl/libssl1.1_1.1.1n-0+deb11u3_amd64.deb --output libssl.deb && \
     dpkg -i libssl.deb && \
     rm libssl.deb

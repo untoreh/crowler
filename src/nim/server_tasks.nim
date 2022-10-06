@@ -34,7 +34,7 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
     n = prevSize
   except CatchableError as e:
     warn "pubtask: init failed with error {e[]}"
-    quit()
+    quit!()
   while true:
     try:
       if n <= 0:

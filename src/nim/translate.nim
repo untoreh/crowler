@@ -356,4 +356,4 @@ when defined(weaveRuntime):
 #     #         discard translateHtml(html, file_path, url_path, pair, slator)
 
 when isMainModule:
-  initThread()
+  initTranslate()

@@ -85,15 +85,16 @@ var
   reqCompleteEQ: ptr AsyncEventQueue[ref ReqContext]
   reqEventQK: ptr EventQueueKey
 
-proc initThreadBase*() {.gcsafe.} =
+proc initThreadBase() {.gcsafe.} =
   initPy()
   initTypes()
   initLogging()
 
-proc initThread*() {.gcsafe.} =
+proc initThreadImpl() {.gcsafe.} =
   if threadInitialized:
     return
   initThreadBase()
+  initSonic() # Must be on top
   initHttp()
   initPyHttp()
   initHtml()
@@ -101,7 +102,6 @@ proc initThread*() {.gcsafe.} =
   initFeed()
   startImgFlow()
   startLsh()
-  initSonic()
   initMimes()
 
   initAmp()
@@ -120,6 +120,12 @@ proc initThread*() {.gcsafe.} =
 
   threadInitialized = true
 
+proc initThread*() =
+  try:
+    initThreadImpl()
+  except Exception as e:
+    warn "Failed to init thread! {e[]}"
+    quit!()
 
 template setEncoding() {.dirty.} =
   let rqHeaders = reqCtx.rq[rqid].headers
@@ -574,7 +580,7 @@ proc runScorper(address, callback: auto) =
     if not srv.isnil:
       waitFor srv.join()
   except Defect:
-    quit()
+    quit!()
 
 proc startServer*(doclear = false, port = 0, loglevel = "info") =
 

@@ -138,6 +138,8 @@ def suggest(topic: str):
         kws = [topic]
         while len(sugs) < 20:
             s = _KEYWORDS.suggest(kws[:20], langloc=None)
+            if len(s) == 0:
+                break
             sugs.extend(s)
             kws = s
     return list(dict.fromkeys(sugs))  ## dedup

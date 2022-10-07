@@ -92,7 +92,7 @@ proc fetchBingConfig(self: BingTranslateObj, userAgent = USER_AGENT): Future[
       resp = await get(url, headers, redir=false)
       # if resp.isnil and resp.code.int < 300 or resp.code.int >= 400:
       #   break
-      if resp.isnil:
+      if resp.code.int == 0:
         continue
       elif resp.code.is3xx:
         let loc = resp.headers.table.getOrDefault("location")

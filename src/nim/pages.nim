@@ -165,6 +165,7 @@ proc processPage*(lang, amp: string, tree: VNode not nil,
       tpath = filedir / lang / relpath
     var fc = initFileContext(tree, filedir, relpath,
           (src: SLang.code, trg: lang), tpath)
+    defer: free(fc)
     checkNil(fc)
     debug "page: translating page to {lang}"
     try:

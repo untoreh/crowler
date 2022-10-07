@@ -74,7 +74,7 @@ proc getDoneArticles*(topic: string, pagenum: int, rev=true): Future[seq[Article
             else:
               addArt(arts)
 
-iterator allDoneContent*(topic: string): string =
+iterator allDoneContent*(topic: string): ptr string =
   ## Iterate over all published content of one topic.
   let lastPage = waitFor lastPageNum(topic)
   var grp: PyObject
@@ -89,13 +89,17 @@ iterator allDoneContent*(topic: string): string =
         pageLen = arts.len
     if pageLen == 0:
       continue
-    var content: string
+    let empty = create(string)
+    var content: ptr string
+    defer: free(empty)
     for n in 0..<pageLen:
+      content = empty
       syncPyLock:
         let data = arts[n]
         if data.isValidArticlePy:
-          content = pyget(data, "content", "")
-      if content.len > 0:
+          content = create(string)
+          content[] = pyget(data, "content", "")
+      if content[].len > 0:
         yield content
 
 proc isEmptyPage*(topic: string, pn: int, locked: static[bool]): Future[bool] {.async.} =

@@ -1,4 +1,4 @@
-import std/[importutils, strutils, marshal, tables, algorithm, os, monotimes, strformat], chronos,
+import std/[importutils, strutils, marshal, tables, sets, algorithm, os, monotimes, strformat], chronos,
     minhash {.all.}
 
 import cfg, types, utils
@@ -10,11 +10,6 @@ type
   PublishedArticlesObj = LocalitySensitive[uint64]
   PublishedArticles* = ptr PublishedArticlesObj
 var lshThread: Thread[void]
-
-proc `destroy=`*(lsh: PublishedArticles) =
-    if not lsh.isnil:
-      reset(lsh[])
-      dealloc(lsh)
 
 proc getLSPath(topic: string): string =
   DATA_PATH / "sites" / WEBSITE_NAME / "topics" / topic / "lsh"
@@ -31,12 +26,18 @@ proc saveLSImpl(topic: string, lsh: PublishedArticlesObj) {.async.} =
   let path = getLSPath(topic)
   createDir(path)
   let lshJson = $$lsh
-  await writeFileAsync(path / "lsh.json.zst", compress(lshJson))
+  let comp = compress(lshJson)
+  await writeFileAsync(path / "lsh.json.zst", comp)
 
-proc saveLS*(topic: string, lsh: PublishedArticles) {.async.} =
+proc saveLS*(topic: string, lsh: sink PublishedArticles) {.async.} =
   if lsh.isnil:
     raise newException(ValueError, "lsh can't be nil.")
   await saveLSImpl(topic, lsh[])
+
+proc free*(lsh: PublishedArticles) =
+  if not lsh.isnil:
+    reset(lsh[])
+    dealloc(lsh)
 
 proc toLsh(data: string): PublishedArticlesObj =
   result = to[PublishedArticlesObj](data)
@@ -81,45 +82,66 @@ proc loadLS*(topic: string): Future[PublishedArticles] {.async.} =
     return initLS()
 
 # these should be generalized since it's the same from `imageflow_server`
-var lshIn*: LockDeque[(MonoTime, PublishedArticles, string)]
+var lshIn*: LockDeque[(MonoTime, PublishedArticles, ptr string)]
 var lshOut*: LockTable[(MonoTime, PublishedArticles), bool]
+var ptrTracker*: ptr HashSet[pointer] # Ensures lshIn doesn't have clashing pointers since we pass string pointers
 
-proc addArticle*(lsh: PublishedArticles, content: string): Future[bool] {.async.} =
+proc addArticle*(lsh: PublishedArticles, content: ptr string): Future[bool] {.async.} =
   let t = getMonoTime()
   lshIn.addLast (t, lsh, content)
   return await lshOut.popWait((t, lsh))
 
-proc checkAndAddArticle(t: MonoTime, lsh: PublishedArticles, content: string) {.async.} =
+{.experimental: "strictnotnil".}
+proc checkAndAddArticle(t: MonoTime, lsh: PublishedArticles, content: ptr string not nil) {.async.} =
   let k = (t, lsh)
   try:
-    if not isDuplicate(lsh[], content):
+    if not isDuplicate(lsh[], content[]):
       let id = $(len(lsh.fingerprints) + 1)
-      lsh[].add(content, id)
+      lsh[].add(content[], id)
       lshOut[k] = true
     else:
       lshOut[k] = false
-  except CatchableError as e:
-    warn "lsh: error adding article {e[]}."
+  except Exception as e:
     lshOut[k] = false
+    if not e.isnil:
+      echo e[]
+    warn "lsh: error adding article."
 
 proc asyncLshHandler() {.async.} =
   try:
+    var
+      t: MonoTime
+      lsh: PublishedArticles
+      content: ptr string
     while true:
-      let (t, lsh, content) = await lshIn.popFirstwait
+      (t, lsh, content) = await lshIn.popFirstwait
+      if content in ptrTracker[]:
+        warn "Clashing pointers found during processing lsh content."
+        continue
       checkNil(lsh):
-        asyncSpawn checkAndAddArticle(t, lsh, content)
-  except: # If we quit we can catch defects too.
-    let e = getCurrentException()[]
-    warn "lsh: lsh handler crashed. {e}"
-    quit!()
+        checkNil(content):
+          asyncSpawn checkAndAddArticle(t, lsh, content)
+  except Exception as e: # If we quit we can catch defects too.
+    if not e.isnil:
+      echo e[]
+    warn "lsh: lsh handler crashed."
 
-proc lshHandler() = waitFor asyncLshHandler()
+proc lshHandler() =
+  while true:
+    waitFor asyncLshHandler()
+    sleep(1000)
+    warn "Restarting lsh..."
+
+
 
 proc startLsh*() =
   setNil(lshIn):
-    initLockDeque[(MonoTime, PublishedArticles, string)]()
+    initLockDeque[(MonoTime, PublishedArticles, ptr string)]()
   setNil(lshOut):
     initLockTable[(MonoTime, PublishedArticles), bool]()
+  setNil(ptrTracker):
+    create(HashSet[pointer])
+  ptrTracker[] = initHashSet[pointer]()
   createThread(lshThread, lshHandler)
 
 when isMainModule:

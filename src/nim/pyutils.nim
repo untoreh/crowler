@@ -230,7 +230,7 @@ proc initPy*() =
             PyNone = pybi[].getattr("None")
         except:
             echo "Can't initialize PyNone"
-            quit!()
+            quit()
 
 pygil.globalAcquire()
 let pyslice = create(PyObject)

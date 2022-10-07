@@ -43,7 +43,7 @@ proc buildBody(self: YandexTranslateObj, text, src, trg: string): string =
 
 proc fetchCookies(self: YandexTranslateObj) {.async.} =
   let resp = await get(YANDEX_URI, redir=true)
-  if resp.isnil:
+  if resp.code.int == 0:
     raiseTranslateError "Yandex fetch cookies failed."
   self.cookie[].setLen 0
   self.cookie[].add resp.parseCookies

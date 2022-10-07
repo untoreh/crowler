@@ -16,11 +16,16 @@ proc getImpl(url: Uri, meth: HttpMethod, headers: HttpHeaders = nil,
              body = "", redir = true): Future[Response] {.async.} =
   ## NOTE: Response can be nil
   let rq = Request.new(url, meth, headers, body, redir)
+  defer: free(rq)
   let k = (getMonoTime(), rq)
   httpIn.addLast k
-  result = await httpOut.popWait(k)
-  if result.isnil:
+  let respPtr = await httpOut.popWait(k)
+  defer: dealloc(respPtr)
+  if respPtr.isnil:
     raise newException(RequestError, "GET request failed, response is nil.")
+  else:
+    result = respPtr[]
+
 
 proc request*(uri: Uri, meth = HttpGet, headers: HttpHeaders = nil,
                                body = "", redir = true, retries = 5): Future[Response] {.async.} =
@@ -28,7 +33,7 @@ proc request*(uri: Uri, meth = HttpGet, headers: HttpHeaders = nil,
   for r in 0..<retries:
     try:
       resp = await getImpl(uri, meth, headers, body, redir)
-      if resp.isnil or resp.headers.isnil:
+      if resp.headers.isnil:
         continue
       return resp
     except CatchableError:

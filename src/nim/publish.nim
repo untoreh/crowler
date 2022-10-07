@@ -112,7 +112,7 @@ proc filterDuplicates(topic: string, lsh: PublishedArticles, pagenum: int,
     return false
   clear(pageset)
   for a in arts:
-    if await addArticle(lsh, a.content):
+    if await addArticle(lsh, a.content.unsafeAddr):
       # make sure article titles/slugs are unique
       var u = 1
       var uslug = a.slug
@@ -151,7 +151,11 @@ proc ensureLS(topic: string): Future[PublishedArticles] {.async, raises: [].} =
     warn "Failed to load lsh for topic {topic}. Rebuilding..."
     result = initLS()
     try:
+      var arts: seq[ptr string]
+      defer:
+        for cnt in arts: free(cnt)
       for cnt in allDoneContent(topic):
+        arts.add cnt
         discard await addArticle(result, cnt)
     except:
       warn "Failed to rebuild lsh for topic {topic}. Proceeding anyway."
@@ -169,6 +173,7 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   let pagedir = topic / $pagenum
 
   let lsh = await ensureLS(topic)
+  defer: free(lsh)
   let startTime = getTime()
   var
     posts: seq[(VNode, Article)]
@@ -311,7 +316,7 @@ proc pubAllPages(topic: string, clear = true) {.async.} =
 #     # resetTopic("vps")
 #     # resetTopic("dedi")
 #     dopublish(topic)
-#     quit!()
+#     quitl()
 #     let
 #         topdir = 0
 #         pagecount = pageSize(topic, topdir)

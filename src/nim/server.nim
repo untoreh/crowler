@@ -125,7 +125,7 @@ proc initThread*() =
     initThreadImpl()
   except Exception as e:
     warn "Failed to init thread! {e[]}"
-    quit!()
+    quitl()
 
 template setEncoding() {.dirty.} =
   let rqHeaders = reqCtx.rq[rqid].headers
@@ -579,8 +579,9 @@ proc runScorper(address, callback: auto) =
     warn "server: {e[]} \n restarting server..."
     if not srv.isnil:
       waitFor srv.join()
-  except Defect:
-    quit!()
+  except Defect as e:
+    warn "server: {e[]} \n quitting..."
+    quitl()
 
 proc startServer*(doclear = false, port = 0, loglevel = "info") =
 

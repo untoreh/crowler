@@ -17,23 +17,23 @@ type
   RequestError* = object of CatchableError
 
 type
-  RequestObj = object
+  Request* = object
     url*: Uri
     meth*: HttpMethod
     headers*: HttpHeaders
     body*: string
     redir*: bool
-  Request* = ptr RequestObj
+  RequestPtr* = ptr Request
 
-  ResponseObj* = object
+  Response* = object
     code*: HttpCode
     headers*: HttpHeaders
     body*: string
-  Response* = ptr ResponseObj
+  ResponsePtr* = ptr Response
 var
   httpThread: Thread[void]
-  httpIn*: LockDeque[(MonoTime, Request)]
-  httpOut*: LockTable[(MonoTime, Request), Response]
+  httpIn*: LockDeque[(MonoTime, RequestPtr)]
+  httpOut*: LockTable[(MonoTime, RequestPtr), ResponsePtr]
 
 proc hash(rq: Request): Hash = hash(rq.url)
 
@@ -48,10 +48,10 @@ proc wait[T](fut: Future[T], timeout: Duration): Future[T] {.async.} =
     else:
       await sleepAsync(1)
 
-proc new*(_: typedesc[Response]): Response = create(ResponseObj)
+proc new*(_: typedesc[Response]): ResponsePtr = create(Response)
 proc new*(_: typedesc[Request], url: Uri, met: HttpMethod = HttpGet,
-          headers: HttpHeaders = nil, body = "", redir = true): Request =
-  result = create(RequestObj)
+          headers: HttpHeaders = nil, body = "", redir = true): RequestPtr =
+  result = create(Request)
   result.url = url
   result.meth = met
   result.body = body
@@ -89,7 +89,7 @@ converter toSeq(headers: HttpHeaders): seq[(string, string)] =
 
 converter toHeaders(s: seq[(string, string)]): HttpHeaders = s.newHttpHeaders()
 
-proc doReq(t: MonoTime, rq: Request, timeout = 4000) {.async.} =
+proc doReq(t: MonoTime, rq: RequestPtr, timeout = 4000) {.async.} =
   let r = new(Response)
   let e = newException(RequestError, "Bad code.")
   var conn: AsyncSocket
@@ -149,7 +149,7 @@ proc httpHandler() =
 
 proc initHttp*() =
   setNil(httpIn):
-    initLockDeque[(MonoTime, Request)](100)
+    initLockDeque[(MonoTime, RequestPtr)](100)
   setNil(httpOut):
-    initLockTable[(MonoTime, Request), Response]()
+    initLockTable[(MonoTime, RequestPtr), ResponsePtr]()
   createThread(httpThread, httpHandler)

@@ -250,6 +250,9 @@ when defined(weaveRuntime):
         var jobs: seq[Flowvar[bool]]
         # Hold references of variables created inside the loop until all jobs have finished
         var ctxs: seq[ptr FileContext]
+        defer:
+          for fc in ctxs:
+            free(fc)
 
         for pair in langpairs:
             let
@@ -277,6 +280,8 @@ when defined(weaveRuntime):
         var jobs: seq[Flowvar[bool]]
         # Hold references of variables created inside the loop until all jobs have finished
         var ctxs: seq[ptr FileContext]
+        defer:
+          for fc in ctxs: free(fc)
 
         let getTargetPath = if targetPath == "": (pair: langPair) => file_path / pair.trg / url_path
                             else: (pair: langPair) => target_path / pair.trg / url_path

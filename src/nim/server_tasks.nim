@@ -32,9 +32,9 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
     # Only publish one topic every `CRON_TOPIC`
     prevSize = len(topicsCache)
     n = prevSize
-  except CatchableError as e:
+  except Exception as e:
     warn "pubtask: init failed with error {e[]}"
-    quit!()
+    quitl()
   while true:
     try:
       if n <= 0:
@@ -49,8 +49,10 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
       if topic != "":
         debug "pubtask: trying to publish {topic}"
         await maybePublish(topic):
-    except CatchableError as e:
-      debug "pubtask: failed with error {e[]}"
+    except Exception as e:
+      if not e.isnil:
+        echo e[]
+      warn "pubtask: failed!"
     await sleepAsync(cfg.CRON_TOPIC.seconds)
     n -= 1
 

@@ -209,6 +209,7 @@ proc query*(topic: string, keywords: string, lang: string = SLang.code,
   if unlikely(keywords.len == 0):
     return
   let msg = create(SonicMessageTuple)
+  defer: free(msg)
   msg.args.topic = topic
   msg.args.keywords = keywords
   msg.args.lang=  lang
@@ -221,6 +222,7 @@ proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[string]] {
   if unlikely(input.len == 0):
     return
   let msg = create(SonicMessageTuple)
+  defer: free(msg)
   msg.args.topic = topic
   msg.args.keywords = input
   # var dlang: string

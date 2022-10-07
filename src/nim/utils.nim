@@ -29,10 +29,11 @@ static: echo "loading utils..."
 
 template procName*(): string = strutils.split(getStacktrace())[^2]
 
-template `quit!`() =
+template quitl*() =
   echo "!!!quitting!!!"
+  writeStackTrace()
   echo procName()
-  quti()
+  quit()
 
 type kstring = string
 const baseUri* = initUri()
@@ -114,7 +115,7 @@ template sdebug*(code) =
 
 template qdebug*(code) =
   try: debug code
-  except: quit!()
+  except: quitl()
 
 template warn*(code: untyped): untyped =
   when logLevelMacro <= lvlWarn:
@@ -159,6 +160,11 @@ template setNil*(id, val) =
 template ifNil*(id, val) =
   if id.isnil:
     val
+
+proc free*[T](o: ptr[T]) =
+  if not o.isnil:
+    reset(o[])
+    dealloc(o)
 
 template checkTrue*(stmt: untyped, msg: string) =
   if not (stmt):
@@ -795,27 +801,35 @@ proc rewriteUrl*(el, rewritePath: auto, hostname = WEBSITE_DOMAIN) =
   # debug "old: {prev} new: {$uriVar}, {rewritePath}"
 
 
-import faststreams/[inputs, outputs]
+import faststreams
+# import faststreams/[inputs, outputs]
+proc readFileImpl(handle: InputStream): seq[byte] {.fsMultiSync.} =
+  defer: handle.close()
+  result.setLen(cast[InputStreamHandle](handle).s.len.get())
+  # let ahandler = Async(handle)
+  # defer: await ahandler.closeAsync()
+
+  discard handle.readInto(result)
+#
 proc readFileAsync*(file: string): Future[string] {.async.} =
-  var data: seq[byte]
-  let handler = memFileInput(file)
-  defer: handler.close()
+  let handle = Async memFileInput(file)
+  result = (await readFileImpl(handle)).toString
 
-  data.setLen(handler.s.len.get())
-  let ahandler = Async(handler)
-  defer: await ahandler.closeAsync()
+proc readFileFs*(file: string): string =
+  let handle = memFileInput(file)
+  result = readFileImpl(handle).toString
 
-  discard ahandler.readInto(data)
-  return data.toString
+proc writeFileImpl[T](handle: OutputStream, data: T) {.fsMultiSync.} =
+  defer: handle.close
+  handle.writeAndWait(data)
 
 proc writeFileAsync*[T](path: string, data: T) {.async.} =
-  let handler = fileOutput(path)
-  defer: handler.close()
+  let handle = Async fileOutput(path, allowAsyncOps=true)
+  await writeFileImpl(handle, data)
 
-  let ahandler = Async(handler)
-  defer: await ahandler.closeAsync()
-
-  ahandler.writeAndWait(data)
+proc writeFileFs*[T](path: string, data: T) =
+  let handle = fileOutput(path, allowAsyncOps=true)
+  writeFileImpl(handle, data)
 
 proc innerText*(n: VNode): string =
   if result.len > 0: result.add '\L'

@@ -74,6 +74,7 @@ proc translateLang*(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath
         "": "index.html" else: relpath)
                  else: targetPath
   var fc = initFileContext(tree, filedir, relpath, lang, t_path)
+  defer: free(fc)
   (await translateDom(fc))[1]
 
 proc translateLang*(fc: ptr FileContext, ar = emptyArt): Future[VNode] {.gcsafe, async.} =

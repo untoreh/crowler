@@ -5,6 +5,11 @@ import chronos/timer
 
 import types, pyutils, quirks, utils
 
+type Decode = enum no, yes
+converter asDec*(b: bool): Decode =
+  if b: Decode.yes
+  else: Decode.no
+
 pygil.globalAcquire()
 pyObjPtr((fetchData, ut[].getAttr("fetch_data")))
 pygil.release()
@@ -26,28 +31,28 @@ proc pywait(j: PyObject): Future[PyObject] {.async, gcsafe.} =
       else:
         raise newException(ValueError, "Python job failed.")
 
-proc pyReqGet(url: string): Future[string] {.async.} =
+proc pyReqGet(url: string, dodec: Decode): Future[string] {.async.} =
   var rdy: bool
   var res: string
   var j: PyObject
   withPyLock:
     {.cast(gcsafe).}:
-      j = pySched[].apply(fetchData[], url, decode=false)
+      j = pySched[].apply(fetchData[], url, decode=bool(dodec))
   let resp = await pywait(j)
   withPyLock:
     result = resp.to(string)
 
-var queue: LockDeque[(MonoTime, string)]
-var httpResults: LockTable[(MonoTime, string), string]
+var queue: LockDeque[(MonoTime, string, Decode)]
+var httpResults: LockTable[(MonoTime, string, Decode), string]
 var handler: ptr Future[void]
 
-proc requestTask(t: MonoTime, url: string) {.async.} =
+proc requestTask(t: MonoTime, url: string, decode: Decode) {.async.} =
   var v: string
   try:
-    v = await pyReqGet(url)
-  except CatchableError:
+    v = await pyReqGet(url, decode)
+  except:
     discard
-  httpResults[(t, url)] = v
+  httpResults[(t, url, decode)] = v
 
 
 import locktplutils
@@ -55,26 +60,27 @@ proc requestHandler() {.async.} =
   var
     t: MonoTime
     url: string
+    decode: Decode
   while true:
     try:
       while true:
-        (t, url) = await queue.popFirstWait()
-        asyncSpawn requestTask(t, url)
+        (t, url, decode) = await queue.popFirstWait()
+        asyncSpawn requestTask(t, url, decode)
     except Exception as e:
       warn "PyRequests handler crashed, restarting. {e[]}"
       await sleepAsync(1.seconds)
 
 proc initPyHttp*() {.gcsafe.} =
   setNil(queue):
-    initLockDeque[(MonoTime, string)]()
+    initLockDeque[(MonoTime, string, Decode)]()
   setNil(httpResults):
-    initLockTable[(MonoTime, string), string]()
+    initLockTable[(MonoTime, string, Decode), string]()
   setNil(handler):
     create(Future[void])
   handler[] = requestHandler()
 
-proc httpGet*(url: string): Future[string] {.async, raises: [Defect].} =
-  let k = (getMonoTime(), url)
+proc httpGet*(url: string, decode=Decode.yes): Future[string] {.async, raises: [Defect].} =
+  let k = (getMonoTime(), url, decode)
   queue.addLast(k)
   return await httpResults.popWait(k)
 

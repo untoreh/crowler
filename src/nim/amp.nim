@@ -47,23 +47,24 @@ var dupStyles: ptr HashSet[string] ## Don't duplicate styles that appear more th
 proc asLocalUrl(path: string): string {.inline.} =
   $(WEBSITE_URL / path.replace(SITE_PATH, ""))
 
-var fileUri {.threadvar.}: Uri
-var url {.threadvar.}: string
 proc getFile(path: string): Future[string] {.async.} =
   ## This does not actually read or save contents to storage, just holds an in memory cache
   ## and fetches from remove urls
   debug "amp: getting style file from path {path}"
+  var url: string
+  var fileUri: Uri
   try:
     result = filesCache[path]
   except KeyError:
     let filePath = DATA_PATH / "cache" / $hash(path) & splitFile(path).ext
     parseUri(path, fileUri)
-    if fileUri.scheme.isEmptyOrWhitespace:
-      url = path.asLocalUrl
-    else:
-      shallowCopy url, path
+    url =
+      if fileUri.scheme.isEmptyOrWhitespace:
+        path.asLocalUrl
+      else:
+        path
     debug "getfile: getting file content from {url}"
-    filesCache[path] = await httpGet(url)
+    filesCache[path] = await httpGet(url, decode=true)
     # filesCache[path] = (await fetch(HttpSessionRef.new(), parseUri(
     #     url))).data.bytesToString
     result = filesCache[path]
@@ -404,5 +405,8 @@ proc ampLink*(path: string): VNode {.gcsafe.} =
   deepCopy(ampLinkEl)
 
 # when isMainModule:
-#     let file = SITE_PATH / "vps" / "index.html"
-#     let p = ampPage(file)
+#   import htmlparser, os
+#   let file = PROJECT_PATH / "index.html"
+#   let html = readFile(file).parseHtml.toVNode
+#   let p = waitFor ampPage(html)
+#   echo p

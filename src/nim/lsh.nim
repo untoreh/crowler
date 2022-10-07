@@ -86,8 +86,8 @@ proc addArticle*(lsh: PublishedArticles, content: ptr string): Future[bool] {.as
   lshIn.addLast (t, lsh, content)
   return await lshOut.popWait((t, lsh))
 
-{.experimental: "strictnotnil".}
-proc checkAndAddArticle(t: MonoTime, lsh: PublishedArticles, content: ptr string not nil) {.async.} =
+# {.experimental: "strictnotnil".}
+proc checkAndAddArticle(t: MonoTime, lsh: PublishedArticles, content: ptr string) {.async.} =
   let k = (t, lsh)
   try:
     if not isDuplicate(lsh[], content[]):

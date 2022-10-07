@@ -23,6 +23,7 @@ import strformat,
        locktplasync
 
 {.experimental: "caseStmtMacros".}
+# {.experimental: "strictnotnil".}
 
 import
   pyutils,
@@ -58,7 +59,8 @@ from nativehttp import initHttp
 # lockedStore(Table)
 
 type
-  ShString {.shallow.} = string
+  # StringRef = ref string not nil
+  StringRef = ref string
   ReqContext = object of RootObj
     rq: Table[ReqId, Request]
     url: uri.Uri
@@ -68,7 +70,7 @@ type
     headers: HttpHeaders
     norm_capts: UriCaptures
     respHeaders: HttpHeaders
-    respBody: ShString
+    respBody: StringRef
     respCode: HttpCode
     lock: AsyncLock # this is acquired while the rq is being processed
     cached: bool    # done processing
@@ -135,16 +137,16 @@ template setEncoding() {.dirty.} =
   if ("*" in accept) or ("gzip" in accept):
     debug "reply: encoding gzip"
     reqCtx.respHeaders.ContentEncoding("gzip")
-    if reqCtx.respBody != "":
+    if reqCtx.respBody[] != "":
       debug "reply: compressing body (gzip)"
-      let comp = reqCtx.respBody.compress(stream = GZIP_STREAM)
-      reqCtx.respBody = comp
+      let comp = reqCtx.respBody[].compress(stream = GZIP_STREAM)
+      reqCtx.respBody[] = comp
   elif "deflate" in accept:
     debug "reply: encoding deflate"
     reqCtx.respHeaders.ContentEncoding("deflate")
-    if reqCtx.respBody != "":
-      let comp = reqCtx.respBody.compress(stream = RAW_DEFLATE)
-      reqCtx.respBody = comp
+    if reqCtx.respBody[] != "":
+      let comp = reqCtx.respBody[].compress(stream = RAW_DEFLATE)
+      reqCtx.respBody[] = comp
       debug "reply: compressing body (deflate)"
 
 proc doReply(reqCtx: ref ReqContext, body: string, rqid: ReqId, scode = Http200,
@@ -155,7 +157,7 @@ proc doReply(reqCtx: ref ReqContext, body: string, rqid: ReqId, scode = Http200,
   else:
     reqCtx.respHeaders = headers
   sdebug "reply: setting body"
-  reqCtx.respBody = if likely(body != ""): body
+  reqCtx.respBody[] = if likely(body != ""): body
                     else:
                       sdebug "reply: body is empty!"
                       ""
@@ -172,19 +174,19 @@ proc doReply(reqCtx: ref ReqContext, body: string, rqid: ReqId, scode = Http200,
     reqCtx.respHeaders[$hetag] = '"' & $reqCtx.key & '"'
   except:
     swarn "reply: troubles serving page {reqCtx.file}"
-    sdebug "reply: sending: {len(reqCtx.respBody)} to {reqCtx.url}"
+    sdebug "reply: sending: {len(reqCtx.respBody[])} to {reqCtx.url}"
   try:
     reqCtx.respCode = scode
     # assert len(respbody) > 0, "reply: Can't send empty body!"
     debug "reply: sending response {reqCtx.key}"
-    await reqCtx.rq[rqid].resp(content = reqCtx.respBody,
+    await reqCtx.rq[rqid].resp(content = reqCtx.respBody[],
         headers = reqCtx.respHeaders, code = reqCtx.respCode)
-    sdebug "reply: sent: {len(reqCtx.respBody)}"
+    sdebug "reply: sent: {len(reqCtx.respBody[])}"
   except Exception as e:
     sdebug "reply: {e[]}"
 
 proc doReply(reqCtx: ref ReqContext, rqid: ReqId) {.async.} =
-  await reqCtx.rq[rqid].resp(content = reqCtx.respBody,
+  await reqCtx.rq[rqid].resp(content = reqCtx.respBody[],
       headers = reqCtx.respHeaders, code = reqCtx.respCode)
 
 {.push dirty.}
@@ -471,6 +473,7 @@ proc handleGet(ctx: Request): Future[void] {.gcsafe, async.} =
     reqCtx.url = url[]
     reqCtx.file = reqCtx.url.path.fp
     reqCtx.key = hash(reqCtx.file)
+    new(reqCtx.respBody)
     reqCtx
   # don't replicate works on unfinished requests
   if not reqCtx.cached:

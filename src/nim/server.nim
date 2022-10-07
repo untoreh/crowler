@@ -200,11 +200,12 @@ template handle301*(loc: string = $WEBSITE_URL) =
       debug "redirect: start..\n {e[]}\nredirect: ..end."
     await reqCtx.doReply($Http301, rqid, scode = Http301, headers = headers)
 
+const redirectJs = fmt"""<script>window.location.replace("{WEBSITE_URL}");</script>"""
 template handle404*(loc = $WEBSITE_URL) =
-  await reqCtx.doReply($Http404, rqid, scode = Http404)
+  await reqCtx.doReply(redirectJs, rqid, scode = Http404)
 
 template handle502*(loc = $WEBSITE_URL) =
-  await reqCtx.doReply($Http502, rqid, scode = Http502)
+  await reqCtx.doReply(redirectJs, rqid, scode = Http502)
 
 import htmlparser, xmltree
 template handleHomePage(relpath: string, capts: UriCaptures,
@@ -336,7 +337,7 @@ template handleArticle(capts: auto, ctx: Request) =
       await reqCtx.doReply(page, rqid, )
     except ValueError:
       debug "article: redirecting to topic because page is empty"
-      handle502()
+      handle404()
       # handle301($(WEBSITE_URL / capts.amp / capts.lang / capts.topic))
   else:
     handle404()

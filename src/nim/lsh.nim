@@ -34,11 +34,6 @@ proc saveLS*(topic: string, lsh: sink PublishedArticles) {.async.} =
     raise newException(ValueError, "lsh can't be nil.")
   await saveLSImpl(topic, lsh[])
 
-proc free*(lsh: PublishedArticles) =
-  if not lsh.isnil:
-    reset(lsh[])
-    dealloc(lsh)
-
 proc toLsh(data: string): PublishedArticlesObj =
   result = to[PublishedArticlesObj](data)
   # reinitialize minhasher since it is a cbinding func

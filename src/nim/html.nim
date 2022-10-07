@@ -43,7 +43,8 @@ const ROOT = initUri() / "/"
 const wsPreline = [(white_space, "pre-line")]
 const wsBreak = [(white_space, "break-spaces")]
 
-threadVars((preline_style, break_style, VStyle))
+threadVars((preline_style, break_style, VStyle), (defaultImageData, string))
+export defaultImageData
 
 proc initHtml*() =
   try:
@@ -51,6 +52,8 @@ proc initHtml*() =
     break_style = style(wsBreak)
     initZstd()
     initSocial()
+    if DEFAULT_IMAGE.fileExists:
+      defaultImageData = readFile(DEFAULT_IMAGE)
   except:
     let e = getCurrentException()[]
     qdebug "Could not initialize html vars {e}"

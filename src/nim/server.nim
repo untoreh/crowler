@@ -204,6 +204,7 @@ template handle404*(loc = $WEBSITE_URL) =
 template handle502*(loc = $WEBSITE_URL) =
   await reqCtx.doReply($Http502, rqid, scode = Http502)
 
+import htmlparser, xmltree
 template handleHomePage(relpath: string, capts: UriCaptures,
     ctx: Request) =
   const homePath = hash(SITE_PATH / "index.html")
@@ -215,7 +216,8 @@ template handleHomePage(relpath: string, capts: UriCaptures,
     let hpage = tocache.asHtml(minify_css = (capts.amp == ""))
     checkTrue hpage.len > 0, "homepage: minification 1 failed"
     pageCache[homePath] = hpage
-    let ppage = toserv.asHtml(minify_css = (capts.amp == ""))
+    let ppage = $toserv #.asHtml(minify_css = (capts.amp == ""))
+    # let ppage = ($(string($toserv).parseHtml)) #.asHtml(minify_css = (capts.amp == ""))
     checkTrue ppage.len > 0, "homepage: minification 2 failed.."
     ppage
   await reqCtx.doReply(page, rqid)
@@ -271,9 +273,10 @@ template dispatchImg() =
     reqCtx.mime = mime
     let headers = newHttpHeaders()
     headers.CacheControl("2678400s")
-    await reqCtx.doReply(page, rqid, )
   else:
-    handle404()
+    reqCtx.mime = DEFAULT_IMAGE_MIME
+    page = defaultImageData
+  await reqCtx.doReply(page, rqid, )
 
 template handleTopic(capts: auto, ctx: Request) =
   debug "topic: looking for {capts.topic}"
@@ -579,6 +582,7 @@ proc runScorper(address, callback: auto) =
     warn "server: {e[]} \n restarting server..."
     if not srv.isnil:
       waitFor srv.join()
+      reset(srv)
   except Defect as e:
     warn "server: {e[]} \n quitting..."
     quitl()

@@ -68,6 +68,7 @@ proc getConn(url: Uri): Future[AsyncSocket] {.async.} =
   try:
     sock = await asyncnet.dial(PROXY_HOST, PROXY_PORT)
     if not await sock.doSocksHandshake(methods = PROXY_METHODS):
+      sock.close
       raise newException(OSError, "Proxy error.")
     let port =
       case url.scheme:
@@ -75,6 +76,7 @@ proc getConn(url: Uri): Future[AsyncSocket] {.async.} =
         of "https": Port 443
         else: Port 80
     if not await sock.doSocksConnect(url.hostname, port):
+      sock.close
       raise newException(OSError, "Proxy error.")
     return sock
   except Exception as e:

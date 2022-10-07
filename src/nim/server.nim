@@ -216,8 +216,7 @@ template handleHomePage(relpath: string, capts: UriCaptures,
     let hpage = tocache.asHtml(minify_css = (capts.amp == ""))
     checkTrue hpage.len > 0, "homepage: minification 1 failed"
     pageCache[homePath] = hpage
-    let ppage = $toserv #.asHtml(minify_css = (capts.amp == ""))
-    # let ppage = ($(string($toserv).parseHtml)) #.asHtml(minify_css = (capts.amp == ""))
+    let ppage = toserv.asHtml(minify_css = (capts.amp == ""))
     checkTrue ppage.len > 0, "homepage: minification 2 failed.."
     ppage
   await reqCtx.doReply(page, rqid)

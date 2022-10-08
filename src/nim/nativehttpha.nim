@@ -1,8 +1,10 @@
-import std/[os, monotimes, httpcore, uri, httpclient, asyncnet, net,
+import std/[os, monotimes, httpcore, uri, asyncnet, net,
             asyncdispatch, hashes, locks, strutils]
 from asyncfutures import asyncCheck
+import httpclient except Response
 import chronos/timer
 import ./harpoon
+import httptypes
 import utils
 from cfg import PROXY_EP
 
@@ -12,24 +14,6 @@ var
 
 const DEFAULT_TIMEOUT = 4.seconds # 4 seconds
 
-type
-  TimeoutError* = object of CatchableError
-  RequestError* = object of CatchableError
-
-type
-  Request* = object
-    url*: Uri
-    meth*: HttpMethod
-    headers*: HttpHeaders
-    body*: string
-    redir*: bool
-  RequestPtr* = ptr Request
-
-  Response* = object
-    code*: HttpCode
-    headers*: HttpHeaders
-    body*: string
-  ResponsePtr* = ptr Response
 var
   httpThread: Thread[void]
   httpIn*: LockDeque[(MonoTime, RequestPtr)]

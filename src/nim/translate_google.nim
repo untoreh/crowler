@@ -5,7 +5,8 @@ from cfg import PROXY_EP
 import types
 import utils
 import translate_native_utils
-import nativehttp
+# import nativehttp
+import pyhttp
 
 type
   GoogleTranslateObj* = object of TranslateObj
@@ -88,7 +89,10 @@ proc init*(_: typedesc[GoogleTranslateObj]): GoogleTranslateObj =
   return srv
 
 when isMainModule:
-  initHttp()
+  when declared(nativehttp):
+    initHttp()
+  else:
+    initPyHttp()
   let text = """This was a fine day."""
   gt = create(GoogleTranslateObj)
   gt[] = init(GoogleTranslateObj)

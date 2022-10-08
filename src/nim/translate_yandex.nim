@@ -8,7 +8,8 @@ import types
 import utils
 import translate_native_utils
 import cacheduuid
-import nativehttp
+# import nativehttp
+import pyhttp
 
 const
   # YANDEX_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.88 Safari/537.36"
@@ -64,11 +65,12 @@ proc translate*(self: YandexTranslateObj, text, src, trg: string): Future[
       ("content-length", $body.len)
       ].newHttpHeaders
 
+  # native
   let resp = await post(uri, headers, body)
   if resp.code != Http200:
     raiseTranslateError "Yandex POST request error, response code {resp.code}".fmt
-
   let respJson = resp.body.parseJson
+
   if respJson.kind != JObject or "text" notin respJson or respJson["text"].len == 0:
     raiseTranslateError "Yandex respone has no translation."
   return respJson["text"][0].to(string)
@@ -84,7 +86,10 @@ proc init*(_: typedesc[YandexTranslateObj]): YandexTranslateObj =
   return srv
 
 when isMainModule:
-  initHttp()
+  when declared(nativehttp):
+    initHttp()
+  else:
+    initPyHttp()
   ydx = create(YandexTranslateObj)
   ydx[] = init(YandexTranslateObj)
   let s = "This is a good day."

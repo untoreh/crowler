@@ -322,6 +322,17 @@ converter pyToSeqStr*(py: PyObject): seq[string] =
   for el in py:
     result.add el.to(string)
 
+type PyDict* = PyObject
+proc topy*[T](tbl: T, _: typedesc[PyDict]): PyDict =
+  static:
+    doassert:
+      compiles:
+        for (k, v) in tbl.pairs: discard
+  {.locks: [pygil].}:
+    result = pybi[].dict()
+    for (k, v) in tbl.pairs():
+        result["k"] = v
+
 # Exported
 # proc cleanText*(text: string): string {.exportpy.} =
 #     multireplace(text, [("\n", "\n\n"),

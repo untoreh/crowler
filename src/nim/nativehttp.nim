@@ -4,6 +4,7 @@ import chronos
 import
   utils,
   locktplutils,
+  httptypes,
   nativehttpha
   # nativehttpad
 

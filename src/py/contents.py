@@ -1,5 +1,5 @@
 import warnings
-from typing import List
+from typing import Dict, List, Any
 
 import feedfinder2 as ff2
 import feedparser as fep
@@ -14,10 +14,10 @@ from sites import Site
 
 warnings.simplefilter("ignore")
 
-FEEDS: List[str] = []
-ARTICLES: List[dict] = []
-LAST_SOURCE = None
-FEEDFINDER_DATA = dict()
+FEEDS: Dict[str, List[str]] = {}
+ARTICLES: Dict[str, List[dict]] = {}
+LAST_SOURCE: Dict[str, Any] = {}
+FEEDFINDER_DATA = {}
 
 # overwrite feedfinder to accept raw data
 setattr(ff2.FeedFinder, "get_feed", lambda _, url: FEEDFINDER_DATA.pop(url, ""))
@@ -31,16 +31,16 @@ def parsesource(url, topic, site: Site):
         f = exclude_blacklist(site, f)
         if f:
             logger.info("Adding %s feeds.", len(f))
-            FEEDS.extend(f)
+            FEEDS[site.name].extend(f)
         a = art.fillarticle(url, data, topic, site)
         if a:
             logger.info("Adding %s articles", len(a))
-            ARTICLES.append(a)
+            ARTICLES[site.name].append(a)
         elif len(f) == 0:
             logger.info("Url is neither an article nor a feed source. (%s)", url)
-        LAST_SOURCE = (f, a)
+        LAST_SOURCE[site.name] = (f, a)
     else:
-        LAST_SOURCE = (None, None)
+        LAST_SOURCE[site.name] = (None, None)
 
 
 def parsearticle(url, topic, site: Site):
@@ -48,7 +48,7 @@ def parsearticle(url, topic, site: Site):
     if data:
         a = art.fillarticle(url, data, topic, site)
         if a:
-            ARTICLES.append(a)
+            ARTICLES[site.name].append(a)
             return a
         else:
             logger.info("Couldn't parse an article from url %s .", url)
@@ -62,8 +62,8 @@ def fromsources(sources, topic, site: Site, n=cfg.POOL_SIZE):
     """Create list of feeds from a subset of links found in the source file, according to SRC_SAMPLE_SIZE."""
     global FEEDS, ARTICLES
     sched.initPool()
-    FEEDS = []
-    ARTICLES = []
+    FEEDS[site.name] = []
+    ARTICLES[site.name] = []
     jobs = []
     logger.info("Starting to collect articles/feeds from %d sources.", len(sources))
     for entry in sources:
@@ -78,21 +78,21 @@ def fromsources(sources, topic, site: Site, n=cfg.POOL_SIZE):
         j.wait()
 
     logger.info("Source parsing Done")
-    FEEDS = ut.dedup(FEEDS)
+    FEEDS[site.name] = ut.dedup(FEEDS)
     logger.info(
         "Found %d feeds and %d articles in %d sources.",
-        len(FEEDS),
-        len(ARTICLES),
+        len(FEEDS[site.name]),
+        len(ARTICLES[site.name]),
         len(sources),
     )
-    return (ARTICLES, FEEDS)
+    return (ARTICLES[site.name], FEEDS[site.name])
 
 
 def fromfeeds(sources, site: Site, n=cfg.POOL_SIZE):
     """Create list of feeds from a subset of links found in the source file, according to SRC_SAMPLE_SIZE."""
     global ARTICLES
     sched.initPool()
-    ARTICLES = []
+    ARTICLES[site.name] = []
     jobs = []
     for entry in sources:
         url = entry.get("url")
@@ -109,10 +109,10 @@ def fromfeeds(sources, site: Site, n=cfg.POOL_SIZE):
     logger.info("Articles parsing Done")
     logger.info(
         "Found %d articles in %d sources.",
-        len(ARTICLES),
+        len(ARTICLES[site.name]),
         len(sources),
     )
-    return ARTICLES
+    return ARTICLES[site.name]
 
 
 def processfeed(f):

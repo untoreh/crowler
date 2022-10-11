@@ -1,3 +1,4 @@
+## NOTE: This allows to call pyobjects as functions, but can mess templating up for other things
 import nimpy {.all.}
 import macros
 
@@ -21,4 +22,4 @@ macro fnCall(o: untyped, args: varargs[untyped]): untyped =
     newCall(bindSym"callObjectAux", newcall("privateRawPyObj", o), plainArgs, kwArgs))
 
 template `()`*(o: PyObject, args: varargs[untyped]): PyObject =
-    fnCall(o, args)
+  fnCall(o, args)

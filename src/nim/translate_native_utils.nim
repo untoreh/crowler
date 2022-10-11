@@ -1,6 +1,6 @@
 import std/[monotimes, uri, httpcore, strutils, net, tables]
 import chronos
-import nativehttp
+import httptypes
 import macros
 from cfg import PROXY_EP
 export PROXY_EP

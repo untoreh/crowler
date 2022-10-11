@@ -3,9 +3,10 @@ import std/[os, monotimes, httpcore, uri, asyncnet, net,
 from asyncfutures import asyncCheck
 import httpclient except Response
 import chronos/timer
-import ./harpoon
 import httptypes
+import sharedqueue
 import utils
+import ./harpoon
 from cfg import PROXY_EP
 
 var
@@ -14,12 +15,9 @@ var
 
 const DEFAULT_TIMEOUT = 4.seconds # 4 seconds
 
-var
-  httpThread: Thread[void]
-  httpIn*: LockDeque[(MonoTime, RequestPtr)]
-  httpOut*: LockTable[(MonoTime, RequestPtr), ResponsePtr]
+var httpThread: Thread[void]
 
-proc hash(rq: Request): Hash = hash(rq.url)
+# proc hash(rq: ptr Request): Hash = hash(rq.url)
 
 proc wait[T](fut: Future[T], timeout: Duration): Future[T] {.async.} =
   let start = Moment.now()
@@ -32,10 +30,9 @@ proc wait[T](fut: Future[T], timeout: Duration): Future[T] {.async.} =
     else:
       await sleepAsync(1)
 
-proc new*(_: typedesc[Response]): ResponsePtr = create(Response)
 proc new*(_: typedesc[Request], url: Uri, met: HttpMethod = HttpGet,
-          headers: HttpHeaders = nil, body = "", redir = true): RequestPtr =
-  result = create(Request)
+          headers: HttpHeaders = nil, body = "", redir = true): RequestRef =
+  result = new(Request)
   result.url = url
   result.meth = met
   result.body = body
@@ -47,21 +44,27 @@ const PROXY_HOST = parseUri(PROXY_EP).hostname
 const PROXY_PORT = parseUri(PROXY_EP).port.parseInt.Port
 const PROXY_METHODS = {NO_AUTHENTICATION_REQUIRED, USERNAME_PASSWORD}
 
-proc getConn(url: Uri): Future[AsyncSocket] {.async.} =
+proc getPort(url: Uri): Port =
+  case url.scheme:
+    of "http": Port 80
+    of "https": Port 443
+    else: Port 80
+
+proc getConn(url: Uri, port: Port, proxied: bool): Future[AsyncSocket] {.async.} =
   var sock: AsyncSocket
   try:
-    sock = await asyncnet.dial(PROXY_HOST, PROXY_PORT)
-    if not await sock.doSocksHandshake(methods = PROXY_METHODS):
-      sock.close
-      raise newException(OSError, "Proxy error.")
-    let port =
-      case url.scheme:
-        of "http": Port 80
-        of "https": Port 443
-        else: Port 80
-    if not await sock.doSocksConnect(url.hostname, port):
-      sock.close
-      raise newException(OSError, "Proxy error.")
+    if proxied:
+      sock = await asyncnet.dial(PROXY_HOST, PROXY_PORT)
+      if not proxied:
+        return sock
+      if not await sock.doSocksHandshake(methods = PROXY_METHODS):
+        sock.close
+        raise newException(OSError, "Proxy error.")
+      if not await sock.doSocksConnect(url.hostname, port):
+        sock.close
+        raise newException(OSError, "Proxy error.")
+    else:
+      sock = newAsyncSocket()
     return sock
   except Exception as e:
     if not sock.isnil:
@@ -75,56 +78,67 @@ converter toSeq(headers: HttpHeaders): seq[(string, string)] =
 
 converter toHeaders(s: seq[(string, string)]): HttpHeaders = s.newHttpHeaders()
 
-proc doReq(t: MonoTime, rq: RequestPtr, timeout = 4000) {.async.} =
-  let r = new(Response)
+proc doReq(rq: ptr Request, timeout = 4000) {.async.} =
+  let r = newResponse()
+  # defer: maybefree(r)
   let e = newException(RequestError, "Bad code.")
   var conn: AsyncSocket
   try:
-    conn = await getConn(rq.url)
+    let port = rq.url.getPort()
+    conn = await getConn(rq.url, port, rq.proxied)
     let resp = await fetch(conn,
                            $rq.url,
                            metod = rq.meth,
                            headers = rq.headers,
                            body = rq.body,
                            timeout = timeout,
-                           skipConnect = true,
+                           skipConnect = rq.proxied,
+                           port = port,
+                           portSsl = port
                            )
     r.code = resp.code
-    r.headers = resp.headers
-    r.body = resp.body
+    r.headers = create(HttpHeaders)
+    r.headers[] = resp.headers.toHeaders()
+    r.body = create(string)
+    r.body[] = resp.body
   except CatchableError as e: # timeout?
-    # echo e[].msg
+    echo e[].msg
     discard
   finally:
     if not conn.isnil:
       conn.close()
   # the response
-  httpOut[(t, rq)] = r
+  httpOut[rq] = r
 
-proc popFirstAsync[T](q: LockDeque[T]): Future[T] {.async.} =
+# proc popFirstAsync[T](q: LockDeque[T]): Future[T] {.async.} =
+#   while true:
+#     if q.len > 0:
+#       result = q.popFirst()
+#       break
+#     else:
+#       await sleepAsync(1)
+
+import std/importutils
+proc pop[T](apc: AsyncPColl[T]): Future[T] {.async.} =
+  privateAccess(AsyncPColl)
   while true:
-    if q.len > 0:
-      result = q.popFirst()
-      break
-    else:
-      await sleepAsync(1)
-
-proc clearFuts(futs: var seq[Future]) =
-  var toKeep: seq[Future]
-  for f in futs:
-    if not f.finished:
-      toKeep.add(f)
-  futs = toKeep
+    withLock(apc.lock):
+      if apc.pcoll.len > 0:
+        doassert apc.pcoll.pop(result)
+        break
+    await sleepAsync(1)
 
 proc asyncHttpHandler() {.async.} =
+  var rq: ptr Request
   while true:
     try:
       warn "http: starting httpHandler..."
       # var futs: seq[Future[void]]
       while true:
         # clearFuts(futs)
-        let (t, rq) = await httpIn.popFirstAsync
-        asyncCheck doReq(t, rq)
+        rq = await httpIn.pop
+        if not rq.isnil:
+          asyncCheck doReq(rq)
         # futs.add doReq(t, rq)
     except:
       let e = getCurrentException()
@@ -134,8 +148,5 @@ proc httpHandler() =
   waitFor asyncHttpHandler()
 
 proc initHttp*() =
-  setNil(httpIn):
-    initLockDeque[(MonoTime, RequestPtr)](100)
-  setNil(httpOut):
-    initLockTable[(MonoTime, RequestPtr), ResponsePtr]()
+  httpTypes.initHttp()
   createThread(httpThread, httpHandler)

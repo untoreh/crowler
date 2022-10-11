@@ -114,7 +114,7 @@ proc styleLink(url: string): VNode =
   # for n in nodes: result.add n
 
 proc buildHead*(path: string; description = ""; topic = "";
-    ar = emptyArt): VNode {.gcsafe.} =
+    ar = emptyArt[]): VNode {.gcsafe.} =
   let canon = $(WEBSITE_URL / path)
   buildHtml(head):
     meta(charset = "UTF-8")
@@ -217,14 +217,13 @@ proc topicsList*(ucls: string; icls: string; small: static[
   result.setAttr("class", ucls)
   let topics = await loadTopics(-MENU_TOPICS) # NOTE: the sign is negative, we load the most recent N topics
   result.add buildHtml(tdiv(class = "topics-shadow"))
-  await pygil.acquire()
-  defer: pygil.release()
-  for tpc in topics:
-    let topic_slug = $tpc[0]
-    let topic_name = $tpc[1]
-    pygil.release()
-    if await isEmptyTopic(topic_slug):
-      await pygil.acquire()
+  var topic_slug, topic_name: string
+  var isEmpty: bool
+  for i in 0..<topics.len:
+    withPyLock:
+      (topic_slug, topic_name) = ($topics[i][0], $topics[i][1])
+    isEmpty = await isEmptyTopic(topic_slug)
+    if isEmpty:
       continue
     let liNode = buildHtml(li(class = fmt"{icls}")):
       # tdiv(class = "mdc-icon-button__ripple") # not used without material icons
@@ -241,7 +240,6 @@ proc topicsList*(ucls: string; icls: string; small: static[
       else:
         span(class = "separator")
     result.add liNode
-    await pygil.acquire()
 
 proc buildMenuSmall*(crumbs: string; topicUri: Uri; path: string): Future[
     VNode] {.gcsafe, async.} =
@@ -260,7 +258,7 @@ proc buildMenuSmall*(crumbs: string; topicUri: Uri; path: string): Future[
       # Topics
       await topicsList(ucls = "menu-list-topics", icls = "menu-topic-item")
 
-proc buildMenuSmall*(crumbs: string; topicUri: Uri; a = emptyArt): Future[
+proc buildMenuSmall*(crumbs: string; topicUri: Uri; a = emptyArt[]): Future[
     VNode] {.async.} =
   return await buildMenuSmall(crumbs, topicUri, a.getArticlePath)
 
@@ -435,7 +433,7 @@ const pageContent* = postContent
 
 template asHtml*(data: VNode, minify: static[bool] = true; minify_css: bool = true): string =
   if data.isnil:
-    error "Data cannot be nil"
+    warn "ashtml: data cannot be nil"
     ""
   else:
     asHtml($data, minify, minify_css)
@@ -468,7 +466,7 @@ proc writeHtml*(data: auto; path: string) {.inline.} =
 
 
 proc processHtml*(relpath: string; slug: string; data: VNode;
-    ar = emptyArt): Future[void] {.async.} =
+    ar = emptyArt[]): Future[void] {.async.} =
   # outputs (slug, data)
   var o: seq[(string, VNode)]
   let
@@ -521,7 +519,7 @@ proc buildPost*(a: Article): Future[VNode] {.async.} =
     bbody
 
 proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode = nil;
-                topic = ""; desc: string = "", ar = emptyArt): Future[VNode] {.gcsafe, async.} =
+                topic = ""; desc: string = "", ar = emptyArt[]): Future[VNode] {.gcsafe, async.} =
   let
     crumbs = if topic != "": fmt"/ {topic.toUpper} /"
              else: "/ "

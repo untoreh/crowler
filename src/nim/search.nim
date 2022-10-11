@@ -73,12 +73,17 @@ proc push*(capts: UriCaptures, content: string) {.async.} =
     try:
       let lang = await capts.lang.toISO3
       var pushed: bool
+      var j: PyObject
       withPyLock:
-        pushed = pySonic[].push(WEBSITE_DOMAIN,
-                "default", # TODO: Should we restrict search to `capts.topic`?
+        j = pySched[].apply(
+          pySonic[].push,
+          WEBSITE_DOMAIN,
+          "default", # TODO: Should we restrict search to `capts.topic`?
           key,
           cnt,
-          lang = if capts.lang != "en": lang else: "").to(bool)
+          lang = if capts.lang != "en": lang else: "")
+      j = await j.pywait()
+      pushed = not pyisnone(j) and j.to(bool)
       if not pushed:
         capts.addToBackLog()
         break

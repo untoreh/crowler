@@ -74,33 +74,29 @@ proc getDoneArticles*(topic: string, pagenum: int, rev=true): Future[seq[Article
             else:
               addArt(arts)
 
-iterator allDoneContent*(topic: string): ptr string =
+proc allDoneContent*(topic: string): Future[seq[string]] {.async.} =
   ## Iterate over all published content of one topic.
   let lastPage = waitFor lastPageNum(topic)
   var grp: PyObject
   var arts: PyObject
-  syncPyLock:
+  withPyLock:
     grp = site[].topic_group(topic)
   for p in 0..<lastPage:
     var pageLen = 0
-    syncPyLock:
+    withPyLock:
       arts = pyget(grp, $topicData.done / $p, PyNone)
       if not (arts.isnil or pyisnone(arts)):
         pageLen = arts.len
     if pageLen == 0:
       continue
-    let empty = create(string)
-    var content: ptr string
-    defer: free(empty)
     for n in 0..<pageLen:
-      content = empty
-      syncPyLock:
+      var content: string
+      withPyLock:
         let data = arts[n]
         if data.isValidArticlePy:
-          content = create(string)
-          content[] = pyget(data, "content", "")
-      if content[].len > 0:
-        yield content
+          content = pyget(data, "content", "")
+          if content.len > 0:
+            result.add move content
 
 proc isEmptyPage*(topic: string, pn: int, locked: static[bool]): Future[bool] {.async.} =
   let pg = await topicPage(topic, pn, locked)
@@ -187,12 +183,12 @@ proc getArticleContent*(topic, page, slug: string): Future[string] {.async.} =
 proc getArticle*(topic, page, slug: auto): Future[Article] {.async.} =
     let py = await getArticlePy(topic, page, slug)
     if py.isnil:
-        return emptyArt
+        return emptyArt[]
     withPyLock:
         result = if not pyisnone(py):
             initArticle(py, parseInt(page))
         else:
-            emptyArt
+            emptyArt[]
 
 
 proc isEmpty*(a: Article): bool = a.isnil or a.title == "" or a.content == ""

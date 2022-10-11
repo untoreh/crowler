@@ -15,10 +15,11 @@ import tables,
 
 import cfg,
        utils,
-       pyhttp,
-       html_misc,
-       html_entities,
-       ads
+       # pyhttp,
+       nativehttp,
+  html_misc,
+  html_entities,
+  ads
 
 const CSS_MAX_SIZE = 75000
 const skipNodes = [VNodeKind.iframe, audio, canvas, embed, video, img,
@@ -64,7 +65,7 @@ proc getFile(path: string): Future[string] {.async.} =
       else:
         path
     debug "getfile: getting file content from {url}"
-    filesCache[path] = await httpGet(url, decode=true)
+    filesCache[path] = (await get(url, proxied = false)).body[]
     # filesCache[path] = (await fetch(HttpSessionRef.new(), parseUri(
     #     url))).data.bytesToString
     result = filesCache[path]

@@ -273,7 +273,7 @@ when defined(weaveRuntime):
 
 when defined(weaveRuntime):
     proc translateTree*(tree: vdom.VNode, file, rx, langpairs: auto, targetPath = "",
-            ar = emptyArt) {.gcsafe.} =
+            ar = emptyArt[]) {.gcsafe.} =
         ## Translate a `VNode` tree to multiple languages
 
         let (filepath, urlpath) = splitUrlPath(rx, file)

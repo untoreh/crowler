@@ -67,7 +67,7 @@ proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN): Future[(
   return (q, otree)
 
 proc translateLang*(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath = "",
-        ar = emptyArt): Future[VNode] {.gcsafe, async.} =
+        ar = emptyArt[]): Future[VNode] {.gcsafe, async.} =
   let
     (filedir, relpath) = splitUrlPath(rx, file)
     t_path = if targetPath == "": filedir / lang.trg / (if relpath ==
@@ -77,5 +77,5 @@ proc translateLang*(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath
   defer: free(fc)
   (await translateDom(fc))[1]
 
-proc translateLang*(fc: ptr FileContext, ar = emptyArt): Future[VNode] {.gcsafe, async.} =
+proc translateLang*(fc: ptr FileContext, ar = emptyArt[]): Future[VNode] {.gcsafe, async.} =
   result = (await translateDom(fc))[1]

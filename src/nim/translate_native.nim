@@ -1,4 +1,5 @@
 import std/[monotimes, parsexml, uri, hashes]
+import threading/channels
 import chronos
 
 import
@@ -7,7 +8,8 @@ import
   translate_native_utils,
   translate_google,
   translate_bing,
-  translate_yandex
+  translate_yandex,
+  sharedqueue
 
 
 const enabledTranslators = [google, yandex]
@@ -17,13 +19,15 @@ type
         yandex: YandexTranslate]
     idx: int
   TranslateRotatorPtr = ptr TranslateRotatorObj
-  AnyTranslate = GoogleTranslate | BingTranslate | YandexTranslate
 
 var
-  transIn: LockDeque[Query]
-  transOut*: LockTable[string, string]
+  transIn: AsyncPColl[ptr Query]
+  transOut*: AsyncTable[ptr Query, ptr string]
   transWorker*: ptr Future[void]
   rotator: TranslateRotatorPtr
+
+proc hash(q: ptr Query): Hash =
+  hash((q.id, q.text, q.src, q.trg))
 
 proc initRotator(timeout = 3.seconds): TranslateRotatorObj =
   result.services.google = new(GoogleTranslateObj)
@@ -60,33 +64,29 @@ proc callService*(text, src, trg: string): Future[string] {.async.} =
 
 template waitTrans*(): string =
   block:
-    let tkey = $(hash (id, text, src, trg))
-    await transOut.popWait(tkey)
-
-template maybeCreate*(id, tp; force: static[bool] = false) =
-  when force:
-    id = create(tp)
-  else:
-    if id.isnil:
-      id = create(tp)
-  reset(id[])
+    let v = await transOut.pop(q.addr)
+    if v.isnil:
+      ""
+    else:
+      v[]
 
 proc setupTranslate*() =
-  transIn.setNil:
-    initLockDeque[Query]()
+  transIn.notNil:
+    delete(transIn)
+  transIn = newAsyncPColl[ptr Query]()
   transOut.setNil:
-    initLockTable[string, string]()
+    newAsyncTable[ptr Query, ptr string]()
 
 when not defined(translateProc):
-  proc translateTask(id: MonoTime; text, src, trg: string) {.async.} =
+  proc translateTask(q: ptr Query) {.async.} =
     var tries: int
     var success: bool
-    var translated: string
+    let translated = create(string)
     try:
       for _ in 0..3:
         try:
-          translated.add await callService(text, src, trg)
-          if translated.len == 0:
+          translated[].add await callService(q.text, q.src, q.trg)
+          if translated[].len == 0:
             continue
           success = true
           break
@@ -95,16 +95,16 @@ when not defined(translateProc):
             break
           tries.inc
     except CatchableError:
-      warn "trans: job failed, {src} -> {trg}."
+      warn "trans: job failed, {q.src} -> {q.trg}."
     finally:
-      let id = hash (id, text, src, trg)
-      transOut[$id] = translated
+      transOut[q] = translated
 
   proc asyncTransHandler() {.async.} =
     try:
       while true:
-        let (id, text, src, trg) = await transIn.popFirstWait()
-        asyncSpawn translateTask(id, text, src, trg)
+        # let qPtr = await transIn.popFirstWait()
+        let q = await transIn.pop()
+        asyncSpawn translateTask(q)
     except: # If we quit we can catch defects too.
       let e = getCurrentException()[]
       warn "trans: trans handler crashed. {e}"
@@ -114,20 +114,31 @@ when not defined(translateProc):
     setupTranslate()
     transWorker.setNil:
       create(Future[void])
+    if not transWorker[].isnil:
+      waitFor transWorker[]
     transWorker[] = asyncTransHandler()
 
   proc translate*(text, src, trg: string): Future[string] {.async, raises: [].} =
-    let id = getMonoTime()
-    transIn.addLast (id, text, src, trg)
+    var q: Query
+    q.id = getMonoTime()
+    q.src = src
+    q.trg = trg
+    q.text = text
+    transIn.add q.addr
     return waitTrans()
 
 when isMainModule:
   proc test() {.async.} =
+    var futs: seq[Future[string]]
     var text = """This was a fine day."""
-    echo await translate(text, "en", "it")
+    futs.add translate(text, "en", "it")
     text = """This was better plan."""
-    echo await translate(text, "en", "it")
+    futs.add translate(text, "en", "it")
     text = """The sun in the sky is yellow."""
-    echo await translate(text, "en", "it")
+    futs.add translate(text, "en", "it")
+    for f in futs:
+      echo await f
+  import nativehttp
+  initHttp()
   startTranslate()
-  # waitFor test()
+  waitFor test()

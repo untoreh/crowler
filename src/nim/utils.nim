@@ -22,8 +22,8 @@ import translate_types
 import locktpl
 lockedStore(Table)
 lockedList(Deque)
-include ./locktplutils
-export nre, tables
+import locktplutils
+export nre, tables, locktplutils
 
 static: echo "loading utils..."
 
@@ -131,8 +131,12 @@ template info*(code: untyped): untyped =
     withLock(loggingLock):
       logger[].log lvlInfo, logstring(`code`)
 
-macro checkNil*(v; code: untyped) =
-  let name = $v
+macro checkNil*(v; code: untyped): untyped =
+  let name =
+    case v.kind:
+      of nnkDotExpr: $(v[^1])
+      else: $v
+
   let message = fmt"{`name`} cannot be nil"
   quote do:
     if `v`.isnil:
@@ -145,7 +149,7 @@ template checkNil*(v) = checkNil(v): discard
 
 template checkNil*(v; msg: string) = checkNil(v, msg): discard
 
-macro checkNil*(v; msg: string, code: untyped) =
+macro checkNil*(v; msg: string, code: untyped): untyped =
   quote do:
     if `v`.isnil:
       debug `msg`, false
@@ -161,10 +165,26 @@ template ifNil*(id, val) =
   if id.isnil:
     val
 
-proc free*[T](o: ptr[T]) =
+template notNil*(id, val) =
+  if not id.isnil:
+    val
+
+template maybeCreate*(id, tp; force: static[bool] = false) =
+  when force:
+    id = create(tp)
+  else:
+    if id.isnil:
+      id = create(tp)
+  reset(id[])
+
+proc free*[T](o: ptr[T]) {.inline.} =
   if not o.isnil:
     reset(o[])
     dealloc(o)
+
+proc maybeFree*[T](o: ptr[T]) {.inline.} =
+  if not getCurrentException().isnil:
+    free(o)
 
 template checkTrue*(stmt: untyped, msg: string) =
   if not (stmt):

@@ -3,10 +3,10 @@ import strutils,
        nimpy/py_lib {.all.},
        os,
        strformat,
-       times,
        chronos,
        locks,
        macros
+import times except milliseconds
 
 export nimpy
 export pyLib, locks
@@ -161,12 +161,12 @@ proc pyisbool*(py: PyObject): bool {.withLocks: [pyGil].} =
     return pybi[].isinstance(py, PyBoolClass[]).to(bool)
 
 proc pyisnone*(py: PyObject): bool {.gcsafe, withLocks: [pyGil].} =
-    assert not pybi[].isnil, "pyn: pybi should not be nil"
-    assert pyhasAttr(pybi[], "isinstance"), "pyn: pybi[].isinstance should not be nil"
-    assert not PyNoneClass[].isnil, "pyn: PyNoneClass should not be nil"
-    let check = pybi[].isinstance(py, PyNoneClass[])
-    assert not check.isnil, "pyn: check should not be nil"
-    return py.isnil or check.to(bool)
+    # assert not pybi[].isnil, "pyn: pybi should not be nil"
+    # assert pyhasAttr(pybi[], "isinstance"), "pyn: pybi[].isinstance should not be nil"
+    # assert not PyNoneClass[].isnil, "pyn: PyNoneClass should not be nil"
+    # let check = pybi[].isinstance(py, PyNoneClass[])
+    # assert not check.isnil, "pyn: check should not be nil"
+    return py.isnil or pybi[].isinstance(py, PyNoneClass[]).to(bool)
 
 proc pyisdatetime*(py: PyObject): bool {.withLocks: [pyGil].} =
     return pybi[].isinstance(py, PyDateTimeClass[]).to(bool)
@@ -317,6 +317,28 @@ proc pyget*[T](py: PyObject, k: string, def: T = ""): T =
             return def
         else:
             return py.to(T)
+
+import quirks
+import std/importutils
+proc pywait*(j: PyObject): Future[PyObject] {.async, gcsafe.} =
+  var rdy: bool
+  var res: PyObject
+  while true:
+    checkNil(j)
+    withPyLock:
+      rdy = j.getAttr("ready")().to(bool)
+    if rdy:
+      checkNil(j)
+      withPyLock:
+        checkTrue not pyErrOccurred(), "Py error occurred."
+        res = j.getAttr("get")()
+      break
+    await sleepAsync(250.milliseconds)
+  withPyLock:
+    if (not res.isnil) and (not res.pyisnone) and (not pyErrOccurred()):
+      return res
+    else:
+      raise newException(ValueError, "Python job failed.")
 
 converter pyToSeqStr*(py: PyObject): seq[string] =
   for el in py:

@@ -1,7 +1,7 @@
 import std/[importutils, strutils, marshal, tables, sets, algorithm, os, monotimes, strformat], chronos,
     minhash {.all.}
 
-import cfg, types, utils
+import cfg, types, utils, sharedqueue
 privateAccess(LocalitySensitive)
 export minhash
 {.experimental: "notnil".}
@@ -76,46 +76,55 @@ proc loadLS*(topic: string): Future[PublishedArticles] {.async.} =
   else:
     return initLS()
 
+type
+  LshQuery = object
+    id: MonoTime
+    lsh: PublishedArticles
+    content: ptr string
+
 # these should be generalized since it's the same from `imageflow_server`
-var lshIn*: LockDeque[(MonoTime, PublishedArticles, ptr string)]
-var lshOut*: LockTable[(MonoTime, PublishedArticles), bool]
-var ptrTracker*: ptr HashSet[pointer] # Ensures lshIn doesn't have clashing pointers since we pass string pointers
+var lshIn: AsyncPColl[ptr LshQuery]
+var lshOut: AsyncTable[ptr LshQuery, bool]
+var processing: ptr HashSet[pointer]
 
 proc addArticle*(lsh: PublishedArticles, content: ptr string): Future[bool] {.async.} =
-  let t = getMonoTime()
-  lshIn.addLast (t, lsh, content)
-  return await lshOut.popWait((t, lsh))
+  var q: LshQuery
+  q.id = getMonoTime()
+  q.lsh = lsh
+  q.content = content
+  lshIn.add q.addr
+  return await lshOut.pop(q.addr)
 
 # {.experimental: "strictnotnil".}
-proc checkAndAddArticle(t: MonoTime, lsh: PublishedArticles, content: ptr string) {.async.} =
-  let k = (t, lsh)
+proc checkAndAddArticle(q: ptr LshQuery) {.async.} =
   try:
-    if not isDuplicate(lsh[], content[]):
-      let id = $(len(lsh.fingerprints) + 1)
-      lsh[].add(content[], id)
-      lshOut[k] = true
+    processing[].incl q
+    checkNil(q.lsh)
+    checkNil(q.content)
+    if not isDuplicate(q.lsh[], q.content[]):
+      let id = $(len(q.lsh.fingerprints) + 1)
+      q.lsh[].add(q.content[], id)
+      lshOut[q] = true
     else:
-      lshOut[k] = false
+      lshOut[q] = false
   except Exception as e:
-    lshOut[k] = false
+    lshOut[q] = false
     if not e.isnil:
       echo e[]
     warn "lsh: error adding article."
+  finally:
+    processing[].excl(q)
 
 proc asyncLshHandler() {.async.} =
   try:
-    var
-      t: MonoTime
-      lsh: PublishedArticles
-      content: ptr string
+    var q: ptr LshQuery
     while true:
-      (t, lsh, content) = await lshIn.popFirstwait
-      if content in ptrTracker[]:
-        warn "Clashing pointers found during processing lsh content."
-        continue
-      checkNil(lsh):
-        checkNil(content):
-          asyncSpawn checkAndAddArticle(t, lsh, content)
+      q = await lshIn.pop
+      checkNil(q):
+        if q in processing[]:
+          warn "Clashing pointers found during processing lsh content."
+          continue
+        asyncSpawn checkAndAddArticle(q)
   except Exception as e: # If we quit we can catch defects too.
     if not e.isnil:
       echo e[]
@@ -131,12 +140,12 @@ proc lshHandler() =
 
 proc startLsh*() =
   setNil(lshIn):
-    initLockDeque[(MonoTime, PublishedArticles, ptr string)]()
+    newAsyncPColl[ptr LshQuery]()
   setNil(lshOut):
-    initLockTable[(MonoTime, PublishedArticles), bool]()
-  setNil(ptrTracker):
+    newAsyncTable[ptr LshQuery, bool]()
+  setNil(processing):
     create(HashSet[pointer])
-  ptrTracker[] = initHashSet[pointer]()
+  processing[] = initHashSet[pointer]()
   createThread(lshThread, lshHandler)
 
 when isMainModule:

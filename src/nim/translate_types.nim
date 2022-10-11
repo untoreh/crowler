@@ -62,6 +62,7 @@ type
     proc(fc: FileContext, hostname: string, finish: bool): (Queue,
         VNode) {.gcsafe.} ## the proc that is called for each `langPair`
 
+
 macro getHtml*(code: untyped, kind: static[FcKind], ): untyped =
   case kind:
     of xml:
@@ -86,6 +87,17 @@ proc initFileContext*(data: XmlNode | VNode; file_path, url_path, pair,
     result.t_path = t_path
   else:
     assert false, "Failed to create file context."
+
+proc free*(o: ptr FileContext) =
+  if not o.isnil:
+    o.file_path.reset
+    o.url_path.reset
+    o.pair.reset
+    case o.kind:
+        of xml: o.xhtml.reset
+        of dom: o.vhtml.reset
+    o[].reset
+    dealloc(o)
 
 const
   default_service* = base_translator

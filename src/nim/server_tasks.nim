@@ -48,7 +48,10 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
       let topic = (await nextTopic())
       if topic != "":
         debug "pubtask: trying to publish {topic}"
-        await maybePublish(topic):
+        try:
+          await maybePublish(topic).wait(10.seconds):
+        except AsyncTimeoutError:
+          discard
     except Exception as e:
       if not e.isnil:
         echo e[]

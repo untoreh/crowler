@@ -150,7 +150,7 @@ def get_current_proxy():
 class _http_opts(object):
     prev_timeout = 0
     prev_proxy = ""
-    timeout = 3
+    timeout = 4
     proxy = None
 
     def __init__(self):

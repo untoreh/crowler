@@ -1,8 +1,7 @@
 import
     std/[os, monotimes, locks, uri, httpcore, strformat, hashes],
     lruCache,
-    chronos,
-    chronos/asyncloop
+    chronos
 
 import
     cfg,
@@ -11,6 +10,27 @@ import
     utils,
     locktpl,
     shorturls
+
+
+type
+  ImgQuery = object
+    id: MonoTime
+    url, width, height: string
+  ImgData = object
+    mime, data: ptr string
+
+proc free*(o: ptr ImgData) =
+  if not o.isnil:
+    reset(o.mime[])
+    dealloc(o.mime)
+    reset(o.data[])
+    dealloc(o.data)
+    dealloc(o)
+
+proc newImgData(): ptr Imgdata =
+  result = create(ImgData)
+  result.mime = create(string)
+  result.data = create(string)
 
 const rxPathImg = "/([0-9]{1,3})x([0-9]{1,3})/\\?(.+)(?=/|$)"
 
@@ -24,87 +44,85 @@ proc imgData(imgurl: string): Future[string] {.inline, gcsafe, async.} =
     echo getCurrentException()[]
     discard
 
-proc parseImgUrl*(relpath: string): (string, string, string) =
+proc parseImgUrl*(relpath: string): ImgQuery =
   let
       m = relpath.match(sre rxPathImg).get
       imgCapts = m.captures.toSeq
-  let
-      url = imgCapts[2].get
-      width = imgCapts[0].get
-      height = imgCapts[1].get
-  return (url, width, height)
+  result.id = getMonoTime()
+  result.url = imgCapts[2].get
+  result.width = imgCapts[0].get
+  result.height = imgCapts[1].get
 
 var
   iflThread: Thread[void]
-  imgIn: LockDeque[(MonoTime, string, string, string)]
-  imgOut: LockTable[(MonoTime, string, string, string), (string, string)]
+  imgIn: AsyncPColl[ptr ImgQuery]
+  imgOut: AsyncTable[ptr ImgQuery, ptr ImgData]
   imgLock: ptr AsyncLock
 
 proc handleImg*(relpath: string): Future[(string, string)] {.async.} =
-  let (url, width, height) = parseImgUrl(relpath)
-  var resp, decodedUrl, mime: string
-  if url.isSomething:
-    decodedUrl = url.asBString.toString(true)
+  var q = parseImgUrl(relpath)
+  if q.url.isSomething:
+    var decodedUrl = q.url.asBString.toString(true)
     debug "img: decoded url: {decodedUrl}"
     # block unused resize requests
-    if not (fmt"{width}x{height}" in IMG_SIZES):
-      resp = await decodedUrl.imgData
+    if not (fmt"{q.width}x{q.height}" in IMG_SIZES):
+      result[0] = await decodedUrl.imgData
     else:
-      assert not imgIn.isnil
-      let imgKey = (getMonoTime(), decodedUrl, width, height)
-      imgIn.addLast imgKey
-      return await imgOut.popWait(imgKey)
+      q.url = decodedUrl
+      imgIn.add q.addr
+      let resp = await imgOut.pop(q.addr)
+      if not resp.isnil:
+        defer: free(resp)
+        result = (resp.data[], resp.mime[])
       debug "ifl server: img processed"
-  return (resp, mime)
 
-template submitImg(val: untyped = ("", "")) {.dirty.} = imgOut[imgKey] = val
+template submitImg(val: untyped = nil) {.dirty.} = imgOut[q] = val
 
-proc processImgData(imgKey: (MonoTime, string, string, string)) {.async.} =
+proc processImgData(q: ptr ImgQuery) {.async.} =
   # push img to imageflow context
-  let (id, decodedUrl, width, height) = imgKey
-  var acquired: bool
-  let data = (await decodedUrl.imgData)
-  if data.len == 0:
-    submitImg()
-    return
-  try:
-    await imgLock[].acquire
-    acquired = true
-    if not addImg(data):
-      return
-    let query = fmt"width={width}&height={height}&mode=max&format=webp"
-    logall "ifl server: serving image hash: {hash(await decodedUrl.imgData)}, size: {width}x{height}"
-    # process and send back
-    submitImg:
-      processImg(query)
-  except CatchableError:
-    submitImg()
-    return
-  finally:
-    if acquired:
-      imgLock[].release
+  initImageFlow() # NOTE: this initializes thread vars
+  var acquired, submitted: bool
+  let data = (await q.url.imgData)
+  let res = newImgData()
+  defer:
+    if acquired: imgLock[].release
+    if not submitted:
+      imgOut[q] = res
+  if data.len > 0:
+    try:
+      await imgLock[].acquire
+      acquired = true
+      if addImg(data):
+        let query = fmt"width={q.width}&height={q.height}&mode=max&format=webp"
+        logall "ifl server: serving image hash: {hash(await q.url.imgData)}, size: {q.width}x{q.height}"
+        # process and send back
+        (res.data[], res.mime[]) = processImg(query)
+        imgOut[q] = res
+        submitted = true
+    except CatchableError:
+      discard
 
 proc asyncImgHandler() {.async.} =
   try:
     while true:
-      let imgKey = await imgIn.popFirstWait
-      asyncSpawn processImgData(imgKey)
+      let q = await imgIn.pop
+      checkNil(q):
+        asyncSpawn processImgData(q)
   except:
     let e = getCurrentException()[]
     warn "imageflow: image handler crashed. {e}"
     quitl()
 
 proc imgHandler*() =
-  initImageFlow() # NOTE: this initializes thread vars
   waitFor asyncImgHandler()
 
 proc startImgFlow*() =
   try:
     # start img handler thread
     setNil(imgIn):
-      initLockDeque[(MonoTime, string, string, string)]()
+      newAsyncPColl[ptr ImgQuery]()
     setNil(imgOut):
-      initLockTable[(MonoTime, string, string, string), (string, string)]()
+      newAsyncTable[ptr ImgQuery, ptr ImgData]()
     setNil(imgLock):
       create(AsyncLock)
     reset(imgLock[])

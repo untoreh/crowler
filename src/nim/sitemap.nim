@@ -220,7 +220,7 @@ proc clearSiteMap*(topic: string, pagenum: int) =
     pageCache[].del(sitemapKey(topic, $pagenum))
 
 import karax/[vdom, karaxdsl]
-proc sitemapLinks*(topic="", ar = emptyArt): seq[VNode] =
+proc sitemapLinks*(topic="", ar = emptyArt[]): seq[VNode] =
   # site wide sitemap (index)
   result.add buildHtml link(rel="sitemap", href=sitemapUrl())
   # articles topic sitemap

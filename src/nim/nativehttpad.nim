@@ -1,39 +1,25 @@
-import std/[os, monotimes, httpcore, uri, httpclient, net, asyncdispatch, hashes, locks]
+import std/[os, monotimes, httpcore, uri, httpclient, net, hashes, locks]
 import chronos/timer
+import asyncdispatch except `$` # overlaps with system `$`
 from asyncfutures import asyncCheck
+import httptypes as htp
+export htp
+import sharedqueue
 import utils
 from cfg import PROXY_EP
-
-var
-  proxy: ptr Proxy
-  sslContext: ptr SSLContext
 
 const DEFAULT_TIMEOUT = 4.seconds # 4 seconds
 
 type
-  TimeoutError* = object of CatchableError
-  RequestError* = object of CatchableError
+  Request = htp.Request
+  Response = htp.Response
 
-type
-  RequestObj = object
-    url*: Uri
-    meth*: HttpMethod
-    headers*: HttpHeaders
-    body*: string
-    redir*: bool
-  Request* = ptr RequestObj
-
-  ResponseObj* = object
-    code*: HttpCode
-    headers*: HttpHeaders
-    body*: string
-  Response* = ptr ResponseObj
 var
   httpThread: Thread[void]
-  httpIn*: LockDeque[(MonoTime, Request)]
-  httpOut*: LockTable[(MonoTime, Request), Response]
+  httpIn*: PColl[ptr Request]
+  httpOut*: LockTable[ptr Request, ptr Response]
 
-proc hash(rq: Request): Hash = hash(rq.url)
+proc hash(rq: ptr Request): Hash = hash(rq.url)
 
 proc wait[T](fut: Future[T], timeout: Duration): Future[T] {.async.} =
   let start = Moment.now()
@@ -44,17 +30,8 @@ proc wait[T](fut: Future[T], timeout: Duration): Future[T] {.async.} =
     elif Moment.now() - start > timeout:
       raise newException(TimeoutError, "Timeout exceeded!")
     else:
-      await sleepAsync(1)
+      await sleepAsync(10)
 
-proc new*(_: typedesc[Response]): Response = create(ResponseObj)
-proc new*(_: typedesc[Request], url: Uri, met: HttpMethod = HttpGet,
-          headers: HttpHeaders = nil, body = "", redir = true): Request =
-  result = create(RequestObj)
-  result.url = url
-  result.meth = met
-  result.body = body
-  result.headers = headers
-  result.redir = redir
 
 proc getClient(redir=true): AsyncHttpClient =
   newAsyncHttpClient(
@@ -63,50 +40,51 @@ proc getClient(redir=true): AsyncHttpClient =
     sslContext=newContext(verifyMode = CVerifyNone)
   )
 
-proc doReq(t: MonoTime, rq: Request, timeout = DEFAULT_TIMEOUT) {.async.} =
-  let r = new(Response)
-  let e = newException(RequestError, "Bad code.")
+proc doReq(rq: ptr Request, timeout = DEFAULT_TIMEOUT) {.async.} =
+  let r = newResponse()
+  defer: maybeFree(r)
   var cl: AsyncHttpClient
   try:
     cl = getClient(rq.redir)
     let resp = await cl.request(rq.url, httpMethod = rq.meth,
         headers = rq.headers, body = rq.body).wait(timeout)
     r.code = resp.code
-    r.headers = resp.headers
+    r.headers[] = resp.headers
     if r.code == Http200:
-      r.body = await resp.body
-  except CatchableError: # timeout?
+      r.body = create(string)
+      try:
+        r.body[] = await resp.body
+      except Exception as e:
+        free(r.body)
+        raise e
+  except ProtocolError as e: # timeout?
+    warn "protocol error: is proxy running? {PROXY_EP}"
+    await sleepAsync(1000)
+  except CatchableError:
     discard
   finally:
     if not cl.isnil:
       cl.close()
   # the response
-  httpOut[(t, rq)] = r
+  httpOut[rq] = r
 
-proc popFirstAsync[T](q: LockDeque[T]): Future[T] {.async.} =
+proc popFirstAsync[T](q: PColl[T]): Future[T] {.async.} =
   while true:
     if q.len > 0:
-      result = q.popFirst()
+      doassert q.pop(result)
       break
     else:
       await sleepAsync(1)
 
-proc clearFuts(futs: var seq[Future]) =
-  var toKeep: seq[Future]
-  for f in futs:
-    if not f.finished:
-        toKeep.add(f)
-  futs = toKeep
-
 proc asyncHttpHandler() {.async.} =
+  var rq: ptr Request
   while true:
     try:
       warn "http: starting httpHandler..."
-      var futs: seq[Future[void]]
       while true:
-        clearFuts(futs)
-        let (t, rq) = await httpIn.popFirstAsync
-        futs.add doReq(t, rq)
+        rq = await httpIn.popFirstAsync
+        checkNil(rq):
+          asyncCheck doReq(rq)
     except:
       let e = getCurrentException()
       warn "http: httpHandler crashed. {e[]}"
@@ -115,8 +93,9 @@ proc httpHandler() =
   waitFor asyncHttpHandler()
 
 proc initHttp*() =
-  setNil(httpIn):
-    initLockDeque[(MonoTime, Request)](100)
+  notNil(httpIn):
+    delete(httpIn)
+  httpIn =  newColl[ptr Request]()
   setNil(httpOut):
-    initLockTable[(MonoTime, Request), Response]()
+    initLockTable[ptr Request, ptr Response]()
   createThread(httpThread, httpHandler)

@@ -1,33 +1,18 @@
-import strformat,
-       sugar,
+import std/[os, times, monotimes, cpuinfo, strformat, strutils, json, tables, strtabs, sugar, locks, options, uri, hashes],
        fusion/matching,
-       strutils,
-       tables,
        nimpy,
-       std/os,
-       times,
-       std/monotimes,
-       locks,
        karax/vdom,
-       strtabs,
-       options,
-       uri,
        lrucache,
        zip/zlib,
-       std/hashes,
        chronos,
        scorper,
-       scorper/http/[httpcore, httpcommonheaders],
-       std/cpuinfo,
-       json,
-       locktplasync
+       scorper/http/[httpcore, httpcommonheaders]
 
 {.experimental: "caseStmtMacros".}
 # {.experimental: "strictnotnil".}
 
 import
   pyutils,
-  pyhttp,
   quirks,
   cfg,
   types,
@@ -59,8 +44,6 @@ from nativehttp import initHttp
 # lockedStore(Table)
 
 type
-  # StringRef = ref string not nil
-  StringRef = ref string
   ReqContext = object of RootObj
     rq: Table[ReqId, Request]
     url: uri.Uri
@@ -70,15 +53,15 @@ type
     headers: HttpHeaders
     norm_capts: UriCaptures
     respHeaders: HttpHeaders
-    respBody: StringRef
+    respBody: ref string
     respCode: HttpCode
     lock: AsyncLock # this is acquired while the rq is being processed
     cached: bool    # done processing
-  ReqId = MonoTime # using time as request id means that the request cache should be thread local
+  ReqId = Hash # using time as request id means that the request cache should be thread local
 
 converter reqPtr(rc: ref ReqContext): uint64 = cast[uint64](rc)
 
-proc getReqId(): ReqId = getMonoTime()
+proc getReqId(path: string): ReqId = hash((getMonoTime(), path))
 
 var
   threadInitialized {.threadvar.}: bool
@@ -98,7 +81,6 @@ proc initThreadImpl() {.gcsafe.} =
   initThreadBase()
   initSonic() # Must be on top
   initHttp()
-  initPyHttp()
   initHtml()
   initLDJ()
   initFeed()
@@ -479,7 +461,7 @@ proc handleGet(ctx: Request): Future[void] {.gcsafe, async.} =
   # don't replicate works on unfinished requests
   if not reqCtx.cached:
     await reqCtx.lock.acquire
-  let rqid = getReqId()
+  let rqid = getReqId(relpath)
   reqCtx.rq[rqid] = ctx
   if nocache != '\0':
     handleCacheClear()

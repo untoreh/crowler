@@ -12,7 +12,8 @@ import
   cfg,
   utils,
   lazyjson,
-  pyhttp
+  # pyhttp
+  nativehttp
 
 const
   IF_VERSION_MAJOR: uint32 = 3
@@ -41,6 +42,7 @@ const
   outputIoId = 0
   inputIoId = 1
 var
+  iflInitialized* {.threadvar.}: bool
   ctx {.threadvar.}: IFLContext
   outputBuffer {.threadvar.}: ptr ptr uint8
   outputBufferLen {.threadvar.}: ptr csize_t
@@ -117,9 +119,12 @@ proc initCmd() =
 #         }
 #     ]
 
-proc setCmd(v: string) {.inline.} = cmdStr["value"] = %v
+proc setCmd(v: string) {.inline.} =
+  cmdStr["value"] = %v
 
 proc initImageFlow*() =
+  if likely(iflInitialized):
+    return
   outputBuffer = create(ptr uint8)
   outputBufferLen = create(csize_t)
   resPtr = create(ptr uint8)
@@ -140,7 +145,7 @@ proc initImageFlow*() =
   let b = imageflow_context_add_output_buffer(ctx.p, outputIoId)
   if not b: doassert ctx.check
   # discard imageflow_context_memory_allocate(ctx.p, BUFFER_SIZE.csize_t, "", 0)
-  doassert ctx.check
+  iflInitialized = ctx.check
 
 proc reset(c: IFLContext) =
   imageflow_context_destroy(ctx.p)
@@ -168,7 +173,7 @@ proc addImg*(img: string): bool =
 proc getImg*(src: string, kind: Source): Future[string] {.async.} =
   return case kind:
     of urlsrc:
-      await httpGet(src, decode=false)
+      (await get(src.parseUri, decode = false, proxied = false)).body[]
       # (await fetch(HttpSessionRef.new(), parseUri(src))).data.bytesToString
     elif fileExists(src):
       await readFileAsync(src)
@@ -215,10 +220,14 @@ proc processImg*(input: string, mtd = execMethod): (string, string) =
   return doProcessImg(input, mtd)
 
 when isMainModule:
+  # initPyHttp()
+  initHttp()
   initImageFlow()
-  let img = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fwww.nj.com%2Fresizer%2Fmg42jsVYwvbHKUUFQzpw6gyKmBg%3D%2F1280x0%2Fsmart%2Fadvancelocal-adapter-image-uploads.s3.amazonaws.com%2Fimage.nj.com%2Fhome%2Fnjo-media%2Fwidth2048%2Fimg%2Fsomerset_impact%2Fphoto%2Fsm0212petjpg-7a377c1c93f64d37.jpg&f=1&nofb=1"
+  let img = "https://picjumbo.com/wp-content/uploads/maltese-dog-puppy-1570x1047.jpg"
   # let img = PROJECT_PATH / "vendor" / "imageflow.dist" / "data" / "cat.jpg"
-  let data = getImg(img, kind = urlsrc)
+  let data = waitFor getImg(img, kind = urlsrc)
+  echo data.len
   doassert data.addImg
   let query = "width=100&height=100&mode=max"
   let (i, mime) = processImg(query)
+  echo mime

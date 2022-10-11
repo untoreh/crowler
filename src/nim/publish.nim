@@ -8,7 +8,8 @@ import nimpy,
        marshal,
        karax / vdom,
        std / importutils,
-       tables
+       tables,
+       macros
 
 import cfg,
        types,
@@ -21,7 +22,8 @@ import cfg,
        search,
        pyutils,
        sitemap,
-       lsh
+       lsh,
+       sharedqueue
 
 let pageset = initLockTable[string, bool]()
 
@@ -51,7 +53,7 @@ proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, i
               pagetree)
   # if we pass a pagecount we mean to finalize
   if finalize:
-    withPyLock:
+    withPylock:
       discard site[].update_page_size(topic, pagenum.parseInt, pagecount, final = true)
   if with_arts:
     for a in arts:
@@ -145,26 +147,30 @@ proc filterDuplicates(topic: string, lsh: PublishedArticles, pagenum: int,
   return true
 
 proc ensureLS(topic: string): Future[PublishedArticles] {.async, raises: [].} =
+  defer: maybeFree(result)
   try:
     result = await loadLS(topic)
   except:
     warn "Failed to load lsh for topic {topic}. Rebuilding..."
     result = initLS()
     try:
-      var arts: seq[ptr string]
-      defer:
-        for cnt in arts: free(cnt)
-      for cnt in allDoneContent(topic):
-        arts.add cnt
-        discard await addArticle(result, cnt)
+      let content = await allDoneContent(topic)
+      for cnt in content:
+        discard await addArticle(result, cnt.unsafeAddr)
     except:
       warn "Failed to rebuild lsh for topic {topic}. Proceeding anyway."
 
+macro infoPub(msg: static[string]) =
+  var m = "pub({topic}): "
+  m.add msg
+  quote do:
+    info `m`
+
 proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   ##  Generates html for a list of `Article` objects and writes to file.
+  infopub "start"
   withPyLock:
     doassert topic in site[].load_topics()[1]
-  info "pub: topic - {topic}"
   var pagenum = await curPageNumber(topic)
   let newpage = (await pageSize(topic, pagenum)) > cfg.MAX_DIR_FILES
   if newpage:
@@ -172,6 +178,7 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   # The subdir (at $pagenum) at this point must be already present on storage
   let pagedir = topic / $pagenum
 
+  infopub "lsh"
   let lsh = await ensureLS(topic)
   defer: free(lsh)
   let startTime = getTime()
@@ -179,6 +186,7 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
     posts: seq[(VNode, Article)]
     donePy: seq[PyObject]
     doneArts: seq[Article]
+  infopub "filter"
   while posts.len == 0 and (getTime() - startTime).inSeconds <
       cfg.PUBLISH_TIMEOUT:
     if not await filterDuplicates(topic, lsh, pagenum, posts.addr, donePy.addr,
@@ -197,8 +205,9 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   # only write articles after having saved LSH (within `filterDuplicates)
   # to avoid duplicates. It is fine to add articles to the set
   # even if we don't publish them, but we never want duplicates
+  infopub "save lsh"
   await saveLS(topic, lsh)
-  info "Writing {newposts} articles for topic: {topic}"
+  infopub "Writing {newposts} articles for topic: {topic}"
   # FIXME: should this be here?
   for (tree, a) in posts:
     await processHtml(pagedir, a.slug, tree, a)
@@ -209,6 +218,7 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   # if its a new page, the page posts count is equivalent to the just published count
   var pagecount: int
   pagecount = newposts
+  infopub "updating db page size"
   withPyLock:
     if not newpage:
       # add previous published articles
@@ -218,27 +228,31 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
         pagecount += pagesize[0].to(int)
     discard site[].update_page_size(topic, pagenum, pagecount)
 
+  infopub "finalizing pages"
   await finalizePages(topic, pagenum, newpage, pagecount.addr)
   # update feed file
   when cfg.RSS:
+    infopub "updating feeds"
     let tfeed = await topic.fetchFeed
     tfeed.update(topic, doneArts, dowrite = true)
   when cfg.SEARCH_ENABLED:
+    infopub "indexing search"
     for ar in doneArts:
       var relpath = topic / $pagenum / ar.slug
       await search.push(relpath)
+  infopub "clearing sitemaps"
   clearSiteMap(topic)
   clearSiteMap(topic, pagenum)
   # update ydx turbo items
   when cfg.YDX:
+    infopub "updating yandex"
     writeFeed()
-  info "pub: published {len(doneArts)} new posts."
+  infopub "published {len(doneArts)} new posts."
   return true
 
 
 let lastPubTime = create(Time)
-let pubLock = create(AsyncLock)
-pubLock[] = newAsyncLock()
+let pubLock = newThreadLock()
 lastPubTime[] = getTime()
 
 proc pubTimeInterval(topic: string): Future[int] {.async.} =
@@ -254,9 +268,7 @@ proc pubTimeInterval(topic: string): Future[int] {.async.} =
 
 proc maybePublish*(topic: string) {.gcsafe, async.} =
   let t = getTime()
-  if not pubLock[].locked:
-    await pubLock[].acquire()
-    defer: pubLock[].release
+  withLock(pubLock):
     let
       tpd = (await topicPubdate())
       pastTime = inMinutes(t - tpd)

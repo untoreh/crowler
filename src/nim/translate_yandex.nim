@@ -67,9 +67,10 @@ proc translate*(self: YandexTranslateObj, text, src, trg: string): Future[
 
   # native
   let resp = await post(uri, headers, body)
+  checkNil(resp.body)
   if resp.code != Http200:
     raiseTranslateError "Yandex POST request error, response code {resp.code}".fmt
-  let respJson = resp.body.parseJson
+  let respJson = resp.body[].parseJson
 
   if respJson.kind != JObject or "text" notin respJson or respJson["text"].len == 0:
     raiseTranslateError "Yandex respone has no translation."
@@ -86,10 +87,7 @@ proc init*(_: typedesc[YandexTranslateObj]): YandexTranslateObj =
   return srv
 
 when isMainModule:
-  when declared(nativehttp):
-    initHttp()
-  else:
-    initPyHttp()
+  initHttp()
   ydx = create(YandexTranslateObj)
   ydx[] = init(YandexTranslateObj)
   let s = "This is a good day."

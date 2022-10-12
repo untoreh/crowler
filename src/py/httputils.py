@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-from io import BytesIO
 from pathlib import Path
 from time import sleep
-from typing import Dict, MutableMapping, NamedTuple
+from typing import Dict, NamedTuple
 
 import numcodecs
 
 # import pycurl
 import pycurl_requests as requests
-import trafilatura.downloads as trad
 import zarr as za
 from numcodecs import Blosc
 from trafilatura.downloads import (
@@ -164,20 +162,20 @@ LRU_CACHE = init_lru()
 #         if curl is not None:
 #             curl.close()
 #
-def send_request(meth, url, headers, body):
+def send_request(depth, meth, url, headers, body):
     try:
-        return requests.request(meth, url, headers=headers, data=body, verify=False)
-    except Exception as e:
-        print(e)
+        with pb.http_opts(proxy=depth, timeout=4):
+            return requests.request(meth, url, headers=headers, data=body, verify=False)
+    except:
+        # print(e)
         pass
 
 
 def fetch(url, depth, *args, meth="GET", headers={}, body="", decode=False, **kwargs):
     resp = ""
-    with pb.http_opts(proxy=depth, timeout=4):
-        req = send_request(meth, url, headers=headers, body=body)
-        if isinstance(req, requests.models.Response):
-            resp = Response(req.url or url, req.status_code or 0, req.headers, req.content)
+    req = send_request(depth, meth, url, headers=headers, body=body)
+    if isinstance(req, requests.models.Response):
+        resp = Response(req.url or url, req.status_code or 0, req.headers, req.content)
         # use ssl only when without proxy
         # resp = send_request(
         #     url,
@@ -199,6 +197,11 @@ def fetch(url, depth, *args, meth="GET", headers={}, body="", decode=False, **kw
         else:
             return resp
 
+def save_data(k, data):
+    if isinstance(data, str):
+        LRU_CACHE[k] = data.encode()
+    elif isinstance(data, bytes):
+        LRU_CACHE[k] = data
 
 def fetch_data(
     url,
@@ -211,11 +214,13 @@ def fetch_data(
     fromcache=True,
     **kwargs,
 ):
-    if False and fromcache:
-        if url in LRU_CACHE:
-            data = LRU_CACHE[Path(url)]
+    if fromcache:
+        k = Path(url)
+        if k in LRU_CACHE:
+            data = LRU_CACHE[k]
         else:
-            data = fetch(url, *args, **kwargs, depth=-1, decode=decode)
+            data = fetch(url, *args, **kwargs, depth=depth, decode=decode)
+            save_data(k, data)
     else:
         # with (depth - 1) we ensure that if cached data was `None`
         # the first trial is always performed without proxy
@@ -235,9 +240,5 @@ def fetch_data(
             asresp=asresp,
             fromcache=False,
         )
-        if isinstance(data, str):
-            try:
-                LRU_CACHE[Path(url)] = data
-            except:
-                pass
+        save_data(Path(url), data)
     return data

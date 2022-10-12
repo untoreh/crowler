@@ -180,7 +180,7 @@ proc translate*(self: BingTranslateObj, text, src, trg: string): Future[
       ("content-length", $body.len)
       ].newHttpHeaders()
 
-  let resp = await post(uri, headers, body)
+  let resp = await post(uri, headers, body, proxied = true)
   checkNil(resp.body)
   if resp.code != Http200:
     raiseTranslateError "Bing POST request error, response code {resp.code}".fmt

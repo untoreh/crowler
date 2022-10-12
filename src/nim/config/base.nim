@@ -39,7 +39,7 @@ export logging
 
 const
     USE_PROXIES* = true
-    PROXY_EP* = "socks5://localhost:8877"
+    PROXY_EP* = "socks5://127.0.0.1:8877"
     WEBSITE_DEBUG_PORT* = when releaseMode or dockerMode: "" else: os.getenv("WEBSITE_DEBUG_PORT", ":5050")
     customPages* = ["dmca", "terms-of-service", "privacy-policy"]
 

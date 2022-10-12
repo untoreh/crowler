@@ -42,11 +42,14 @@ proc toResponse(obj: PyObject): Future[Response] {.async.} =
       result.headers[] = obj.headers.pyToHeaders
       result.body[] = obj.data.to(string)
 
-proc pyReqGet(url: string, dodec: Decode): Future[Response] {.async.} =
+proc pyReqGet(url: string, dodec: Decode, proxied: bool): Future[Response] {.async.} =
   env()
   withPyLock:
     {.cast(gcsafe).}:
-      j = pySched[].apply(fetchData[], url, decode = bool(dodec))
+      j = pySched[].apply(fetchData[],
+                          url,
+                          decode = bool(dodec),
+                          depth = proxied.int + 1)
   var obj = await pywait(j)
   result = await toResponse(move obj)
 
@@ -60,7 +63,7 @@ proc pyReqPost(q: ptr Request): Future[Response] {.async.} =
                           headers = q.headers.headersToPy(),
                           body = q.body,
                           decode = bool(q.decode),
-                          fromcache = false
+                          depth = q.proxied.int + 1
         )
   var obj = await pywait(move j)
   result = await toResponse(move obj)
@@ -70,7 +73,7 @@ proc requestTask(q: ptr Request) {.async.} =
   try:
     v[] =
       if q.meth == HttpGet:
-        await pyReqGet($q.url, q.decode)
+        await pyReqGet($q.url, q.decode, q.proxied)
       else: # post
         await pyReqPost(q)
   except:
@@ -98,7 +101,7 @@ proc initHttp*() {.gcsafe.} =
 
 
 proc httpGet*(url: string; headers: HttpHeaders = nil;
-              decode = Decode.yes): Future[Response] {.async,
+              decode = Decode.yes, proxied = false): Future[Response] {.async,
                   raises: [Defect].} =
   var q: Request
   q.id = getMonoTime()
@@ -108,6 +111,7 @@ proc httpGet*(url: string; headers: HttpHeaders = nil;
     if headers.isnil: newHttpHeaders()
     else: headers
   q.decode = decode
+  q.proxied = proxied
   httpIn.add q.addr
   let resp = await httpOut.pop(q.addr)
   defer: free(resp)
@@ -115,18 +119,27 @@ proc httpGet*(url: string; headers: HttpHeaders = nil;
     result = resp[]
 
 # `redir` is stub for compat
-macro get*(url: Uri; redir = false, decode = true, args: varargs[
+macro get*(url: Uri; redir = false, decode = true, proxied = false, args: varargs[
     untyped]): untyped =
   quote do:
-    httpGet($`url`, `args`)
+    httpGet($`url`, `args`, proxied = `proxied`)
 
-macro get*(url: string; headers: HttpHeaders = nil, redir = false,
-                                               decode = true): untyped =
+macro get*(url: string;
+           headers: HttpHeaders = nil,
+           redir = false,
+           decode = true,
+           proxied = false
+           ): untyped =
   quote do:
-    httpGet(`url`, `headers`, `decode`, )
+    httpGet(`url`, `headers`, `decode`, `proxied`)
 
-proc httpPost*(url: string, headers: HttpHeaders = nil, body: sink string = "",
-    decode = Decode.yes): Future[Response] {.async, raises: [Defect].} =
+proc httpPost*(url: string,
+               headers: HttpHeaders = nil,
+               body: sink string = "",
+               decode = Decode.yes,
+               proxied = false): Future[
+                 Response] {.async,
+                             raises: [Defect].} =
   var q: Request
   q.id = getMonoTime()
   q.meth = HttpPost
@@ -135,6 +148,7 @@ proc httpPost*(url: string, headers: HttpHeaders = nil, body: sink string = "",
     if headers.isnil: newHttpHeaders()
     else: headers
   q.decode = decode
+  q.proxied = proxied
   q.body = body
   httpIn.add q.addr
   let resp = await httpOut.pop(q.addr)

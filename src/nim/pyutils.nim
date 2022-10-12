@@ -324,14 +324,13 @@ proc pywait*(j: PyObject): Future[PyObject] {.async, gcsafe.} =
   var rdy: bool
   var res: PyObject
   while true:
-    checkNil(j)
     withPyLock:
-      rdy = j.getAttr("ready")().to(bool)
-    if rdy:
       checkNil(j)
+      rdy = j.callMethod("ready").to(bool)
+    if rdy:
       withPyLock:
-        checkTrue not pyErrOccurred(), "Py error occurred."
-        res = j.getAttr("get")()
+        checkNil(j)
+        res = j.callMethod("get")
       break
     await sleepAsync(250.milliseconds)
   withPyLock:

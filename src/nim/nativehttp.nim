@@ -4,9 +4,10 @@ import chronos
 import httptypes except initHttp
 import
   utils,
-  pyhttp
-  # nativehttpha,
-  # nativehttpad,
+  # pyhttp
+  # harphttp
+  # stdhttp
+  chronhttp
 
 
 export Request, Response, RequestError, initHttp
@@ -28,9 +29,14 @@ proc getImpl(url: Uri, meth: HttpMethod, headers: HttpHeaders = nil,
   else:
     result = move respPtr[]
 
-proc request*(uri: Uri, meth = HttpGet, headers: HttpHeaders = nil,
-                               body = "", redir = true, proxied = true,
-                                   retries = 5): Future[Response] {.async.} =
+proc request*(uri: Uri,
+              meth = HttpGet,
+              headers: HttpHeaders = nil,
+              body = "",
+              redir = true,
+              proxied = true,
+              decode = true,
+              retries = 5): Future[Response] {.async.} =
   var resp: Response
   for r in 0..<retries:
     try:
@@ -43,34 +49,24 @@ proc request*(uri: Uri, meth = HttpGet, headers: HttpHeaders = nil,
       continue
   raiseRequestError("Request failed, retries exceeded.")
 
-import macros
-macro request*(uri: string, args: varargs[untyped]): untyped =
-  quote do:
-    request(`uri`, `args`)
+type Url = string | Uri
 
-macro get*(url: Uri; redir = true; decode = false; proxied = true;
-    args: varargs[untyped]): untyped =
-  quote do:
-    request(`url`, proxied = `proxied`, `args`)
+proc asUri*(u: Url): Uri {.inline.} =
+  when u is string:
+    parseUri(u)
+  else: u
 
-macro get*(url: string; args: varargs[untyped]): untyped =
-  quote do:
-    request(parseUri(`url`), `args`)
+template get*(url: Url; args: varargs[untyped]): untyped =
+  request(url.asUri, HttpGet, args)
 
-proc post*(uri: Uri; headers: HttpHeaders = nil; body = ""): Future[
-    Response] {.async.} =
-  return await request(uri, meth = HttpPost, headers = headers, body = body)
-
-template post*(url: string, args: varargs[untyped]): Future[Response] =
-  post(parseUri(url), args)
+template post*(url: Url; args: varargs[untyped]): Future[Response] =
+  request(url.asUri, HttpPost, args)
 
 when isMainModule:
   import uri
-  when declared(pyhttp):
-    initPyHttp()
-  else:
-    initHttp()
+  import ad_chronos_adapter
+  initHttp()
   let u = "https://ipinfo.io/ip".parseUri
-  let resp = waitFor get(u)
+  let resp = waitFor get(u, proxied = true)
   echo resp.code
   echo resp.body[]

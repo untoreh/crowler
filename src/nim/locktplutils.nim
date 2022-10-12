@@ -35,11 +35,6 @@ when declared(LockDeque):
 
 import sharedqueue
 import chronos/asyncloop
-proc popFirstWait*[T](q: PColl[T]): Future[T] {.async.} =
-  if q.len > 0:
-    doassert q.pop(result)
-  else:
-    result = newFuture[T]("Pcoll.popFirstWait")
 
 type
   AsyncPCollObj[T] = object
@@ -84,17 +79,6 @@ proc pop*[T](apc: AsyncPColl[T]): Future[T] =
     else:
       apc.waiters.add fut
   fut[]
-
-proc add*[T](apc: AsyncPColl[T]): Future[T] {.async.} =
-  withLock(apc.lock):
-    var clear: seq[int]
-    for i in 0..<apc.waiters.len:
-      if apc.waiters[i].finished:
-        clear.add i
-    apc.waiters.pop(clear)
-  result = await apc.popImpl()
-  # withLock(apc.lock):
-  #   apc.waiters[0].delete()
 
 proc delete*[T](apc: AsyncPColl[T]) =
   apc.waiters.delete()

@@ -5,9 +5,7 @@ from cfg import PROXY_EP
 import types
 import utils
 import translate_native_utils
-# import nativehttp
-import httptypes
-import pyhttp
+import nativehttp
 
 type
   GoogleTranslateObj* = object of TranslateObj
@@ -77,7 +75,7 @@ proc translate*(self: GoogleTranslateObj, text, src, trg: string): Future[
   elif text.len > 5000:
     raiseTranslateError "Translation string exceeds max length of 5000 bytes."
   let uri = queryUrl(text, src, trg)
-  let resp = await get(uri)
+  let resp = await get(uri, proxied = true)
   if resp.body.isnil or resp.body[].len == 0:
     raiseTranslateError "Translation was empty."
   result = getTranslation(resp.body[])
@@ -90,10 +88,7 @@ proc init*(_: typedesc[GoogleTranslateObj]): GoogleTranslateObj =
   return srv
 
 when isMainModule:
-  when declared(nativehttp):
-    initHttp()
-  else:
-    initPyHttp()
+  initHttp()
   let text = """This was a fine day."""
   gt = create(GoogleTranslateObj)
   gt[] = init(GoogleTranslateObj)

@@ -71,11 +71,15 @@ proc init*(r: var Request, url: Uri, met: HttpMethod = HttpGet,
   r.redir = redir
   r.proxied = proxied
 
+proc `=destroy`*(o: var Response) =
+  ## The data under pointers is not deleted
+  o.code.reset
+  if not o.headers.isnil:
+    o.headers = nil
+  if not o.body.isnil:
+    o.body = nil
+
 proc free*(o: ptr Response) =
   if not o.isnil:
-    o.code.reset
-    if not o.headers.isnil:
-      o.headers.reset
-    if not o.body.isnil:
-      o.body.reset
+    `=destroy`(o[])
     dealloc o

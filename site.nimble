@@ -34,6 +34,6 @@ requires "fsnotify"
 requires "zip"
 requires "threading"
 requires "uuids"
-requires "https://github.com/untoreh/nim-chronos#master" # required for proxy support
+requires "https://github.com/untoreh/nim-chronos#update" # required for proxy support
 requires "https://github.com/untoreh/nimSocks#master" # required for proxy support
 requires "asynctools"

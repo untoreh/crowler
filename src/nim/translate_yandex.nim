@@ -8,8 +8,7 @@ import types
 import utils
 import translate_native_utils
 import cacheduuid
-# import nativehttp
-import pyhttp
+import nativehttp
 
 const
   # YANDEX_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.88 Safari/537.36"
@@ -43,11 +42,13 @@ proc buildBody(self: YandexTranslateObj, text, src, trg: string): string =
   return body.encodeQuery
 
 proc fetchCookies(self: YandexTranslateObj) {.async.} =
-  let resp = await get(YANDEX_URI, redir=true)
+  let resp = await get(YANDEX_URI, redir=true, proxied=true)
+  const errMsg =  "Yandex fetch cookies failed."
   if resp.code.int == 0:
-    raiseTranslateError "Yandex fetch cookies failed."
-  self.cookie[].setLen 0
-  self.cookie[].add resp.parseCookies
+    raiseTranslateError errMsg
+  checkNil(resp.headers[], errMsg):
+    self.cookie[].setLen 0
+    self.cookie[].add resp.parseCookies
 
 proc translate*(self: YandexTranslateObj, text, src, trg: string): Future[
     string] {.async.} =
@@ -66,7 +67,7 @@ proc translate*(self: YandexTranslateObj, text, src, trg: string): Future[
       ].newHttpHeaders
 
   # native
-  let resp = await post(uri, headers, body)
+  let resp = await post(uri, headers, body, proxied = true)
   checkNil(resp.body)
   if resp.code != Http200:
     raiseTranslateError "Yandex POST request error, response code {resp.code}".fmt

@@ -24,9 +24,18 @@ import config as cfg
 import log
 import proxies_pb as pb
 import utils as ut
+from enum import IntEnum
 from utils import ZarrKey, load_zarr, save_zarr
 
 SITES = {}
+
+
+class Topic(IntEnum):
+    Slug = 0
+    Name = 1
+    PubDate = 2
+    PubCount = 3
+    UnpubCount = 4
 
 
 def read_sites_config(sitename: str, ensure=False, force=False):
@@ -284,9 +293,13 @@ class Site:
             case Job.reddit:
                 return self.has_reddit and time.time() - self._last_reddit > kind.value
             case Job.facebook:
-                return self.has_facebook and time.time() - self._last_facebook > kind.value
+                return (
+                    self.has_facebook and time.time() - self._last_facebook > kind.value
+                )
             case Job.twitter:
-                return self.has_twitter and time.time() - self._last_twitter > kind.value
+                return (
+                    self.has_twitter and time.time() - self._last_twitter > kind.value
+                )
 
     def topic_feed_interval(self, topic: str):
         # How much time should wait between parse jobs
@@ -329,6 +342,7 @@ class Site:
             assert newsize >= 0, "just saved topics should be greater than 0"
             saved_articles.resize(newsize)
         save_zarr(done, k=ZarrKey.done, subk=pagenum, root=self.topic_dir(topic))
+        self.update_article_count(topic)
 
     def update_pubtime(self, topic: str, pagenum: int):
         page_articles_arr = load_zarr(
@@ -348,6 +362,7 @@ class Site:
         save_zarr(
             checked_arts, k=ZarrKey.articles, root=self.topic_dir(topic), reset=reset
         )
+        self.update_article_count(topic)
 
     def update_page_size(self, topic: str, idx: int, val, final=False):
         assert idx >= 0, "page idx has to be greater than 0"
@@ -411,6 +426,7 @@ class Site:
             save_zarr([], k=ZarrKey.articles, root=self.topic_dir(topic))
         if "feeds" not in grp:
             save_zarr([], k=ZarrKey.feeds, root=self.topic_dir(topic))
+        self.update_article_count(topic)
 
     def _init_data(self):
         if not os.path.exists(self.topics_idx):
@@ -518,6 +534,10 @@ class Site:
     def get_topic_desc(self, topic: str):
         return self.topics_dict[topic]
 
+    def get_topic_idx(self, topic):
+        arr = self.load_topics()[0]
+        return np.argmax(arr[:, 0] == topic)
+
     def get_topic_pubDate(self, idx: int):
         assert self.topics_arr is not None
         return int(self.topics_arr[idx, 2]) if len(self.topics_arr) > idx else 0
@@ -566,6 +586,7 @@ class Site:
                         atp = a.get("topic", "")
                         if atp and atp != topic:
                             page_arts[n] = None
+
         try:
             if topic == "all":
                 for topic in self.load_topics()[1].keys():
@@ -574,8 +595,6 @@ class Site:
                 clear_topic(topic)
         except:
             log.warn("Couldn't remove broken articles.")
-
-
 
     def topics_watcher(self):
         while True:
@@ -592,6 +611,40 @@ class Site:
         for img in images:
             if img.url not in self.img_bloom:
                 return img
+
+    def _migrate_to_new_size(self) -> za.Array:
+        assert isinstance(self.topics_arr, za.Array)
+        assert self.topics_arr.ndim == 2
+        n_cols = len(Topic)
+        if self.topics_arr.shape[1] < n_cols:
+            c = self.topics_arr.shape[0]
+            self.topics_arr.resize(c, n_cols)  # add
+        return self.topics_arr
+
+    def _update_topic_articles(self, t: np.ndarray):
+        slug = t[0]
+        t[Topic.PubCount] = len(self.load_done(slug))
+        # published count
+        t[Topic.UnpubCount] = len(self.load_articles(slug))
+        return t
+
+    def update_article_count(self, topic=None):
+        # assert isinstance(self.topics_arr, za.Array)
+        arr = self._migrate_to_new_size()
+        if topic is None:  # Update all topics
+            for n, t in enumerate(arr):
+                arr[n] = self._update_topic_articles(t)
+        else:
+            idx = self.get_topic_idx(topic)
+            t = arr[idx]
+            assert t[Topic.Name] == topic, "Topic not found"
+            arr[idx] = self._update_topic_articles(t)
+
+    def sorted_topics(self, key=Topic.UnpubCount, force=False, full=False):
+        """Returns topics index sorted by the number of unpublished articles of each topics."""
+        arr = self.load_topics(force)[0][:]
+        idx = arr[:, key].argsort()
+        return arr[idx] if full else arr[Topic.Name, idx]
 
 
 # def init_topic(topic: str):

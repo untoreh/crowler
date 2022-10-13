@@ -15,7 +15,7 @@ import sources  # NOTE: searx has some namespace conflicts with google.ads, init
 import topics as tpm
 import utils as ut
 from log import logger
-from sites import Job, Site
+from sites import Job, Site, Topic
 
 
 def get_kw_batch(site: Site, topic):
@@ -140,6 +140,7 @@ def run_parse_job(site, topic):
     if arts:
         logger.info("%s@%s: Saving %d articles.", topic, site.name, len(arts))
         ut.save_zarr(arts, k=ut.ZarrKey.articles, root=topic_path)
+        site.update_article_count(topic)
     else:
         logger.info("%s@%s: No articles found.", topic, site.name)
 
@@ -181,6 +182,7 @@ def run_feed_job(site: Site, topic):
     if articles:
         logger.info("%s@%s: Saving %d articles.", topic, site.name, len(articles))
         ut.save_zarr(articles, k=ut.ZarrKey.articles, root=site.topic_dir(topic))
+        site.update_article_count(topic)
     else:
         logger.info("%s@%s: No articles were found queued.", topic, site.name)
     return articles
@@ -200,7 +202,7 @@ def site_loop(site: Site, throttle=5):
     backoff = 0
     while True:
         try:
-            topics = list(site.topics_dict.keys())
+            topics = site.sorted_topics(key=Topic.UnpubCount)
             # print(h.heap())
             try:
                 for topic in topics:

@@ -231,7 +231,7 @@ def load_zarr(
     nocache=False,
 ):
     cache_key, path = arr_key(k, subk, root)
-    if nocache:
+    if nocache and cache_key in PUBCACHE:
         del PUBCACHE[cache_key]
     try:
         return PUBCACHE[cache_key]

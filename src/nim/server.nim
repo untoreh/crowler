@@ -562,6 +562,7 @@ proc doServe*(address: string, callback: ScorperCallback): Future[
 proc runScorper(address, callback: auto) =
   var srv: Scorper
   try:
+    info "server: starting scorper, limits: {getMaxOpenFiles()}(fd)"
     srv = waitFor doServe(address, callback)
   except CatchableError as e:
     warn "server: {e[]} \n restarting server..."

@@ -56,6 +56,7 @@
     "@material/tooltip": "^13.0.0",
     "@material/top-app-bar": "^13.0.0",
     "esbuild": "^0.14.31",
+    "google-translate-api-x": "^10.4.2",
     "lighthouse": "^9.5.0",
     "material-components": "^0.5.0",
     "svgo": "^2.8.0",

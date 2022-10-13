@@ -1,10 +1,11 @@
-import std/os, strutils, hashes, chronos
+import std/[os, strutils, hashes, enumerate]
+import chronos
 from std/times import gettime, Time, fromUnix, inSeconds, `-`
 from chronos/timer import seconds, Duration
 
 import server_types,
     cfg, types, utils, topics, pyutils, publish, quirks, stats, articles, cache,
-        sitemap, translate_types
+        sitemap, translate_types, osutils
 
 
 proc pubTask*(): Future[void] {.gcsafe, async.} =
@@ -105,6 +106,53 @@ proc cleanupTask*(): Future[void] {.async.} =
     except CatchableError as e:
       warn "cleanuptask: failed with error {e[]}"
     await sleepAsync(cleanupInterval)
+
+proc memWatcherTask*() {.async.} =
+  while true:
+    if memLimitReached():
+      warn "memwatcher: mem limit ({memLimit}MB) reached!"
+      quitl()
+    await sleepAsync(5.seconds)
+
+type
+  TaskKind = enum pub, cleanup, mem
+  TaskProc = proc(): Future[void] {.gcsafe.}
+  TaskTable = Table[TaskKind, Future[void]]
+
+proc selectTask(k: TaskKind): TaskProc =
+  case k:
+    of pub: pubTask
+    of cleanup: cleanupTask
+    of mem: memWatcherTask
+
+proc scheduleTasks(): TaskTable =
+  template addTask(t) =
+    let fut = (selectTask t)()
+    result[t] = fut
+  # Publishes new articles for one topic every x seconds
+  addTask pub
+  # cleanup task for deleting low traffic articles
+  addTask cleanup
+  # quit when max memory usage reached
+  addTask mem
+
+proc tasksMonitorImpl() {.async.} =
+  try:
+    var tasks = scheduleTasks()
+    while true:
+      for k in tasks.keys():
+        let t = tasks[k]
+        if t.finished:
+          if t.failed and not t.error.isnil:
+            warn "task failed, restarting! {t.error[]}"
+          tasks[k] = (selectTask k)()
+      await sleepAsync(10.seconds)
+  except:
+    warn "tasks: monitor crashed"
+    quitl
+
+template runTasks*() =
+  let ttbl = tasksMonitorImpl()
 
 when isMainModule:
   import cache

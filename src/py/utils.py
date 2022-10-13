@@ -28,8 +28,7 @@ from cachetools import LRUCache
 compressor = Blosc(cname="zstd", clevel=2, shuffle=Blosc.BITSHUFFLE)
 codec = numcodecs.Pickle()
 TOPICS: Optional[za.Array] = None
-TPDICT: Dict[str, str] = dict()
-PUBCACHE = LRUCache(16)
+PUBCACHE = LRUCache(3)
 OVERWRITE_FLAG = strtobool(os.getenv("RESET_ARTICLES", "False"))
 
 

@@ -63,16 +63,16 @@ export default defineConfig({
     //   targets: ["defaults", "not IE 11"],
     // }),
   ],
-css: {
-  postcss: {
-    plugins: [autoprefixer()],
+  css: {
+    postcss: {
+      plugins: [autoprefixer()],
     },
-},
-build: {
-  lib: {
-    entry: "src/js/app.js",
-      name: "app",
-        fileName: "app"
   },
-},
+  build: {
+    lib: {
+      entry: "src/js/app.js",
+      name: "app",
+      fileName: "app"
+    },
+  },
 });

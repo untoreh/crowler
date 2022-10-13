@@ -52,6 +52,7 @@ proc fixLS(topic: string, data: string) {.async.} =
           await saveLS(topic, ls)
 
 proc loadLS*(topic: string): Future[PublishedArticles] {.async.} =
+  logall "lsh: loading topic {topic}"
   var lspath = getLSPath(topic) / "lsh.json.zst"
   var data: string
   if fileExists(lspath):

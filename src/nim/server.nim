@@ -577,20 +577,12 @@ proc startServer*(doclear = false, port = 0, loglevel = "info") =
   let serverPort = if port == 0:
                          os.getEnv("SITE_PORT", "5050").parseInt
                      else: port
-  # main Thread
   initThread()
-
   initCache()
   initStats()
   readAdsConfig()
 
-  # Publishes new articles for one topic every x seconds
-  var jobs: seq[Future[void]]
-  jobs.add pubTask()
-
-  # cleanup task for deleting low traffic articles
-  jobs.add cleanupTask()
-
+  runTasks()
   runAdsWatcher()
   runAssetsWatcher()
 

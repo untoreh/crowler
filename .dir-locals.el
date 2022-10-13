@@ -16,7 +16,7 @@
                            ;; "/usr/lib/libpython3.10d.so"
                            ;; (my/concat-path (getenv "HOME") ".pyenv/versions/3.8.7/lib/libpython3.8d.so")
                            )))))
- (nim-mode . ((nim-compile-default-command . ("r" "-r" "--mm:orc"))
+ (nim-mode . ((nim-compile-default-command . ("r" "-r"))
               (lsp-nim-project-mapping . [(:projectFile "tests/all.nim" :fileRegex "tests/.*\\.nim")
                                           (:projectFile "src/nim/server.nim" :fileRegex "src/nim/.*|.*\\.nim")
                                           (:projectFile "src/nim/test.nim" :fileRegex "src/nim/test.*\\.nim")

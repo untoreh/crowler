@@ -98,13 +98,15 @@ template logstring(code: untyped): untyped =
   else:
     fmt"{getThreadId()} - " & fmt code
 
+const shouldLog = logLevel == lvlAll or (not defined(release))
+
 template debug*(code: untyped; dofmt = true): untyped =
-  when not defined(release) and logLevelMacro <= lvlDebug:
+  when shouldLog and logLevelMacro <= lvlDebug:
     withLock(loggingLock):
       logger[].log lvlDebug, when dofmt: logstring(`code`) else: `code`
 
 template logall*(code: untyped): untyped =
-  when not defined(release) and logLevelMacro < lvlNone:
+  when shouldLog and logLevelMacro < lvlNone:
     withLock(loggingLock):
       logger[].log lvlAll, logstring(`code`)
 

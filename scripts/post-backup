@@ -1,0 +1,7 @@
+#!/bin/sh
+
+lockfile=/tmp/.duplicacy_sites_lock
+
+docker unpause scraper wsl wsl
+[ ! -e $lockfile ] && { echo "Duplicacy lockfile was not found at $lockfile"; exit 1; }
+rm /tmp/$lockfile

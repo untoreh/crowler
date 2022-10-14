@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#
+NAMES=scraper,wsl,wsl
+IFS=,
+while true; do
+    output=$(docker ps)
+    for name in $NAMES; do
+        ct=$(echo $output | grep $name)
+        if [ "${ct/unhealthy/}" != "$ct" ]; then
+            docker restart $name
+        elif [ "${ct/Paused/}" != "$ct" ]; then
+            docker unpause $name
+        fi
+    done
+    sleep 60
+done

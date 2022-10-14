@@ -63,9 +63,8 @@ proc doQuery(q: auto, sents: seq[string]): Future[seq[string]] {.async.} =
     ## Iterate over all the separators pair until a bijective mapping is found
     var
         itr = 1
-        query = ""
-
-    var res: string
+        res, query: string
+        n_result, n_sents: int
     for (sep, splitsep) in q.glues:
         query = join(sents, sep)
         assert query.len < q.bufsize, fmt"mmh: {sents.len}, {query.len}"
@@ -74,18 +73,18 @@ proc doQuery(q: auto, sents: seq[string]): Future[seq[string]] {.async.} =
         logall "query: response size: {res.len}"
         result = res.split(splitsep)
         logall "query: split translations"
-        if len(result) == len(sents):
+        (n_result, n_sents) = (len(result), len(sents))
+        if n_result == n_sents:
             debug "query: translation successful."
             return
         glueTracker[itr - 1].inc
-        debug "query: translation failed ({len(result)}, {len(sents)}), trying new glue ({itr})"
+        debug "query: translation failed ({n_result}, {n_sents}), trying new glue ({itr})"
         debug "glueFailures: {glueTracker}"
         itr += 1
     checkBatchedTranslation(sents, query, result)
 
 proc toSeq(sentsIn: splitSent): seq[string] =
     result = collect(for s in sentsIn.sents: s)
-    # doQuery(q, collect(for s in sentsIn.sents: s))
     sentsIn.clear()
 
 proc setEl(q, el: auto, t: string) =
@@ -138,15 +137,11 @@ proc push[T](q: var T) =
 
 proc elementsUpdate[T](q: var T) =
     ## Update all the elements in the queue
-    debug "eleupdate: performing batch translation"
-    # let tr = doQuery(q, )
     debug "eleupdate: setting elements"
     for (el, t) in zip(q.bucket, tr):
-        # debug "el: {el.tag}, {t}"
+        logall "el: {el.tag}, {t}"
         setEl(q, el, t)
     debug "eleupdate: cleaning up queue"
-    # q.bucket.setLen(0)
-    # q.sz = 0
 
 proc doQueryAll(els: auto, q: QueueXml | QueueDom, batches: seq[seq[string]]): Future[void] {.async.} =
   # We might have multiple batches when translating a single element
@@ -175,8 +170,6 @@ proc queueTrans(): seq[Future[void]]  =
 proc doTrans*() {.async.} =
     let jobs = queueTrans()
     await allFutures(jobs)
-    # for j in jobs:
-    #     await j
     saveToDB(force=true)
 
 proc translate*[T](q: ptr[QueueXml | QueueDom], el: T, srv: service) =

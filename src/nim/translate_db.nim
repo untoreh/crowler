@@ -87,8 +87,6 @@ proc initLRUTrans*(comp = true): LRUTrans =
 proc initSlations*(comp = true) {.gcsafe.} =
     if slations.isnil:
       slations = initLockTable[int64, string]()
-        # slations = create(Table[int64, string])
-        # slations[] = initTable[int64, string]()
 
 trans = initLRUTrans()
 openDB(trans)

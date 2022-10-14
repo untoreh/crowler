@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import time
+import traceback as tb
 
 import blacklist
 import config as cfg
@@ -208,37 +209,37 @@ def site_loop(site: Site, throttle=5):
                 for topic in topics:
                     if site.is_paste_interval(Job.parse, topic):
                         run_parse_job(site, topic)
-            except Exception as e:
-                logger.warn("parse job failed. \n %s", e)
+            except:
+                logger.warn("parse job failed. \n %s", tb.format_exc())
             try:
                 for topic in topics:
                     if site.is_paste_interval(Job.feed, topic):
                         run_feed_job(site, topic)
-            except Exception as e:
-                logger.warn("feed job failed. \n %s", e)
+            except:
+                logger.warn("feed job failed. \n %s", tb.format_exc())
             try:
                 if site.new_topics_enabled:
                     new_topic(site)
-            except Exception as e:
-                logger.warn("new topics  failed. \n %s", e)
+            except:
+                logger.warn("new topics  failed. \n %s", tb.format_exc())
             try:
                 if site.is_paste_interval(Job.reddit):
                     site.reddit_submit()
-            except Exception as e:
-                logger.warn("reddit failed. \n %s", e)
+            except:
+                logger.warn("reddit failed. \n %s", tb.format_exc())
             try:
                 if site.is_paste_interval(Job.twitter):
                     site.tweet()
-            except Exception as e:
+            except:
                 logger.warn("twitter failed. \n %s", e)
             try:
                 if site.is_paste_interval(Job.facebook):
                     site.facebook_post()
-            except Exception as e:
-                logger.warn("facebook failed. \n %s", e)
+            except:
+                logger.warn("facebook failed. \n %s", tb.format_exc())
             time.sleep(throttle)
-        except Exception as e:
-            logger.warning(f"{e} (site: {site.name})")
+        except:
+            logger.warning(f"{tb.format_exc()} (site: {site.name})")
             backoff += 1
             time.sleep(backoff)
 

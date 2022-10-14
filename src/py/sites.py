@@ -644,7 +644,7 @@ class Site:
         """Returns topics index sorted by the number of unpublished articles of each topics."""
         arr = self.load_topics(force)[0][:]
         idx = arr[:, key].argsort()
-        return arr[idx] if full else arr[Topic.Name, idx]
+        return arr[idx] if full else arr[idx, Topic.Name]
 
 
 # def init_topic(topic: str):

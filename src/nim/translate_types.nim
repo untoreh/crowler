@@ -40,7 +40,6 @@ type
   Queue* = object of RootObj ## An instance of a translation run
     pair*: langPair
     bufsize*: int
-    glues*: seq[(string, Regex)]
     sz*: int
   QueueXml* = object of Queue
     bucket*: seq[XmlNode]
@@ -178,7 +177,7 @@ proc initLang*(code: string): Lang =
 
 proc srcLangName*(lang: langPair): string = TLangsTable[lang.src]
 
-var glues {.threadvar.}: seq[(string, Regex)]
+var glues* {.threadvar.}: seq[(string, Regex)]
 var gluePadding*: int
 
 let defaultGlues = [
@@ -198,41 +197,12 @@ proc initGlues*() {.gcsafe.} =
   gluePadding *= 2
 
 proc initQueue*[T](pair: langPair): T =
-  result.glues = glues
   result.bufsize = 5000
   result.pair = pair
-
-import hashes
-var queueXmlCache* {.threadvar.}: Table[Hash, QueueXml]
-var queueDomCache* {.threadvar.}: Table[Hash, QueueDom]
-proc initQueueCache*() =
-  queueXmlCache = initTable[Hash, QueueXml]()
-  queueDomCache = initTable[Hash, QueueDom]()
-
-macro getCachedQueue(k: Hash, kind: static[int]): untyped =
-  case kind:
-    of 0:
-      quote do:
-        queueXmlCache[`k`]
-    else:
-      quote do:
-        queueDomCache[`k`]
-
-proc setCachedQueue(k: Hash, v: QueueXml) = queueXmlCache[k] = v
-proc setCachedQueue(k: Hash, v: QueueDom) = queueDomCache[k] = v
 
 macro getQueue*(kind: static[FcKind], pair: langPair): untyped =
   let tp = case kind:
     of xml: QueueXml
     else: QueueDom
-  quote do:
-    let k = hash((`kind`, `pair`))
-    var q: `tp`
-    try:
-      q = getCachedQueue(k, static(`kind`))
-    except KeyError:
-      q = initQueue[`tp`](`pair`)
-      setCachedQueue(k, q)
-    q.bucket.setLen 0
-    q.sz = 0
-    q
+  quote do: initQueue[`tp`](`pair`)
+

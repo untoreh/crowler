@@ -65,7 +65,7 @@ proc doQuery(q: auto, sents: seq[string]): Future[seq[string]] {.async.} =
         itr = 1
         res, query: string
         n_result, n_sents: int
-    for (sep, splitsep) in q.glues:
+    for (sep, splitsep) in glues:
         query = join(sents, sep)
         assert query.len < q.bufsize, fmt"mmh: {sents.len}, {query.len}"
         # debug "query: calling translation function, bucket: {q.bucket.len()}, query: {query.len}"
@@ -133,7 +133,6 @@ proc push[T](q: var T) =
     q.bucket.setLen(0)
     q.sz = 0
     checkJobs(q)
-
 
 proc elementsUpdate[T](q: var T) =
     ## Update all the elements in the queue

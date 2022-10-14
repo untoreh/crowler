@@ -637,7 +637,7 @@ class Site:
         else:
             idx = self.get_topic_idx(topic)
             t = arr[idx]
-            assert t[Topic.Name] == topic, "Topic not found"
+            assert t[Topic.Name] == topic, f"Topic mismatch: {t[Topic.Name]} != {topic} "
             arr[idx] = self._update_topic_articles(t)
 
     def sorted_topics(self, key=Topic.UnpubCount, force=False, full=False):

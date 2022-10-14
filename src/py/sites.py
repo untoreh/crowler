@@ -637,14 +637,14 @@ class Site:
         else:
             idx = self.get_topic_idx(topic)
             t = arr[idx]
-            assert t[Topic.Name] == topic, f"Topic mismatch: {t[Topic.Name]} != {topic} "
+            assert t[Topic.Slug] == topic, f"Topic mismatch: {t[Topic.Slug]} != {topic} "
             arr[idx] = self._update_topic_articles(t)
 
     def sorted_topics(self, key=Topic.UnpubCount, force=False, full=False):
         """Returns topics index sorted by the number of unpublished articles of each topics."""
         arr = self.load_topics(force)[0][:]
         idx = arr[:, key].argsort()
-        return arr[idx] if full else arr[idx, Topic.Name]
+        return arr[idx] if full else arr[idx, Topic.Slug]
 
 
 # def init_topic(topic: str):

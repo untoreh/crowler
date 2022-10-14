@@ -92,6 +92,7 @@ ENGINES_INITIALIZED = False
 def ensure_engines(force=False):
     global ENGINES_INITIALIZED
     if force or not ENGINES_INITIALIZED:
+        print("Ensuring searx engines are loaded...")
         searx.network.network.NETWORKS.clear()
         searx.search.PROCESSORS.clear()
         searx.engines.engines.clear()

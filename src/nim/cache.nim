@@ -12,19 +12,19 @@ type PageCache {.borrow: `.`.} = LRUTrans
 var pageCache*: ptr PageCache
 let searchCache* = initLockLruCache[int64, string](32)
 
-proc initPageCache*(): PageCache =
+proc init*(pg: var PageCache) =
   let dbpath = DATA_PATH / "sites" / WEBSITE_NAME / "page.db"
   translate_db.MAX_DB_SIZE = 40 * 1024 * 1024 * 1024
   debug "cache: storing cache at {dbpath}"
   translate_db.DB_PATH[] = dbpath
-  result = initLRUTrans()
-  openDB(result)
+  pg = initLRUTrans()
+  openDB(pg)
 
 proc initCache*() =
   try:
     if pageCache.isnil:
-      let hc {.global.} = initPageCache()
-      pageCache = hc.unsafeAddr
+      pageCache = create(PageCache)
+      init(pageCache[])
   except:
     let e = getCurrentException()[]
     qdebug "{e}"
@@ -62,4 +62,3 @@ proc deletePage*(relpath: string) {.gcsafe.} =
     pageCache[].del(hash(SITE_PATH / lang / sfx))
 
 # proc `get`*[K](c: ptr PageCache, k: K): string = c[].get(k)
-

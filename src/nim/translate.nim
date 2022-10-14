@@ -311,7 +311,6 @@ proc initTranslate*() =
     if vbtmcache.isnil:
         vbtmcache = newLRUCache[array[5, byte], XmlNode](32)
     initGlues()
-    initQueueCache()
     initSlations()
     initTforms()
     when nativeTranslator:

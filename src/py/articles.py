@@ -1,6 +1,6 @@
 import re
 import warnings
-from typing import Callable, List
+from typing import Callable, List, NamedTuple
 
 import lassie as la
 import nltk
@@ -56,27 +56,56 @@ if not hasattr(nltk, "punkt"):
     nltk.download("punkt")
 
 char_start_rgx = re.compile(r"^[^a-zA-Z\-\*\=]")
-noise_rgx = re.compile(r"(cookies?)|(policy)|(privacy)|(browser)|(firefox)|(chrome)|(mozilla)|(\sads?\s)|(copyright)|(\slogo\s)|(trademark)|(javascript)|(supported)|(block)|(available)|(country?i?e?s?)|(slow)|(loading)(allowe?d?)", re.IGNORECASE)
+noise_rgx = re.compile(
+    r"(cookies?)|(policy)|(privacy)|(browser)|(firefox)|(chrome)|(mozilla)|(\sads?\s)|(copyright)|(\slogo\s)|(trademark)|(javascript)|(supported)|(block)|(available)|(country?i?e?s?)|(slow)|(loading)(allowe?d?)",
+    re.IGNORECASE,
+)
+
 
 def isnoise(content, thresh=0.005) -> bool:
     m = re.findall(noise_rgx, content)
     if len(m) / len(content) > thresh:
         return True
+    return False
+
+
+class Relevance:
+    content = chars = noise = body = True
+
+    def __str__(self):
+        return f"cnt: {self.content}, chr: {self.chars}, nse: {self.noise}, bod: {self.body}"
+
+
+"""Last relevance score (debug)."""
+LRS = Relevance()
+
+
+def reset_rev():
+    LRS.body = True
+    LRS.content = True
+    LRS.chars = True
+    LRS.noise = True
+
 
 def isrelevant(title, body):
     """String BODY is relevant if it contains at least one word from TITLE."""
+    reset_rev()
     if not title or not body:
+        LRS.content = False
         return False
     # only allow contents that don't start with special chars to avoid spam/code blocks
     if re.match(char_start_rgx, body):
+        LRS.chars = False
         return False
     # skip error/messages/warnings pages
     if isnoise(title) or isnoise(body):
+        LRS.noise = False
         return False
     t_words = set(title.split())
     for w in ut.splitStr(body):
         if w in t_words:
             return True
+    LRS.body = False
     return False
 
 
@@ -203,17 +232,20 @@ def remove_urls(title: str | None) -> str | None:
 
 
 def add_img(final, urls: List[Callable], site: Site) -> bool:
-    for f in urls:
-        url = f()
-        if (
-            url
-            and (url != final["icon"])
-            and (url not in site.img_bloom)
-            and ut.is_img_url(url)
-        ):
-            final["imageUrl"] = url
-            return True
-    return False
+    try:
+        for f in urls:
+            url = f()
+            if (
+                url
+                and (url != final["icon"])
+                and (url not in site.img_bloom)
+                and ut.is_img_url(url)
+            ):
+                final["imageUrl"] = url
+                return True
+        return False
+    except:
+        return False
 
 
 def search_img(final: dict, site: Site):
@@ -250,24 +282,39 @@ def clean_content(content: str):
         return content
 
 
+"""Last Parsed Article (debugging)"""
+LPA = {}
+
+
 def fillarticle(url, data, topic, site: Site):
     """Using `trafilatura`, `goose` and `lassie` machinery to parse article data."""
-    idf  = hash(url)
+    idf = hash(url)
+
     def logit(s, *args):
         log.info(f"pyart(%d): {s}", idf, *args)
+
     logit("parsing url: %s", url)
+    final, tra, goo, la = {}, {}, {}, {}
+
+    def save_lpa():
+        LPA["final"] = final
+        LPA["tra"] = tra
+        LPA["goo"] = goo
+
     try:
-        final = dict()
-        tra = trafi(url, data)
+        try:
+            tra = trafi(url, data)
+        except:
+            pass
+        try:
+            goo = goose(url, data).infos
+        except:
+            pass
         assert isinstance(tra, dict)
-        goo = goose(url, data).infos
-        if tra is None:
-            tra = {}
-        if goo is None:
-            goo = {}
-        la = {}
+        assert isinstance(goo, dict)
+
         # first try content
-        if len(tra["text"]) >= len(goo["cleaned_text"]):
+        if len(tra["text"]) >= len(goo.get("cleaned_text", "")):
             src = "traf"
             final["content"] = tra["text"]
             final["source"] = "tra"
@@ -283,6 +330,7 @@ def fillarticle(url, data, topic, site: Site):
         final["title"] = remove_urls(tra["title"] or goo.get("title"))
         if final["title"] is None:
             logit("no title found!", url)
+            save_lpa()
             return {}
         # Ensure articles are always in the chosen source language
         if final["lang"] != tr.SLang.code:
@@ -296,11 +344,13 @@ def fillarticle(url, data, topic, site: Site):
         final["content"] = replace_profanity(final["content"])
         if not final["content"] or not isrelevant(final["title"], final["content"]):
             logit("content not relevant (%d)", len(final["content"] or ""))
+            save_lpa()
             return {}
 
         final["content"] = clean_content(final["content"])
         if not final["content"]:
             logit("cleaned content is empty.")
+            save_lpa()
             return {}
 
         final["slug"] = ut.slugify(final["title"])
@@ -318,10 +368,14 @@ def fillarticle(url, data, topic, site: Site):
         final["tags"] = rake(final["content"])
 
         ## Icon/Image
-        la = lassie_img(url, data, final)
-        if not final["icon"]:
+        try:
+            la = lassie_img(url, data, final)
+        except:
+            pass
+        if not final.get("icon", "") and goo.get("meta", ""):
             final["icon"] = abs_url(goo["meta"]["favicon"], url)
-        if final["imageUrl"] in site.img_bloom or not ut.is_img_url(final["imageUrl"]):
+        imgUrl = final.get("imageUrl", "")
+        if (not imgUrl) or (imgUrl in site.img_bloom) or (not ut.is_img_url(imgUrl)):
             img_f = [
                 lambda: abs_url(goo["image"], url),
                 lambda: goo["opengraph"].get("image", ""),
@@ -331,14 +385,15 @@ def fillarticle(url, data, topic, site: Site):
         else:
             site.img_bloom.add(final["imageUrl"])
         if not final.get("imageTitle", ""):
-            final["imageTitle"] = (
-                la["description"] if la["description"] != final["desc"] else ""
-            )
+            final["imageTitle"] = la.get("description", "") or final["desc"]
         if not final.get("imageOrigin", ""):
-            final["imageOrigin"] = final["imageUrl"]
+            final["imageOrigin"] = final.get("imageUrl", "")
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         logit("exception %s", e)
+        save_lpa()
         return {}
+    logit("parse successfull")
     return final

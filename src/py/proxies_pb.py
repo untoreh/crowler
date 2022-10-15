@@ -144,6 +144,7 @@ def select_proxy(proxy):
     return sel
 
 def get_current_proxy():
+    """NOT async-safe. Only for debugging."""
     return CURRENT_PROXY
 
 

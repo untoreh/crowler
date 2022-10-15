@@ -45,13 +45,16 @@ def parsesource(url, topic, site: Site):
 
 def parsearticle(url, topic, site: Site):
     data = ut.fetch_data(url)
+    verb = "fetch"
     if data:
         a = art.fillarticle(url, data, topic, site)
         if a:
+            if site.name not in ARTICLES:
+                ARTICLES[site.name] = []
             ARTICLES[site.name].append(a)
             return a
-        else:
-            logger.info("Couldn't parse an article from url %s .", url)
+        verb = "parse"
+    logger.info("Couldn't %s an article from url %s .", verb, url)
 
 
 def parsefeed(f):

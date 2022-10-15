@@ -88,7 +88,7 @@ def fromsources(sources, topic, site: Site, n=cfg.POOL_SIZE):
     return (ARTICLES[site.name], FEEDS[site.name])
 
 
-def fromfeeds(sources, site: Site, n=cfg.POOL_SIZE):
+def fromfeeds(sources, site: Site, n=cfg.POOL_SIZE) -> List:
     """Create list of feeds from a subset of links found in the source file, according to SRC_SAMPLE_SIZE."""
     global ARTICLES
     sched.initPool()

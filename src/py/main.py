@@ -6,6 +6,9 @@ import os
 import shutil
 import time
 import traceback as tb
+from typing import List, Union
+import zarr as za
+from numpy import ndarray
 
 import blacklist
 import config as cfg
@@ -154,10 +157,11 @@ def run_parse_job(site, topic):
     return (arts, feeds)
 
 
-def get_feeds(site: Site, topic, n=3, resize=True):
+def get_feeds(site: Site, topic, n=3, resize=True) -> Union[List, ndarray]:
     z = site.load_feeds(topic)
     if len(z) == 0:
-        return
+        return []
+    assert isinstance(z, za.Array)
     if len(z) < n:
         feeds = z[:]
         if resize:
@@ -175,12 +179,12 @@ def run_feed_job(site: Site, topic):
     Run one iteration of the job to find articles from feed links.
     """
     feed_links = get_feeds(site, topic, 3)
-    if not feed_links:
+    if not len(feed_links):
         logger.warning("Couldn't find feeds for topic %s@%s", topic, site.name)
         return None
     logger.info("Search %d feeds for articles...", len(feed_links))
     articles = cnt.fromfeeds(feed_links, site)
-    if articles:
+    if len(articles):
         logger.info("%s@%s: Saving %d articles.", topic, site.name, len(articles))
         ut.save_zarr(articles, k=ut.ZarrKey.articles, root=site.topic_dir(topic))
         site.update_article_count(topic)

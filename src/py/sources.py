@@ -207,6 +207,7 @@ def fromkeyword_async(keyword="trending", n_engines=1, filter_lang=False):
     n = 0
     kwjobs = []
     kwlang = tr.detect(keyword) if filter_lang else "all"
+    ensure_engines()
     for egn in get_engine():
         n += 1
         if n > n_engines:

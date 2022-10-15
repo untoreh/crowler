@@ -252,7 +252,10 @@ def clean_content(content: str):
 
 def fillarticle(url, data, topic, site: Site):
     """Using `trafilatura`, `goose` and `lassie` machinery to parse article data."""
-    log.debug("pyarticle: parsing %s", url)
+    idf  = hash(url)
+    def logit(s, *args):
+        log.info(f"pyart(%d): {s}", idf, *args)
+    logit("parsing url: %s", url)
     try:
         final = dict()
         tra = trafi(url, data)
@@ -265,21 +268,25 @@ def fillarticle(url, data, topic, site: Site):
         la = {}
         # first try content
         if len(tra["text"]) >= len(goo["cleaned_text"]):
+            src = "traf"
             final["content"] = tra["text"]
             final["source"] = "tra"
         else:
+            src = "goose"
             final["content"] = goo["cleaned_text"]
             final["source"] = "goo"
+        logit("using content from %s (%d)", src, len(final["content"]))
         if len(final["content"]) < cfg.ART_MIN_LEN:
-            log.debug("too short!: %d, %s", len(final["content"]), url)
+            logit("too short! %d", len(final["content"]))
 
         final["lang"] = tr.detect(final["content"])
         final["title"] = remove_urls(tra["title"] or goo.get("title"))
         if final["title"] is None:
+            logit("no title found!", url)
             return {}
         # Ensure articles are always in the chosen source language
         if final["lang"] != tr.SLang.code:
-            log.debug("articles: different lang? %s", final["lang"])
+            logit("different lang? %s", final["lang"])
             final["content"] = tr.translate(
                 final["content"], to_lang=tr.SLang.code, from_lang=final["lang"]
             )
@@ -288,10 +295,12 @@ def fillarticle(url, data, topic, site: Site):
             )
         final["content"] = replace_profanity(final["content"])
         if not final["content"] or not isrelevant(final["title"], final["content"]):
+            logit("content not relevant (%d)", len(final["content"] or ""))
             return {}
 
         final["content"] = clean_content(final["content"])
         if not final["content"]:
+            logit("cleaned content is empty.")
             return {}
 
         final["slug"] = ut.slugify(final["title"])
@@ -330,6 +339,6 @@ def fillarticle(url, data, topic, site: Site):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        log.info("articles: Exception %s", e)
+        logit("exception %s", e)
         return {}
     return final

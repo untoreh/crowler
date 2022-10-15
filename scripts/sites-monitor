@@ -2,6 +2,9 @@
 #
 NAMES=scraper,wsl,wsl
 IFS=,
+DUPLOCKFILE=/tmp/.duplicacy_sites_lock
+DUPBIN=dup
+
 while true; do
     output=$(docker ps)
     for name in $NAMES; do
@@ -9,7 +12,14 @@ while true; do
         if [ "${ct/unhealthy/}" != "$ct" ]; then
             docker restart $name
         elif [ "${ct/Paused/}" != "$ct" ]; then
-            docker unpause $name
+            if [ -e $DUPLOCKFILE ]; then
+                if ! pgrep -x $DUPBIN; then
+                    echo "Duplicacy lockfile found without backup process ($DUPBIN) running, removing lockfile."
+                    docker unpause $name
+                fi
+            else
+                docker unpause $name
+            fi
         fi
     done
     sleep 60

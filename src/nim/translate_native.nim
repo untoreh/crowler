@@ -22,9 +22,12 @@ type
 
 var
   transIn: AsyncPColl[ptr Query]
-  transOut*: AsyncTable[ptr Query, ptr string]
   transWorker*: ptr Future[void]
   rotator: TranslateRotatorPtr
+when not defined(translateProc):
+  var transOut*: AsyncTable[ptr Query, ptr string]
+else:
+  var transOut*: AsyncTable[int, ptr string]
 
 proc hash(q: ptr Query): Hash =
   hash((q.id, q.text, q.src, q.trg))
@@ -65,6 +68,7 @@ proc callService*(text, src, trg: string): Future[string] {.async.} =
 template waitTrans*(): string =
   block:
     let v = await transOut.pop(q.addr)
+    defer: free(v)
     if v.isnil:
       ""
     else:
@@ -75,7 +79,7 @@ proc setupTranslate*() =
     delete(transIn)
   transIn = newAsyncPColl[ptr Query]()
   transOut.setNil:
-    newAsyncTable[ptr Query, ptr string]()
+    newAsyncTable[when not defined(translateProc): ptr Query else: int, ptr string]()
 
 when not defined(translateProc):
   proc translateTask(q: ptr Query) {.async.} =

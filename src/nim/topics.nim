@@ -148,10 +148,16 @@ proc topicPage*(topic: string, page = -1, locked: static[bool] = true): Future[P
     result = site[].topic_group(topic)[$topicData.done][pagenum]
 
 proc topicArticles*(topic: string): Future[PyObject] {.async.} =
+  ## The py zarr array holding unpublished articles
   withPyLock:
     checkNil(site)
     let tg = site[].topic_group(topic)
     return tg[$topicData.articles]
+
+proc hasUnpublishedArticles*(topic: string): Future[bool] {.async.} =
+  let arts = await topicArticles(topic)
+  withPyLock:
+    result = arts.len > 0
 
 proc publishedArticles*[V](topic: string, attr: string = ""): Future[seq[(
     PyObject, V)]] {.async.} =

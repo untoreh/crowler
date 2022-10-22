@@ -177,23 +177,25 @@ proc initLang*(code: string): Lang =
 
 proc srcLangName*(lang: langPair): string = TLangsTable[lang.src]
 
-var glues* {.threadvar.}: seq[(string, Regex)]
+var glues*: ptr seq[(string, Regex)]
 var gluePadding*: int
 
 let defaultGlues = [
+    (" #|#|# ", re"\s?#\s?\|\s?#\s?\|\s?#\s?"),
     (" %¶%¶% ", re"\%\s\¶\s?\%\s?\¶\s?\%\s?"),
     (" <<...>> ", re"\s?<\s?<\s?\.\s?\.\s?\.\s?>\s?>\s?"),
     (" \n[[...]]\n ", re"\s?\n?\[\[?\.\.\.\]\]?\n?"),
-    (" #|#|# ", re"\s?#\s?\|\s?#\s?\|\s?#\s?"),
     ]
 
 var glueTracker*: array[4, int]
 
 proc initGlues*() {.gcsafe.} =
-  {.cast(gcsafe).}:
-    glues.add defaultGlues
+  if glues.isnil:
+    glues = create(seq[(string, Regex)])
+    {.cast(gcsafe).}:
+      glues[].add defaultGlues
   gluePadding = max:
-    collect(for (sep, _) in glues: sep.len)
+    collect(for (sep, _) in glues[]: sep.len)
   gluePadding *= 2
 
 proc initQueue*[T](pair: langPair): T =

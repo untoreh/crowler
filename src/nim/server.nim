@@ -534,7 +534,9 @@ proc handleGet(ctx: Request): Future[void] {.gcsafe, async.} =
           handle301()
         discard
     reqCtx.cached = true
-  except: abort()
+  except:
+    echo getCurrentException()[]
+    abort()
   finally:
     reqCtx.rq.del(rqid)
     reqCtx.lock.release

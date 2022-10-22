@@ -66,7 +66,7 @@ proc requestTask(q: ptr Request) {.async.} =
         v[].headers[] = newHttpHeaders(cast[seq[(string, string)]](
             resp.headers.toList))
   except CatchableError as e:
-    debug "cronhttp: {e[].msg}"
+    debug "cronhttp: {e[]}"
     discard
   httpOut[q] = v
 

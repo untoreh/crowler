@@ -15,8 +15,8 @@ import tables,
 
 import cfg,
        utils,
-       # pyhttp,
-       nativehttp,
+       pyhttp,
+       # nativehttp,
   html_misc,
   html_entities,
   ads
@@ -65,9 +65,10 @@ proc getFile(path: string): Future[string] {.async.} =
       else:
         path
     debug "getfile: getting file content from {url}"
-    filesCache[path] = (await get(url, proxied = false)).body[]
-    # filesCache[path] = (await fetch(HttpSessionRef.new(), parseUri(
-    #     url))).data.bytesToString
+    block:
+      let resp = (await get(url, proxied = false))
+      checkNil(resp.body)
+      filesCache[path] = resp.body[]
     result = filesCache[path]
 
 
@@ -394,6 +395,7 @@ proc initAmpImpl() =
 
 proc initAmp*() =
   try:
+    initHttp()
     initAmpImpl()
   except:
     qdebug "server: failed to initAmp"

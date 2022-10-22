@@ -160,6 +160,7 @@ proc ensureLS(topic: string): Future[PublishedArticles] {.async, raises: [].} =
     except:
       warn "Failed to rebuild lsh for topic {topic}. Proceeding anyway."
 
+
 macro infoPub(msg: static[string]) =
   var m = "pub({topic}): "
   m.add msg
@@ -171,6 +172,10 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   infopub "start"
   withPyLock:
     doassert topic in site[].load_topics()[1]
+  if not (await hasUnpublishedArticles(topic)):
+    infopub "no unpublished articles"
+    return false
+  # Ensure there are some articles available to be published
   var pagenum = await curPageNumber(topic)
   let newpage = (await pageSize(topic, pagenum)) > cfg.MAX_DIR_FILES
   if newpage:
@@ -273,13 +278,15 @@ proc maybePublish*(topic: string) {.gcsafe, async.} =
       tpd = (await topicPubdate())
       pastTime = inMinutes(t - tpd)
     # Don't publish each topic more than `CRON_TOPIC_FREQ`
+    var published: bool
     if pastTime > (await pubTimeInterval(topic)):
       debug "pubtask: {topic} was published {pastTime} hours ago, publishing."
       lastPubTime[] = t
-      discard await pubTopic(topic)
-      # clear homepage and topic page cache
-      deletePage("")
-      deletePage("/" & topic)
+      published = await pubTopic(topic)
+      if published:
+          # clear homepage and topic page cache
+          deletePage("")
+          deletePage("/" & topic)
 
 proc resetTopic(topic: string) =
   syncPyLock():

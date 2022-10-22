@@ -49,7 +49,7 @@ proc pyReqGet(url: string, dodec: Decode, proxied: bool): Future[Response] {.asy
       j = pySched[].apply(fetchData[],
                           url,
                           decode = bool(dodec),
-                          depth = proxied.int + 1)
+                          depth = proxied.int )
   var obj = await pywait(j)
   result = await toResponse(move obj)
 
@@ -63,7 +63,7 @@ proc pyReqPost(q: ptr Request): Future[Response] {.async.} =
                           headers = q.headers.headersToPy(),
                           body = q.body,
                           decode = bool(q.decode),
-                          depth = q.proxied.int + 1
+                          depth = q.proxied.int
         )
   var obj = await pywait(move j)
   result = await toResponse(move obj)
@@ -159,9 +159,9 @@ proc httpPost*(url: string,
 template post*(url: Uri, args: varargs[untyped]): untyped = httpPost($url, args)
 
 when isMainModule:
-  initPyHttp()
+  initHttp()
   let url = "https://httpbin.org/get".parseUri
-  let resp = waitFor get(url)
+  let resp = waitFor get(url, proxied=true)
   echo resp.code
   echo resp.body[]
   # let headers = [("accept", "application/json")].newHttpHeaders()

@@ -2,7 +2,7 @@ when not defined(linux):
   raise newException(OSError, "Only linux is supported.")
 
 import
-  std/[os, osproc, streams, posix, hashes, strformat, locks],
+  std/[os, osproc, streams, posix, hashes, strformat, parseutils, locks],
   asynctools/asyncipc,
   std/exitprocs
 import
@@ -26,6 +26,7 @@ var
   outputSendIpc: ptr AsyncIpcHandle
   outputRecvIpc: ptr AsyncIpcHandle
   ipcInitialized = false
+  transThread: Thread[void]
 
 const
   appName = "translate_proc"
@@ -90,7 +91,7 @@ proc wait[T: not void](fut: asyncdispatch.Future[T], timeout = timeout): Future[
   await waitLoop(fut).wait(timeout)
   result = fut.read()
 
-proc write(output: AsyncIpcHandle, s: string) {.async.} =
+proc write(output: AsyncIpcHandle, s: string | array) {.async.} =
   if s.len == 0:
     return
   let header = s.len
@@ -100,10 +101,15 @@ proc write(output: AsyncIpcHandle, s: string) {.async.} =
 proc read(input: AsyncIpcHandle, n: static int): Future[string] {.async.} =
   var dst: array[n, char]
   let c = await input.readInto(dst.addr, n).wait()
-  return dst.toString
+  return dst[].toString
 
-proc read(input: AsyncIpcHandle, timeout = 1.seconds): Future[
-    string] {.async.} =
+proc read[T](input: AsyncIpcHandle, dst: ptr T): Future[int] {.async.} =
+  return await input.readInto(dst, dst[].len).wait()
+
+proc read(input: AsyncIpcHandle, dst: pointer, n: static int): Future[int] {.async.} =
+  return await input.readInto(dst, n).wait()
+
+proc read(input: AsyncIpcHandle, timeout = 1.seconds): Future[string] {.async.} =
   # NOTE: read operation expect data *to be present in the pipe already*
   # if data is sent after the read is initiated, it stalls.
   # Read operations should always time-out.
@@ -119,9 +125,8 @@ proc read(input: AsyncIpcHandle, timeout = 1.seconds): Future[
     raise newException(OSError, "Failed to read content from ipc.")
   result.add dst.toOpenArray(0, c - 1).toString
 
-proc read(input: AsyncIpcHandle, _: bool, buffer = bufferSize): Future[seq[
+proc read[T](input: AsyncIpcHandle, dst: T,  _: bool, buffer = bufferSize): Future[seq[
     byte]] {.async.} =
-  var dst: array[bufferSize, byte]
   var c, n: int
   while true:
     c = await input.readInto(dst.addr, bufferSize).wait()
@@ -129,6 +134,17 @@ proc read(input: AsyncIpcHandle, _: bool, buffer = bufferSize): Future[seq[
     result.add dst.toOpenArray(0, n - 1)
     if c < bufferSize or result[^1].char == '\0':
       break
+
+template read(input: AsyncIpcHandle, _: bool, buffer = bufferSize): Future[seq[byte]] =
+  var dst: array[bufferSize, byte]
+  read(input, _, dst, buffer)
+
+template jobId(): int = (hash (text, src, trg)).int
+template jobIdBytes(): array[sizeof(int), byte] =
+  var idBytes: array[sizeof(int), byte]
+  let id = jobId()
+  copyMem(idBytes.addr, id.unsafeAddr, sizeof(int))
+  idBytes
 
 proc translateTask(text, src, trg: string) {.async.} =
   ## This translation task is run in a sub-process.
@@ -152,9 +168,8 @@ proc translateTask(text, src, trg: string) {.async.} =
     echo e[]
     warn "trans: job failed, {src} -> {trg}."
   finally:
-    let id = hash (text, src, trg)
     withAsyncLock(outputLock[]):
-      await outputSendIpc[].write($id)
+      await outputSendIpc[].write(jobIdBytes())
       await outputSendIpc[].write(translated)
 
 proc restartTranslate() =
@@ -197,11 +212,15 @@ proc transForwarderAsync() {.async.} =
   # var id, trans: string
   try:
     while true:
+      let trans = create(string)
       try:
-        let id = await outputRecvIpc[].read()
-        let trans = await outputRecvIpc[].read()
-        transOut[$id] = trans
+        var id: int
+        let idBytes = (await outputRecvIpc[].read())
+        copyMem(id.addr, idBytes[0].unsafeAddr, sizeof(int))
+        trans[] = await outputRecvIpc[].read()
+        transOut[id] = trans
       except AsyncTimeoutError:
+        dealloc(trans)
         continue
   except:
     let e = getCurrentException()[]
@@ -253,6 +272,7 @@ proc spawnAndMonitor() {.async.} =
         await sleepAsync(1.seconds)
     except CatchableError as e:
       warn "trans: process terminated. {e[]}"
+    await sleepAsync(1.seconds)
 
 proc transForwarderLoop() =
   var processMonitor: Future[void]
@@ -277,10 +297,10 @@ proc transConsumerLoop() =
       echo getCurrentException()[]
     sleep(1000)
 
-proc startTranslate*(server = false) =
+proc startTranslate*(worker = false) =
   info "Setting up translation."
   setupTranslate()
-  if server:
+  if worker:
     transConsumerLoop()
   else:
     createThread(transThread, transForwarderLoop)
@@ -293,13 +313,21 @@ proc translate*(text, src, trg: string): Future[string] {.async.} =
     await inputSendIpc[].write(text)
     await inputSendIpc[].write(src)
     await inputSendIpc[].write(trg)
-  return waitTrans()
+  result =
+    block:
+      let id = jobId()
+      let v = await transOut.pop(id)
+      defer: free(v)
+      if v.isnil:
+        ""
+      else:
+        v[]
 
 
 when isMainModule:
   import cligen
-  when false:
-    test()
-  else:
-    proc run() = startTranslate(true)
-    dispatch run
+  import nativehttp
+  proc run() =
+    initHttp()
+    startTranslate(true)
+  dispatch run

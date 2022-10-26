@@ -4,8 +4,7 @@ import chronos
 import chronos/asyncsync
 from chronos/timer import seconds, milliseconds
 import httptypes
-# import nativehttp
-import pyhttp
+import nativehttp
 
 from cfg import PROXY_EP
 import types
@@ -201,10 +200,7 @@ proc init*(_: typedesc[BingTranslateObj]): BingTranslateObj =
   return srv
 
 when isMainModule:
-  when declared(pyhttp):
-    initPyHttp()
-  else:
-    initHttp()
+  initHttp()
   bt = create(BingTranslateObj)
   bt[] = init(BingTranslateObj)
   # let bc = waitFor bt[].fetchBingConfig()

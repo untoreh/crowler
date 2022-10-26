@@ -208,21 +208,33 @@ pygil.globalAcquire()
 let pycfg* = pyImport("config")
 doassert not pyisnone(pycfg)
 discard pyImport("log")
-# let ut* = pyImport("utils")
 pyObjPtrExp((ut, pyImport("utils")))
 doassert not pyisnone(ut[])
 discard pyImport("blacklist")
 let site* = create(PyObject)
 site[] = pyImport("sites").Site(WEBSITE_NAME)
 doassert not pyisnone(site[])
-# let pySched* = pyImport("scheduler")
 pyObjPtrExp(
     (pySched, pyImport("scheduler")),
     (pySchedApply, pySched[].getAttr("apply"))
 )
 doassert not pyisnone(pySched[])
 discard pySched[].initPool()
+# Proxies
+discard pySched[].apply(
+  pyImport("proxies_pb").proxy_sync_forever,
+  pycfg.getAttr("PROXIES_FILE")
+  )
+pyObjPtr(
+  (pyProxies, pyImport("proxies_pb"))
+)
 pygil.release()
+
+proc pyGetProxy*(st: bool = true): Future[string] {.async.} =
+  withPyLock():
+    let prx = callMethod(pyProxies[], "get_proxy", st)
+    if not pyisnone(prx):
+      return prx.to(string)
 
 proc initPy*() =
     syncPyLock:

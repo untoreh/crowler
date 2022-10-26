@@ -18,7 +18,10 @@ import os,
        normalize,
        chronos
 
-import translate_types
+# import std/segfaults
+# export segfaults
+
+# import translate_types
 import locktpl
 lockedStore(Table)
 lockedList(Deque)
@@ -304,6 +307,10 @@ proc findnil*(tree: VNode) =
         findnil(el)
 
 
+const
+  skip_nodes* = static(["code", "style", "script", "address", "applet", "audio", "canvas",
+        "embed", "time", "video", "svg"])
+  skip_class* = ["menu-lang-btn", "material-icons", "rss", "sitemap"].static
 iterator preorder*(tree: XmlNode): XmlNode =
   ## Iterator, skipping tags in `skip_nodes`
   ## also skipping comments, entities, CDATA and zero-length text nodes
@@ -386,6 +393,8 @@ proc `==`*(a: XmlNode, b: string): bool {.inline.} = b == a
 
 proc `add`*(n: XmlNode, s: string) = n.add newText(s)
 
+const skip_vnodes* = static([VNodeKind.code, script, VNodeKind.address, audio,
+      canvas, embed, time, video, svg])
 iterator preorder*(tree: VNode, withStyles: static[bool] = false): VNode =
   ## Iterator, skipping tags in `skip_nodes`
   ## also skipping comments, entities, CDATA and zero-length text nodes
@@ -756,16 +765,13 @@ proc rewriteUrl*(el, rewritePath: auto, hostname = WEBSITE_DOMAIN) =
   # debug "old: {prev} new: {$uriVar}, {rewritePath}"
 
 
-import faststreams
 # import faststreams/[inputs, outputs]
+import faststreams
 proc readFileImpl(handle: InputStream): seq[byte] {.fsMultiSync.} =
   defer: handle.close()
   result.setLen(cast[InputStreamHandle](handle).s.len.get())
-  # let ahandler = Async(handle)
-  # defer: await ahandler.closeAsync()
-
   discard handle.readInto(result)
-#
+
 proc readFileAsync*(file: string): Future[string] {.async.} =
   let handle = Async memFileInput(file)
   result = (await readFileImpl(handle)).toString

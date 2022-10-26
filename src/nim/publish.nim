@@ -147,12 +147,11 @@ proc filterDuplicates(topic: string, lsh: PublishedArticles, pagenum: int,
   return true
 
 proc ensureLS(topic: string): Future[PublishedArticles] {.async, raises: [].} =
-  defer: maybeFree(result)
   try:
     result = await loadLS(topic)
   except:
     warn "Failed to load lsh for topic {topic}. Rebuilding..."
-    result = initLS()
+    result = init(PublishedArticles)
     try:
       let content = await allDoneContent(topic)
       for cnt in content:
@@ -185,7 +184,6 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
 
   infopub "lsh"
   let lsh = await ensureLS(topic)
-  defer: free(lsh)
   let startTime = getTime()
   var
     posts: seq[(VNode, Article)]
@@ -293,7 +291,7 @@ proc resetTopic(topic: string) =
     discard site[].reset_topic_data(topic)
   pageCache[].del(topic.feedKey)
   clearSiteMap(topic, all = true)
-  waitFor saveLS(topic, initLS())
+  waitFor saveLS(topic, init(PublishedArticles))
 
 proc pubAllPages(topic: string, clear = true) {.async.} =
   ## Starting from the homepage, rebuild all archive pages, and their articles

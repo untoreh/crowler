@@ -82,7 +82,6 @@ macro defIfDom*(kind: static[FcKind]): untyped =
 
 template translateEnv*(kind: static[FcKind] = xml) {.dirty.} =
     debug "html: initializing vars "
-    checkNil(fc)
     let
         file_path = fc.file_path
         url_path = fc.url_path
@@ -249,7 +248,7 @@ when defined(weaveRuntime):
         debug "translating file {file}"
         var jobs: seq[Flowvar[bool]]
         # Hold references of variables created inside the loop until all jobs have finished
-        var ctxs: seq[ptr FileContext]
+        var ctxs: seq[FileContext]
         defer:
           for fc in ctxs:
             free(fc)
@@ -263,9 +262,9 @@ when defined(weaveRuntime):
                 d_path = parentDir(t_path)
             if not dirExists(d_path):
                 createDir(d_path)
-            var fc = initFileContext(html, file_path, url_path, pair, t_path)
+            let fc = init(FileContext, html, file_path, url_path, pair, t_path)
             ctxs.add(fc)
-            let j = spawn tryTranslate(fc, xml)
+            let j = spawn tryTranslate(fc.addr, xml)
 
         syncRoot(Weave)
         saveToDB(force = true)
@@ -279,7 +278,7 @@ when defined(weaveRuntime):
         let (filepath, urlpath) = splitUrlPath(rx, file)
         var jobs: seq[Flowvar[bool]]
         # Hold references of variables created inside the loop until all jobs have finished
-        var ctxs: seq[ptr FileContext]
+        var ctxs: seq[FileContext]
         defer:
           for fc in ctxs: free(fc)
 
@@ -291,9 +290,9 @@ when defined(weaveRuntime):
             let d_path = parentDir(t_path)
             if not dirExists(d_path):
                 createDir(d_path)
-            var fc = initFileContext(tree, file_path, url_path, pair, t_path)
+            let fc = init(tree, file_path, url_path, pair, t_path)
             ctxs.add(fc)
-            let j = spawn tryTranslate(fc, dom)
+            let j = spawn tryTranslate(fc.addr, dom)
 
         syncRoot(Weave)
         saveToDB(force = true)

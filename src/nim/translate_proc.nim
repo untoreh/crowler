@@ -209,18 +209,19 @@ proc transConsumer() {.async.} =
 proc transForwarderAsync() {.async.} =
   ## Forwards translated text from sub process to main proc translation table.
   info "Starting trans forwarder..."
-  # var id, trans: string
   try:
     while true:
-      let trans = create(string)
       try:
         var id: int
         let idBytes = (await outputRecvIpc[].read())
         copyMem(id.addr, idBytes[0].unsafeAddr, sizeof(int))
-        trans[] = await outputRecvIpc[].read()
+        let
+          trText = await outputRecvIpc[].read()
+          trans = create(string)
+        trans[] = trText
         transOut[id] = trans
       except AsyncTimeoutError:
-        dealloc(trans)
+        await sleepAsync(1.millisecond)
         continue
   except:
     let e = getCurrentException()[]
@@ -278,11 +279,15 @@ proc transForwarderLoop() =
   var processMonitor: Future[void]
   while true:
     try:
+      info "transForwarder: starting IPC..."
       initIpc()
       if not processMonitor.isnil:
+        info "transForwarder: resetting process Monitor..."
         processMonitor.complete()
         reset(processMonitor)
+      info "transForwarder: setting process Monitor..."
       processMonitor = spawnAndMonitor()
+      info "transForwarder: starting forwarder..."
       waitFor transForwarderAsync()
     except:
       echo getCurrentException()[]

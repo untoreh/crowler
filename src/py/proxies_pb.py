@@ -28,8 +28,11 @@ from user_agent import generate_user_agent
 import log
 
 PROXIES_ENABLED = True
-STATIC_PROXY_EP = "socks5://localhost:8877"
 STATIC_PROXY = True
+STATIC_PROXY_EP = "socks5://localhost:8877"
+PROXY_EP_S5 = "socks5://localhost:8878"
+PROXY_EP_S4 = "socks4://localhost:8879"
+PROXY_EP_HTTP = "http://localhost:8880"
 PROXY_DICT = {"http": STATIC_PROXY_EP, "https": STATIC_PROXY_EP}
 REQ_TIMEOUT = 20
 CURRENT_PROXY = ""
@@ -90,6 +93,7 @@ def reset_requests():
     requests.get = REQUESTS_GET
     requests.post = REQUESTS_POST
 
+
 if "DEFAULT_SSL_MODE" not in globals():
     DEFAULT_SSL_MODE = copy.deepcopy(ssl.SSLContext.verify_mode)
 
@@ -142,6 +146,7 @@ def select_proxy(proxy):
     elif proxy > 1:
         sel = get_proxy(static=(proxy % 2))
     return sel
+
 
 def get_current_proxy():
     """NOT async-safe. Only for debugging."""
@@ -223,12 +228,19 @@ typemap = {
     "SOCKS4": "socks4",
     "SOCKS5": "socks5",
 }
+from enum import Enum
+
+
+class ProxyType(Enum):
+    http = "http"
+    socks4 = "socks4"
+    socks5 = "socks5"
 
 
 @retry(tries=3, delay=1, backoff=3.0)
-def sync_from_file(file_path: Path):
+def sync_from_file(proxies_file: Path):
     try:
-        with open(file_path, "r") as f:
+        with open(proxies_file, "r") as f:
             proxies = f.read()
         try:
             proxies = json.loads(proxies)
@@ -253,16 +265,47 @@ def sync_from_file(file_path: Path):
         log.logger.debug("Could't sync proxies, was the file being written?")
 
 
+DEFAULT_PEER_CONFIG = """
+strategy round
+max_fails 1
+fail_timeout 24h
+reload 5s
+"""
+
+
+@retry(tries=3, delay=1, backoff=3.0)
+def update_gost_config(proxies_file: Path, config_dir: Path, config_suffix: str = "peers"):
+    """Updates the peers list of the GOST proxy."""
+    sync_from_file(proxies_file)
+    new_config = {}
+    for tp in ProxyType:
+        new_config[tp] = [DEFAULT_PEER_CONFIG]
+    for p in PROXIES:
+        print(p)
+        match p[:6]:
+            case "http:/": new_config[ProxyType.http].append(f"peer {p}")
+            case "socks5": new_config[ProxyType.socks5].append(f"peer {p}")
+            case "socks4": new_config[ProxyType.socks4].append(f"peer {p}")
+    for k, v in new_config.items():
+        path = config_dir / f"{k.value}{config_suffix}.txt"
+        print("\n".join(v))
+        with open(path, "w") as f:
+            f.write("\n".join(v))
+
+
 PROXY_SYNC_RUNNING = False
 
 
-def proxy_sync_forever(file_path: Path, interval=60):
+def proxy_sync_forever(proxies_file: Path, config_dir: Path, interval=60):
     global PROXY_SYNC_RUNNING
     if not PROXY_SYNC_RUNNING:
         while True:
-            PROXY_SYNC_RUNNING = True
-            sync_from_file(file_path)
-            time.sleep(interval)
+            try:
+                PROXY_SYNC_RUNNING = True
+                update_gost_config(proxies_file, config_dir)
+                time.sleep(interval)
+            except:
+                pass
 
 
 def get_proxy(static=True) -> str:

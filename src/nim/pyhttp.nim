@@ -69,16 +69,17 @@ proc pyReqPost(q: ptr Request): Future[Response] {.async.} =
   result = await toResponse(move obj)
 
 proc requestTask(q: ptr Request) {.async.} =
-  let v = create(Response)
   try:
-    v[] =
+    let resp =
       if q.meth == HttpGet:
         await pyReqGet($q.url, q.decode, q.proxied)
       else: # post
         await pyReqPost(q)
+    new(q.response)
+    q.response[] = resp
   except:
     discard
-  httpOut[q] = v
+  httpOut[q] = true
 
 proc requestHandler() {.async.} =
   # var q: Request
@@ -113,10 +114,9 @@ proc httpGet*(url: string; headers: HttpHeaders = nil;
   q.decode = decode
   q.proxied = proxied
   httpIn.add q.addr
-  let resp = await httpOut.pop(q.addr)
-  defer: free(resp)
-  checkNil(resp):
-    result = resp[]
+  discard await httpOut.pop(q.addr)
+  checkNil(q.response)
+  result = q.response[]
 
 # `redir` is stub for compat
 macro get*(url: Uri; redir = false, decode = true, proxied = false, args: varargs[
@@ -151,10 +151,9 @@ proc httpPost*(url: string,
   q.proxied = proxied
   q.body = body
   httpIn.add q.addr
-  let resp = await httpOut.pop(q.addr)
-  defer: free(resp)
-  checkNil(resp):
-    result = resp[]
+  discard await httpOut.pop(q.addr)
+  checkNil(q.response)
+  result = q.response[]
 
 template post*(url: Uri, args: varargs[untyped]): untyped = httpPost($url, args)
 

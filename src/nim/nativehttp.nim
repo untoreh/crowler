@@ -5,9 +5,8 @@ import httptypes except initHttp
 import
   utils,
   # pyhttp
-  # harphttp
-  # stdhttp
-  chronhttp
+  threadshttp
+  # chronhttp
 
 
 export Request, Response, RequestError, initHttp
@@ -22,12 +21,13 @@ proc getImpl(url: Uri, meth: HttpMethod, headers: HttpHeaders = nil,
   var rq: Request
   rq.init(url, meth, headers, body, redir, proxied)
   httpIn.add rq.addr
-  let respPtr = await httpOut.pop(rq.addr)
-  defer: free(respPtr)
-  if respPtr.isnil:
-    raise newException(RequestError, "GET request failed, response is nil.")
+  let status = await httpOut.pop(rq.addr)
+  if not status:
+    raise newException(RequestError, "GET request failed.")
+  elif rq.response.isnil:
+    raise newException(RequestError, "GET request failed. Response is nil.")
   else:
-    result = move respPtr[]
+    result = rq.response[]
 
 proc request*(uri: Uri,
               meth = HttpGet,
@@ -36,17 +36,14 @@ proc request*(uri: Uri,
               redir = true,
               proxied = true,
               decode = true,
-              retries = 5): Future[Response] {.async.} =
+              ): Future[Response] {.async.} =
   var resp: Response
-  for r in 0..<retries:
-    try:
-      resp = await getImpl(uri, meth, headers, body, redir, proxied)
-      if resp.headers.isnil:
-        continue
-      return resp
-    except CatchableError:
-      echo getCurrentException()[]
-      continue
+  try:
+    resp = await getImpl(uri, meth, headers, body, redir, proxied)
+    checkNil(resp.headers)
+    return resp
+  except CatchableError:
+    echo getCurrentException()[]
   raiseRequestError("Request failed, retries exceeded.")
 
 type Url = string | Uri
@@ -63,10 +60,10 @@ template post*(url: Url; args: varargs[untyped]): Future[Response] =
   request(url.asUri, HttpPost, args)
 
 when isMainModule:
-  import uri
-  import ad_chronos_adapter
   initHttp()
-  let u = "https://ipinfo.io/ip".parseUri
-  let resp = waitFor get(u, proxied = true)
-  echo resp.code
-  echo resp.body[]
+  proc f() {.async.} =
+    let u = "https://ipinfo.io/ip".parseUri
+    let resp = await get(u, proxied = true)
+    echo resp.code
+    echo resp.body[]
+  waitFor f()

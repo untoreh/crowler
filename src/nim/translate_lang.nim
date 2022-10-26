@@ -50,7 +50,7 @@ template translateIter(otree; vbtm: static[bool] = true) =
             (el.hasAttr("title") and el.isTranslatable("title")):
             translate(q.addr, el, srv)
 
-proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN): Future[(
+proc translateDom(fc: FileContext, hostname = WEBSITE_DOMAIN): Future[(
     QueueDom, VNode)] {.async.} =
   translateEnv(dom)
   for node in otree.preorder():
@@ -73,9 +73,8 @@ proc translateLang*(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath
     t_path = if targetPath == "": filedir / lang.trg / (if relpath ==
         "": "index.html" else: relpath)
                  else: targetPath
-  var fc = initFileContext(tree, filedir, relpath, lang, t_path)
-  defer: free(fc)
+  let fc = init(FileContext, tree, filedir, relpath, lang, t_path)
   (await translateDom(fc))[1]
 
-proc translateLang*(fc: ptr FileContext, ar = emptyArt[]): Future[VNode] {.gcsafe, async.} =
+proc translateLang*(fc: FileContext, ar = emptyArt[]): Future[VNode] {.gcsafe, async.} =
   result = (await translateDom(fc))[1]

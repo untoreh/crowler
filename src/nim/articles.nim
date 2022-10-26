@@ -214,7 +214,7 @@ proc deleteArt*(capts: UriCaptures, cacheOnly=false) {.async, gcsafe.} =
         pageCache[].del(SITE_PATH / "amp" / lang / artPath)
         pageCache[].del(SITE_PATH / lang / artPath)
     if not cacheOnly:
-        let tg = (await topicsCache.fetch(capts.topic)).group[]
+        let tg = (await topicsCache.fetch(capts.topic)).group
         await pygil.acquire()
         defer:
           if pygil.locked:

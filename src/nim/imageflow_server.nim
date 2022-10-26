@@ -13,24 +13,12 @@ import
 
 
 type
+  ImgData = object
+    mime, data: string
   ImgQuery = object
     id: MonoTime
     url, width, height: string
-  ImgData = object
-    mime, data: ptr string
-
-proc free*(o: ptr ImgData) =
-  if not o.isnil:
-    reset(o.mime[])
-    dealloc(o.mime)
-    reset(o.data[])
-    dealloc(o.data)
-    dealloc(o)
-
-proc newImgData(): ptr Imgdata =
-  result = create(ImgData)
-  result.mime = create(string)
-  result.data = create(string)
+    processed: ref Imgdata
 
 const rxPathImg = "/([0-9]{1,3})x([0-9]{1,3})/\\?(.+)(?=/|$)"
 
@@ -56,7 +44,7 @@ proc parseImgUrl*(relpath: string): ImgQuery =
 var
   iflThread: Thread[void]
   imgIn: AsyncPColl[ptr ImgQuery]
-  imgOut: AsyncTable[ptr ImgQuery, ptr ImgData]
+  imgOut: AsyncTable[ptr ImgQuery, bool]
   imgLock: ptr AsyncLock
 
 proc handleImg*(relpath: string): Future[(string, string)] {.async.} =
@@ -70,24 +58,20 @@ proc handleImg*(relpath: string): Future[(string, string)] {.async.} =
     else:
       q.url = decodedUrl
       imgIn.add q.addr
-      let resp = await imgOut.pop(q.addr)
-      if not resp.isnil:
-        defer: free(resp)
-        result = (resp.data[], resp.mime[])
+      discard await imgOut.pop(q.addr)
+      checkNil(q.processed):
+        result = (q.processed.data, q.processed.mime)
       debug "ifl server: img processed"
-
-template submitImg(val: untyped = nil) {.dirty.} = imgOut[q] = val
 
 proc processImgData(q: ptr ImgQuery) {.async.} =
   # push img to imageflow context
   initImageFlow() # NOTE: this initializes thread vars
   var acquired, submitted: bool
   let data = (await q.url.imgData)
-  let res = newImgData()
   defer:
     if acquired: imgLock[].release
     if not submitted:
-      imgOut[q] = res
+      imgOut[q] = true
   if data.len > 0:
     try:
       await imgLock[].acquire
@@ -96,8 +80,9 @@ proc processImgData(q: ptr ImgQuery) {.async.} =
         let query = fmt"width={q.width}&height={q.height}&mode=max&format=webp"
         logall "ifl server: serving image hash: {hash(await q.url.imgData)}, size: {q.width}x{q.height}"
         # process and send back
-        (res.data[], res.mime[]) = processImg(query)
-        imgOut[q] = res
+        new(q.processed)
+        (q.processed.data, q.processed.mime) = processImg(query)
+        imgOut[q] = true
         submitted = true
     except CatchableError:
       discard
@@ -114,7 +99,10 @@ proc asyncImgHandler() {.async.} =
     quitl()
 
 proc imgHandler*() =
-  waitFor asyncImgHandler()
+  while true:
+    waitFor asyncImgHandler()
+    sleep(1000)
+
 
 proc startImgFlow*() =
   try:
@@ -122,7 +110,7 @@ proc startImgFlow*() =
     setNil(imgIn):
       newAsyncPColl[ptr ImgQuery]()
     setNil(imgOut):
-      newAsyncTable[ptr ImgQuery, ptr ImgData]()
+      newAsyncTable[ptr ImgQuery, bool]()
     setNil(imgLock):
       create(AsyncLock)
     reset(imgLock[])

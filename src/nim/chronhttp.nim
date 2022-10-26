@@ -4,7 +4,7 @@ import httputils
 import std/[httpcore, tables, monotimes, hashes, uri, macros, sequtils]
 
 import types, pyutils, utils, httptypes
-from cfg import PROXY_EP
+from cfg import selectProxy
 
 var handler: ptr Future[void]
 
@@ -36,39 +36,43 @@ converter tobytes(s: string): seq[byte] = cast[seq[byte]](s.toSeq())
 const proxiedFlags = {NoVerifyHost, NoVerifyServerName, NewConnectionAlways}
 const sessionFlags = {NoVerifyHost, NoVerifyServerName}
 proc requestTask(q: ptr Request) {.async.} =
-  let v = create(Response)
-  try:
-    var resp: HttpClientResponseRef
-    let
-      sess = new(HttpSessionRef,
-                proxyTimeout = 10.seconds.div(3),
-                headersTimeout = 10.seconds.div(2),
-                connectTimeout = 10.seconds,
-                proxy = if q[].proxied: PROXY_EP else: "",
-                flags = if q[].proxied: proxiedFlags else: sessionFlags
-      )
-      req = new(HttpClientRequestRef,
-                sess,
-                sess.getAddress(q[].url).get,
-                q[].meth,
-                headers = q[].headers.toHeaderTuple,
-                body = q[].body.tobytes,
+  var trial = 0
+  while trial < q[].retries:
+    try:
+      trial.inc
+      var resp: HttpClientResponseRef
+      let
+        sess = new(HttpSessionRef,
+                  proxyTimeout = 10.seconds.div(3),
+                  headersTimeout = 10.seconds.div(2),
+                  connectTimeout = 10.seconds,
+                  proxy = if q[].proxied: selectProxy(trial) else: "",
+                  flags = if q[].proxied: proxiedFlags else: sessionFlags
         )
-    resp = await req.fetch(followRedirects = q[].redir, raw = true)
-    checkNil(resp):
-      defer:
-        asyncSpawn resp.closeWait()
-        resp = nil
-      init(v[])
-      v[].code = httpcore.HttpCode(resp.status)
-      checkNil(resp.connection):
-        v[].body[] = bytesToString (await resp.getBodyBytes)
-        v[].headers[] = newHttpHeaders(cast[seq[(string, string)]](
-            resp.headers.toList))
-  except CatchableError as e:
-    debug "cronhttp: {e[]}"
-    discard
-  httpOut[q] = v
+        req = new(HttpClientRequestRef,
+                  sess,
+                  sess.getAddress(q[].url).get,
+                  q[].meth,
+                  headers = q[].headers.toHeaderTuple,
+                  body = q[].body.tobytes,
+          )
+      resp = await req.fetch(followRedirects = q[].redir, raw = true)
+      checkNil(resp):
+        defer:
+          asyncSpawn resp.closeWait()
+          resp = nil
+        new(q.response)
+        init(q.response[])
+        q.response.code = httpcore.HttpCode(resp.status)
+        checkNil(resp.connection):
+          q.response.body[] = bytesToString (await resp.getBodyBytes)
+          q.response.headers[] = newHttpHeaders(cast[seq[(string, string)]](
+              resp.headers.toList))
+        break
+    except CatchableError as e:
+      debug "cronhttp: {e[]}"
+      discard
+  httpOut[q] = true
 
 proc requestHandler() {.async.} =
   # var q: Request
@@ -96,13 +100,13 @@ proc httpGet*(url: string; headers: HttpHeaders = nil;
   q.decode = decode
   q.proxied = proxied
   httpIn.add q.addr
-  let resp = await httpOut.pop(q.addr)
-  defer: free(resp)
-  checkNil(resp):
-    result = resp[]
+  discard await httpOut.pop(q.addr)
+  checkNil(q.response):
+    result = q.response[]
 
 proc initHttp*() {.gcsafe.} =
   httptypes.initHttp()
   setNil(handler):
     create(Future[void])
+  reset(handler[])
   handler[] = requestHandler()

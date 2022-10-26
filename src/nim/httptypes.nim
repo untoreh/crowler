@@ -7,6 +7,12 @@ type
 
 type
   Decode* = enum no, yes
+  Response* = object
+    code*: HttpCode
+    headers*: ref HttpHeaders
+    body*: ref string
+    size*: int
+  ResponseRef* = ref Response
   Request* = object
     id*: MonoTime
     url*: Uri
@@ -16,25 +22,20 @@ type
     redir*: bool
     decode*: Decode
     proxied*: bool
+    retries*: int
+    response*: ResponseRef
   RequestRef* = ref Request
-
-  Response* = object
-    code*: HttpCode
-    headers*: ptr HttpHeaders
-    body*: ptr string
-    size*: int
-  ResponseRef* = ref Response
 
 var
   httpIn*: AsyncPColl[ptr Request]
-  httpOut*: AsyncTable[ptr Request, ptr Response]
+  httpOut*: AsyncTable[ptr Request, bool]
 
 proc initHttp*() =
   if not httpIn.isnil:
     delete(httpIn)
   httpIn = newAsyncPColl[ptr Request]()
   if httpOut.isnil:
-    httpOut = newAsyncTable[ptr Request, ptr Response]()
+    httpOut = newAsyncTable[ptr Request, bool]()
 
 converter asDec*(b: bool): Decode =
   if b: Decode.yes
@@ -53,16 +54,12 @@ proc hash*(q: ptr Request): Hash = hash((q.id, q.meth, key(q.url.hostname), key(
     q.url.path), key(q.body)))
 
 proc init*(r: var Response) {.inline.} =
-  r.headers = create(HttpHeaders)
-  r.body = create(string)
-
-proc newResponse*(): ptr Response {.inline.} =
-  result = create(Response)
-  init(result[])
+  new(r.headers)
+  new(r.body)
 
 proc init*(r: var Request, url: Uri, met: HttpMethod = HttpGet,
              headers: HttpHeaders = nil, body = "", redir = true,
-                 proxied = true) =
+                     proxied = true, retries = 3) =
   r.id = getMonoTime()
   r.url = url
   r.meth = met
@@ -70,6 +67,7 @@ proc init*(r: var Request, url: Uri, met: HttpMethod = HttpGet,
   r.headers = headers
   r.redir = redir
   r.proxied = proxied
+  r.retries = retries
 
 proc `=destroy`*(o: var Response) =
   ## The data under pointers is not deleted

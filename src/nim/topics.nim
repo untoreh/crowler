@@ -9,15 +9,14 @@ import
 
 lockedStore(OrderedTable)
 type
-  TopicState* = tuple[topdir: int, group: ptr PyObject]
+  TopicState* = tuple[topdir: int, group: PyObject]
   Topics* = LockOrderedTable[string, TopicState]
 
 pygil.globalAcquire()
 let
   topicsCache*: Topics = initLockOrderedTable[string, TopicState]()
   pyTopicsMod = create(PyObject)
-let emptyTopic* = (topdir: -1, group: create(PyObject))
-emptyTopic.group[] = PyObject()
+let emptyTopic* = (topdir: -1, group: PyObject())
 pyTopicsMod[] = if os.getEnv("NEW_TOPICS_ENABLED", "") != "":
                       # discard relPyImport("proxies_pb") # required by topics
                       # discard relPyImport("translator") # required by topics
@@ -129,10 +128,9 @@ proc updateTopicPubdate*(idx: int) {.async.} =
 proc updateTopicPubdate*() {.async.} = await updateTopicPubdate(max(0,
     topicIdx - 1))
 
-proc getTopicGroup*(topic: string): Future[ptr PyObject] {.async.} =
+proc getTopicGroup*(topic: string): Future[PyObject] {.async.} =
   withPyLock:
-    result = create(PyObject)
-    result[] = site[].topic_group(topic)
+    result = site[].topic_group(topic)
 
 proc topicDonePages*(topic: string, locked: static[bool] = true): Future[PyObject] {.async.} =
   togglePyLock(locked):
@@ -200,7 +198,7 @@ proc getState*(topic: string): Future[(int, int)] {.async.} =
   let cache = await topicsCache.fetch(topic)
   var grp: PyObject
   withPyLock:
-    grp = cache.group[]
+    grp = cache.group
   doassert not grp.isnil, "gs: group is nil"
   var topdir, numdone: int
   const pgK = $topicData.pages
@@ -218,7 +216,7 @@ proc getState*(topic: string): Future[(int, int)] {.async.} =
 proc hasArticles*(topic: string): Future[bool] {.async.} =
   let cache = await topicsCache.fetch(topic)
   withPyLock:
-    var grp {.inject.} = cache.group[]
+    var grp {.inject.} = cache.group
     return grp[$topicData.done].len > 0 and grp[$topicData.done][0].len > 0
 
 var topicsCount {.threadvar.}: int # Used to check if topics are in sync, but it is not perfect (in case topics deletions happen)

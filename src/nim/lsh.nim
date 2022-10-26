@@ -7,22 +7,18 @@ export minhash
 {.experimental: "notnil".}
 
 type
-  PublishedArticlesObj = LocalitySensitive[uint64]
-  PublishedArticles* = ptr PublishedArticlesObj
+  PublishedArticles* = LocalitySensitive[uint64]
 var lshThread: Thread[void]
 
 proc getLSPath(topic: string): string =
   DATA_PATH / "sites" / WEBSITE_NAME / "topics" / topic / "lsh"
 
-proc initLS*(): PublishedArticles =
+proc init*(_: typedesc[PublishedArticles]): PublishedArticles =
   let hasher = initMinHasher[uint64](64)
   # very small band width => always find duplicates
-  let lsh = create(PublishedArticlesObj)
-  checkNil(lsh):
-    result = lsh
-  result[] = initLocalitySensitive[uint64](hasher, 16)
+  result = initLocalitySensitive[uint64](hasher, 16)
 
-proc saveLSImpl(topic: string, lsh: PublishedArticlesObj) {.async.} =
+proc saveLSImpl(topic: string, lsh: PublishedArticles) {.async.} =
   let path = getLSPath(topic)
   createDir(path)
   let lshJson = $$lsh
@@ -30,12 +26,10 @@ proc saveLSImpl(topic: string, lsh: PublishedArticlesObj) {.async.} =
   await writeFileAsync(path / "lsh.json.zst", comp)
 
 proc saveLS*(topic: string, lsh: sink PublishedArticles) {.async.} =
-  if lsh.isnil:
-    raise newException(ValueError, "lsh can't be nil.")
-  await saveLSImpl(topic, lsh[])
+  await saveLSImpl(topic, lsh)
 
-proc toLsh(data: string): PublishedArticlesObj =
-  result = to[PublishedArticlesObj](data)
+proc toLsh(data: string): PublishedArticles =
+  result = to[PublishedArticles](data)
   # reinitialize minhasher since it is a cbinding func
   result.hasher = initMinHasher[uint64](64)
 
@@ -47,8 +41,7 @@ proc fixLS(topic: string, data: string) {.async.} =
     if j.len > 1:
       if j[0].kind == JInt:
         if j[1].kind == JObject:
-          let ls = create(PublishedArticlesObj)
-          ls[] = ($j[1]).toLsh
+          let ls = ($j[1]).toLsh
           await saveLS(topic, ls)
 
 proc loadLS*(topic: string): Future[PublishedArticles] {.async.} =
@@ -63,24 +56,22 @@ proc loadLS*(topic: string): Future[PublishedArticles] {.async.} =
     if fileExists(lspath):
       data = await readFileAsync(lspath)
   if data.len != 0:
-    result = create(PublishedArticlesObj)
-    checkNil(result):
+    try:
+      result = data.toLsh
+    except CatchableError as e:
+      warn "Couldn't load LSH for topic {topic}, trying fix."
       try:
-        result[] = data.toLsh
-      except CatchableError as e:
-        warn "Couldn't load LSH for topic {topic}, trying fix."
-        try:
-          await fixLS(topic, data)
-        except CatchableError:
-          warn "Couldn't apply fix for lsh."
-          raise e
+        await fixLS(topic, data)
+      except CatchableError:
+        warn "Couldn't apply fix for lsh."
+        raise e
   else:
-    return initLS()
+    return init(PublishedArticles)
 
 type
   LshQuery = object
     id: MonoTime
-    lsh: PublishedArticles
+    lsh: ptr PublishedArticles
     content: ptr string
 
 # these should be generalized since it's the same from `imageflow_server`
@@ -91,7 +82,7 @@ var processing: ptr HashSet[pointer]
 proc addArticle*(lsh: PublishedArticles, content: ptr string): Future[bool] {.async.} =
   var q: LshQuery
   q.id = getMonoTime()
-  q.lsh = lsh
+  q.lsh = lsh.unsafeAddr
   q.content = content
   lshIn.add q.addr
   return await lshOut.pop(q.addr)
@@ -137,8 +128,6 @@ proc lshHandler() =
     sleep(1000)
     warn "Restarting lsh..."
 
-
-
 proc startLsh*() =
   setNil(lshIn):
     newAsyncPColl[ptr LshQuery]()
@@ -146,6 +135,8 @@ proc startLsh*() =
     newAsyncTable[ptr LshQuery, bool]()
   setNil(processing):
     create(HashSet[pointer])
+  processing[].clear()
+  processing[].reset()
   processing[] = initHashSet[pointer]()
   createThread(lshThread, lshHandler)
 

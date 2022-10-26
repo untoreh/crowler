@@ -1,17 +1,8 @@
-import strutils,
+import std/[exitprocs, monotimes, os, htmlparser, xmltree, parseutils, strutils, uri, hashes],
        nimpy,
-       std/exitprocs,
-       os,
-       htmlparser,
-       xmltree,
-       parseutils,
-       uri,
-       hashes,
        chronos
 
 from unicode import runeSubStr, validateUtf8
-
-import std/isolation
 
 import
   types,
@@ -138,9 +129,6 @@ proc resumeSonic() {.async.} =
     await push(relpath)
   await writeFileAsync(SONIC_BACKLOG, "")
 
-import std/monotimes
-import locktplasync
-asyncLockedStore(Table)
 type
   SonicQueryArgsTuple = tuple[topic: string, keywords: string, lang: string, limit: int]
   SonicMessageTuple = tuple[args: SonicQueryArgsTuple, id: MonoTime]
@@ -190,7 +178,7 @@ proc pushAllSonic*(clear = true) {.async.} =
     withPyLock:
       discard pySonic[].flush(WEBSITE_DOMAIN)
   for (topic, state) in topicsCache:
-    let done = state.group[]["done"]
+    let done = state.group["done"]
     for page in done:
       var c = len(done[page])
       for n in 0..<c:
@@ -213,21 +201,19 @@ proc query*(topic: string, keywords: string, lang: string = SLang.code,
   ## Thread safe sonic query
   if unlikely(keywords.len == 0):
     return
-  let msg = create(SonicMessageTuple)
-  defer: free(msg)
+  var msg: SonicMessageTuple
   msg.args.topic = topic
   msg.args.keywords = keywords
   msg.args.lang=  lang
   msg.args.limit = limit
   msg.id = getMonoTime()
-  return await querySonic(msg)
+  return await querySonic(msg.addr)
 
 # import quirks # required by py DetectLang
 proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[string]] {.async.} =
   if unlikely(input.len == 0):
     return
-  let msg = create(SonicMessageTuple)
-  defer: free(msg)
+  var msg: SonicMessageTuple
   msg.args.topic = topic
   msg.args.keywords = input
   # var dlang: string
@@ -236,7 +222,7 @@ proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[string]] {
   # msg.args.lang = await toISO3(dlang)
   msg.args.limit = limit
   msg.id = getMonoTime()
-  return await suggestSonic(msg)
+  return await suggestSonic(msg.addr)
 
 proc connectSonic(reconnect=false) =
   var notConnected: bool

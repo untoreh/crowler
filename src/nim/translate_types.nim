@@ -71,21 +71,17 @@ macro getHtml*(code: untyped, kind: static[FcKind], ): untyped =
       quote do:
         `code`.vhtml
 
-proc `html=`*(fc: ptr FileContext, data: XmlNode) = fc.xhtml = data
-proc `html=`*(fc: ptr FileContext, data: vdom.VNode) = fc.vhtml = data
+proc `html=`*(fc: var FileContext, data: XmlNode) = fc.xhtml = data
+proc `html=`*(fc: var FileContext, data: vdom.VNode) = fc.vhtml = data
 
-proc initFileContext*(data: XmlNode | VNode; file_path, url_path, pair,
-    t_path: auto): ptr FileContext =
-  result = create(FileContext)
-  if not result.isnil:
-    result[] = FileContext(kind: (if data is XmlNode: xml else: dom))
-    result.html = data
-    result.file_path = file_path
-    result.url_path = url_path
-    result.pair = pair
-    result.t_path = t_path
-  else:
-    assert false, "Failed to create file context."
+proc init*(_: typedesc[FileContext], data: XmlNode | VNode; file_path, url_path, pair,
+    t_path: auto): FileContext =
+  result = FileContext(kind: (if data is XmlNode: xml else: dom))
+  result.html = data
+  result.file_path = file_path
+  result.url_path = url_path
+  result.pair = pair
+  result.t_path = t_path
 
 proc free*(o: ptr FileContext) =
   if not o.isnil:
@@ -98,13 +94,7 @@ proc free*(o: ptr FileContext) =
     o[].reset
     dealloc(o)
 
-const
-  default_service* = base_translator
-  skip_nodes* = static(["code", "style", "script", "address", "applet", "audio", "canvas",
-          "embed", "time", "video", "svg"])
-  skip_vnodes* = static([VNodeKind.code, script, VNodeKind.address, audio,
-      canvas, embed, time, video, svg])
-  skip_class* = ["menu-lang-btn", "material-icons", "rss", "sitemap"].static
+const default_service* = base_translator
 
 pygil.globalAcquire()
 let
@@ -182,9 +172,9 @@ var gluePadding*: int
 
 let defaultGlues = [
     (" #|#|# ", re"\s?#\s?\|\s?#\s?\|\s?#\s?"),
+    (" \n[[...]]\n ", re"\s?\n?\[\[?\.\.\.\]\]?\n?"),
     (" %¶%¶% ", re"\%\s\¶\s?\%\s?\¶\s?\%\s?"),
     (" <<...>> ", re"\s?<\s?<\s?\.\s?\.\s?\.\s?>\s?>\s?"),
-    (" \n[[...]]\n ", re"\s?\n?\[\[?\.\.\.\]\]?\n?"),
     ]
 
 var glueTracker*: array[4, int]

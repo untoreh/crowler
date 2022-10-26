@@ -15,8 +15,7 @@ import tables,
 
 import cfg,
        utils,
-       pyhttp,
-       # nativehttp,
+       nativehttp,
   html_misc,
   html_entities,
   ads

@@ -5,6 +5,7 @@ import std/[os, times, monotimes, cpuinfo, strformat, strutils, json, tables, st
        lrucache,
        zip/zlib,
        chronos,
+       chronos_patches,
        scorper,
        scorper/http/[httpcore, httpcommonheaders]
 
@@ -67,13 +68,12 @@ var
   threadInitialized {.threadvar.}: bool
   reqCtxCache {.threadvar.}: LockLruCache[string, ref ReqContext]
   urlCache {.threadvar.}: LockLruCache[string, ref Uri]
-  reqCompleteEQ: ptr AsyncEventQueue[ref ReqContext]
-  reqEventQK: ptr EventQueueKey
 
 proc initThreadBase() {.gcsafe.} =
   initPy()
   initTypes()
   initLogging()
+  registerChronosCleanup()
 
 proc initThreadImpl() {.gcsafe.} =
   if threadInitialized:
@@ -94,10 +94,6 @@ proc initThreadImpl() {.gcsafe.} =
 
   reqCtxCache = initLockLruCache[string, ref ReqContext](32)
   urlCache = initLockLruCache[string, ref Uri](32)
-  reqCompleteEQ = create(AsyncEventQueue[ref ReqContext])
-  reqCompleteEQ[] = newAsyncEventQueue[ref ReqContext]()
-  reqEventQK = create(EventQueueKey)
-  reqEventQK[] = reqCompleteEQ[].register()
   waitFor syncTopics()
   loadAssets()
   readAdsConfig()

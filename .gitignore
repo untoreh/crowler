@@ -45,3 +45,4 @@ data_*/proxies/*
 /wsl-cli
 /supervisord.pid
 /data/topics-blacklist.txt
+/valgrind-out.txt

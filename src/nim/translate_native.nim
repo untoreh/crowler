@@ -25,7 +25,7 @@ var
   transWorker*: ptr Future[void]
   rotator: TranslateRotatorPtr
 when not defined(translateProc):
-  var transOut*: AsyncTable[ptr Query, ptr string]
+  var transOut*: AsyncTable[ptr Query, bool]
 else:
   var transOut*: AsyncTable[int, ptr string]
 
@@ -67,7 +67,7 @@ proc callService*(text, src, trg: string): Future[string] {.async.} =
 
 template waitTrans*(): string =
   block:
-    let v = await transOut.pop(q.addr)
+    discard await transOut.pop(q.addr)
     defer: free(v)
     if v.isnil:
       ""
@@ -79,13 +79,15 @@ proc setupTranslate*() =
     delete(transIn)
   transIn = newAsyncPColl[ptr Query]()
   transOut.setNil:
-    newAsyncTable[when not defined(translateProc): ptr Query else: int, ptr string]()
+    newAsyncTable[when not defined(translateProc): ptr Query else: int, bool]()
 
 when not defined(translateProc):
   proc translateTask(q: ptr Query) {.async.} =
-    var tries: int
-    var success: bool
-    let translated = create(string)
+    var
+      tries: int
+      success: bool
+      translated: ref string
+    new(translated)
     try:
       for _ in 0..3:
         try:
@@ -101,7 +103,8 @@ when not defined(translateProc):
     except CatchableError:
       warn "trans: job failed, {q.src} -> {q.trg}."
     finally:
-      transOut[q] = translated
+      q.trans = translated
+      transOut[q] = true
 
   proc asyncTransHandler() {.async.} =
     try:
@@ -129,7 +132,10 @@ when not defined(translateProc):
     q.trg = trg
     q.text = text
     transIn.add q.addr
-    return waitTrans()
+    discard await transOut.pop(q.addr)
+    result =
+      if q.trans.isnil: ""
+      else: q.trans[]
 
 when isMainModule:
   proc test() {.async.} =

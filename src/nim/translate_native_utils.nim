@@ -14,7 +14,7 @@ proc raiseTranslateError*(msg: string) =
   raise newException(TranslateError, msg)
 
 type
-  Query* = tuple[id: MonoTime, text: string, src: string, trg: string]
+  Query* = tuple[id: MonoTime, text: string, src: string, trg: string, trans: ref string]
   TranslateFunc* = proc(text, src, trg: string): Future[string] {.gcsafe.}
   Service* = enum google, bing, yandex
   TranslateObj* = object of RootObj

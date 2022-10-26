@@ -1,0 +1,9 @@
+{
+    "strategy": "round",
+    "max_fails": 1,
+    "fail_timeout": "24h",
+    "reload": "5s",
+    "peer": [
+        "socks4://:?ip=/tmp/pbproxies"
+    ]
+}

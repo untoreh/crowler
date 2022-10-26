@@ -1,0 +1,39 @@
+{
+    "Timeout": 10,
+    "ServeNodes": [],
+    "ChainNodes": [],
+    "Routes": [
+        {
+            "ServeNodes": [
+                "http://:8877"
+            ],
+            "ChainNodes": [
+                ":?peer=peer.txt"
+            ]
+        },
+        {
+            "ServeNodes": [
+                "socks5://:8878"
+            ],
+            "ChainNodes": [
+                ":?peer=socks5peers.txt"
+            ]
+        },
+        {
+            "ServeNodes": [
+                "socks4://:8879"
+            ],
+            "ChainNodes": [
+                ":?peer=socks4peers.txt"
+            ]
+        },
+        {
+            "ServeNodes": [
+                "http://:8880"
+            ],
+            "ChainNodes": [
+                ":?peer=httppeers.txt"
+            ]
+        }
+    ]
+}

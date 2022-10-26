@@ -1,0 +1,10 @@
+{
+    "Timeout": 10,
+    "ServeNodes": [
+        "socks5://:8878"
+    ],
+    "ChainNodes": [
+        ":?peer=testpeer.txt"
+    ],
+    "Routes": []
+}

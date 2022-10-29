@@ -112,7 +112,7 @@ import tables
 type
   AsyncTableObj[K, V] = object
     lock: ThreadLock
-    waiters: Table[K, seq[pointer]] # pointer future
+    waiters: Table[K, seq[ptr Future[V]]]
     table: Table[K, V]
   AsyncTable*[K, V] = ptr AsyncTableObj[K, V]
 
@@ -120,7 +120,7 @@ proc newAsyncTable*[K, V](): AsyncTable[K, V] =
   result = create(AsyncTableObj[K, V])
   result.lock = newThreadLock()
   result.table = initTable[K, V]()
-  result.waiters = initTable[K, seq[pointer]]()
+  result.waiters = initTable[K, seq[ptr Future[V]]]()
 
 proc pop*[K, V](t: AsyncTable[K, V], k: K): Future[V] {.async.} =
   var fut = newFuture[V]("AsyncTable.getWait")
@@ -133,7 +133,7 @@ proc pop*[K, V](t: AsyncTable[K, V], k: K): Future[V] {.async.} =
       return v
     else:
       if k notin t.waiters:
-        t.waiters[k] = newSeq[pointer]()
+        t.waiters[k] = newSeq[ptr Future[V]]()
       t.waiters[k].add fut.addr
   while not fut.finished:
     sleep()
@@ -145,14 +145,14 @@ proc pop*[K, V](t: AsyncTable[K, V], k: K): Future[V] {.async.} =
 proc put*[K, V](t: AsyncTable[K, V], k: K, v: V) {.async.} =
   withLock(t.lock):
     if k in t.waiters:
-      var ws: seq[pointer]
+      var ws: seq[ptr Future[V]]
       doassert t.waiters.pop(k, ws)
       # defer: dealloc(ws)
       while ws.len > 0:
         let w = ws.pop()
         if not w.isnil:
           let f = cast[ptr Future[V]](w)
-          if not f[].finished:
+          if if not f.isnil and not f[].finished:
             f[].complete(v)
     else:
       t.table[k] = v

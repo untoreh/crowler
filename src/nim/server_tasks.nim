@@ -34,7 +34,8 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
     prevSize = len(topicsCache)
     n = prevSize
   except Exception as e:
-    warn "pubtask: init failed with error {e[]}"
+    let exc = e[]
+    warn "pubtask: init failed with error {exc}"
     quitl()
   while true:
     try:
@@ -104,7 +105,8 @@ proc cleanupTask*(): Future[void] {.async.} =
       for topic in topicsCache.keys():
         await deleteLowTrafficArts(topic)
     except CatchableError as e:
-      warn "cleanuptask: failed with error {e[]}"
+      let exc = e[]
+      warn "cleanuptask: failed with error {exc}"
     await sleepAsync(cleanupInterval)
 
 proc memWatcherTask*() {.async.} =

@@ -110,9 +110,8 @@ proc fetchBingConfig(self: BingTranslateObj, userAgent = USER_AGENT): Future[
       else:
         break
 
-    checkNil(resp.body)
     # PENDING: optional?
-    for (k, ck) in resp.headers[].pairs:
+    for (k, ck) in resp.headers.pairs:
       if k == "set-cookie":
         let cks = ck.split(";")
         if len(cks) > 0:
@@ -120,23 +119,23 @@ proc fetchBingConfig(self: BingTranslateObj, userAgent = USER_AGENT): Future[
           config.cookie.add "; "
 
     block:
-      let igMatch = resp.body[].match(sre r"""(?s).*IG:"([^"]+)""")
+      let igMatch = resp.body.match(sre r"""(?s).*IG:"([^"]+)""")
       if igMatch.isnone:
         raiseTranslateError "Bing IG doesn't match."
-      config.ig = resp.body[][igMatch.get.captureBounds[0]]
+      config.ig = resp.body[igMatch.get.captureBounds[0]]
 
     block:
-      let iidMatch = resp.body[].match(sre r"""(?s).*data-iid="([^"]+)""")
+      let iidMatch = resp.body.match(sre r"""(?s).*data-iid="([^"]+)""")
       if iidMatch.isnone:
         raiseTranslateError "Bing IID doesn't match."
-      config.iid = resp.body[][iidMatch.get.captureBounds[0]]
+      config.iid = resp.body[iidMatch.get.captureBounds[0]]
 
     block:
-      let helperMatch = resp.body[].match(
+      let helperMatch = resp.body.match(
           sre r"(?s).*params_RichTranslateHelper\s?=\s?([^\]]+\])")
       if helperMatch.isnone:
         raiseTranslateError "Bing helper doesn't match."
-      let helper = resp.body[][helperMatch.get.captureBounds[0]].parseJson
+      let helper = resp.body[helperMatch.get.captureBounds[0]].parseJson
       config.key = helper[0].to(int)
       config.token = helper[1].to(string)
       config.tokenExpiryInterval = ($helper[2]).parseInt
@@ -147,7 +146,8 @@ proc fetchBingConfig(self: BingTranslateObj, userAgent = USER_AGENT): Future[
       # exclude milliseconds
       config.tokenTs = config.key.intToStr[0..^4].parseInt.fromUnix
   except CatchableError as e:
-    warn "failed to fetch global config {e[]}"
+    let exc = e[]
+    warn "failed to fetch global config {exc}"
     raise e
   shallowCopy self.config[], config[]
   return config
@@ -180,11 +180,11 @@ proc translate*(self: BingTranslateObj, text, src, trg: string): Future[
       ].newHttpHeaders()
 
   let resp = await post(uri, headers, body, proxied = true)
-  checkNil(resp.body)
+  checkTrue(resp.body.len > 0, "bing: body was empty")
   if resp.code != Http200:
     raiseTranslateError "Bing POST request error, response code {resp.code}".fmt
 
-  let bodyJson = resp.body[].parseJson
+  let bodyJson = resp.body.parseJson
   if not validateResponse(bodyJson):
     raiseTranslateError "Bing translations not found in bing response."
 

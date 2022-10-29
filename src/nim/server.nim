@@ -104,7 +104,8 @@ proc initThread*() =
   try:
     initThreadImpl()
   except Exception as e:
-    warn "Failed to init thread! {e[]}"
+    let exc = e[]
+    warn "Failed to init thread! {exc}"
     quitl()
 
 template setEncoding() {.dirty.} =
@@ -135,10 +136,10 @@ proc doReply(reqCtx: ref ReqContext, body: string, rqid: ReqId, scode = Http200,
   else:
     reqCtx.respHeaders = headers
   sdebug "reply: setting body"
-  reqCtx.respBody[] = if likely(body != ""): body
-                    else:
-                      sdebug "reply: body is empty!"
-                      ""
+  reqCtx.respBody[] =
+      if likely(body != ""): body
+      else: sdebug "reply: body is empty!"; ""
+  let size = len(reqCtx.respBody[])
   if reqCtx.mime == "":
     sdebug "reply: mimepath"
     reqCtx.mime = mimePath(reqCtx.file)
@@ -152,16 +153,17 @@ proc doReply(reqCtx: ref ReqContext, body: string, rqid: ReqId, scode = Http200,
     reqCtx.respHeaders[$hetag] = '"' & $reqCtx.key & '"'
   except:
     swarn "reply: troubles serving page {reqCtx.file}"
-    sdebug "reply: sending: {len(reqCtx.respBody[])} to {reqCtx.url}"
+    sdebug "reply: sending: {size} to {reqCtx.url}"
   try:
     reqCtx.respCode = scode
     # assert len(respbody) > 0, "reply: Can't send empty body!"
     debug "reply: sending response {reqCtx.key}"
     await reqCtx.rq[rqid].resp(content = reqCtx.respBody[],
         headers = reqCtx.respHeaders, code = reqCtx.respCode)
-    sdebug "reply: sent: {len(reqCtx.respBody[])}"
+    sdebug "reply: sent: {size}"
   except Exception as e:
-    sdebug "reply: {e[]}"
+    let exc = e[]
+    sdebug "reply: {exc}"
 
 proc doReply(reqCtx: ref ReqContext, rqid: ReqId) {.async.} =
   await reqCtx.rq[rqid].resp(content = reqCtx.respBody[],
@@ -175,7 +177,8 @@ template handle301*(loc: string = $WEBSITE_URL) =
   block:
     let e = getCurrentException()
     if not e.isnil:
-      debug "redirect: start..\n {e[]}\nredirect: ..end."
+      let exc = e[]
+      debug "redirect: start..\n {exc}\nredirect: ..end."
     await reqCtx.doReply($Http301, rqid, scode = Http301, headers = headers)
 
 const redirectJs = fmt"""<script>window.location.replace("{WEBSITE_URL}");</script>"""
@@ -303,7 +306,7 @@ template handleArticle(capts: auto, ctx: Request) =
   ##
   debug "article: fetching article"
   let tg = topicsCache.get(capts.topic, emptyTopic)
-  assert not tg.group.isnil
+  checkNil(tg.group)
   if tg.topdir != -1:
     try:
       page = pageCache[].lcheckOrPut(reqCtx.key):
@@ -466,7 +469,8 @@ proc handleGet(ctx: Request): Future[void] {.gcsafe, async.} =
       logall "cache: serving nocache reply, {reqCtx.key} addr: {cast[uint](reqCtx)}"
       await reqCtx.doReply(rqid, )
     except CatchableError as e:
-      debug "cache: aborting {e[]}"
+      let exc = e[]
+      debug "cache: aborting {exc}"
       abort()
   try:
     let capts = uriTuple(reqCtx.url.path)
@@ -563,12 +567,14 @@ proc runScorper(address, callback: auto) =
     info "server: starting scorper, limits: {getMaxOpenFiles()}(fd)"
     srv = waitFor doServe(address, callback)
   except CatchableError as e:
-    warn "server: {e[]} \n restarting server..."
+    let exc = e[]
+    warn "server: {exc} \n restarting server..."
     if not srv.isnil:
       waitFor srv.join()
       reset(srv)
   except Defect as e:
-    warn "server: {e[]} \n quitting..."
+    let exc = e[]
+    warn "server: {exc} \n quitting..."
     quitl()
 
 proc startServer*(doclear = false, port = 0, loglevel = "info") =

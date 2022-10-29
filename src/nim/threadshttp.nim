@@ -22,11 +22,10 @@ template doTry(trial: int) =
     let resp = cl.request(rq.url, httpMethod = rq.meth,
                           headers = rq.headers, body = rq.body)
     r.code = resp.code
-    checkNil(r.headers)
-    r.headers[] = resp.headers
+    checkNil(resp.headers)
+    r.headers = resp.headers
     if r.code == Http200:
-      checkNil(r.body)
-      r.body[] = resp.body
+      r.body = resp.body
   except ProtocolError as e: # timeout?
     warn "protocol error: is proxy running? {selectProxy(trial)}"
     sleep(1000)
@@ -37,13 +36,12 @@ template doTry(trial: int) =
       cl.close()
 
 proc doReq(rq: ptr Request, timeout = DEFAULT_TIMEOUT): bool =
-  new(rq.response)
-  init(rq.response[])
+  checkNil(rq.response)
   let r = rq.response
   var trial = 0
   while trial < rq.retries:
     doTry(trial)
-    if not r.body.isnil:
+    if r.body.len > 0:
       break
     trial.inc
   # the response
@@ -59,10 +57,10 @@ proc handler() =
       while true:
         rq = waitFor httpIn.pop
         checkNil(rq)
-        discard tp.spawn doReq(rq)
+        discard tp.spawn doReq(move rq)
     except:
-      let e = getCurrentException()
-      warn "http: httpHandler crashed. {e[]}"
+      let exc = getCurrentException()[]
+      warn "http: httpHandler crashed. {exc}"
 
 proc initHttp*() =
   httptypes.initHttp()

@@ -9,14 +9,14 @@ import
 
 lockedStore(OrderedTable)
 type
-  TopicState* = tuple[topdir: int, group: PyObject]
+  TopicState* = tuple[topdir: int, group: ptr PyObject]
   Topics* = LockOrderedTable[string, TopicState]
 
 pygil.globalAcquire()
 let
   topicsCache*: Topics = initLockOrderedTable[string, TopicState]()
   pyTopicsMod = create(PyObject)
-let emptyTopic* = (topdir: -1, group: PyObject())
+let emptyTopic*: TopicState = (topdir: -1, group: nil)
 pyTopicsMod[] = if os.getEnv("NEW_TOPICS_ENABLED", "") != "":
                       # discard relPyImport("proxies_pb") # required by topics
                       # discard relPyImport("translator") # required by topics
@@ -128,9 +128,13 @@ proc updateTopicPubdate*(idx: int) {.async.} =
 proc updateTopicPubdate*() {.async.} = await updateTopicPubdate(max(0,
     topicIdx - 1))
 
+import std/wrapnils
+proc getTopicGroupImpl(topic: string): PyObject =
+  ?.site[].topic_group(topic)
+
 proc getTopicGroup*(topic: string): Future[PyObject] {.async.} =
   withPyLock:
-    result = site[].topic_group(topic)
+    result = getTopicGroupImpl(topic)
 
 proc topicDonePages*(topic: string, locked: static[bool] = true): Future[
     PyObject] {.async.} =
@@ -190,17 +194,32 @@ proc publishedArticles*[V](topic: string, attr: string = ""): Future[seq[(
       result.add (art, v)
 
 
-proc fetch*(t: Topics, k: string): Future[TopicState] {.async.} =
-  return t.lgetOrPut(k):
-    (topdir: await lastPageNum(k), group: await getTopicGroup(k))
+proc fetchAsync*(_: typedesc[Topics], k: string): Future[TopicState] {.async.} =
+  result =
+    topicsCache.lgetOrPut(k):
+      var ts: TopicState
+      ts.topdir = await lastPageNum(k)
+      ts.group = create(PyObject)
+      ts.group[] = await getTopicGroup(k)
+      move ts
+
+proc fetch*(_: typedesc[Topics], k: string): TopicState  =
+  checkNil(topicsCache)
+  result =
+    topicsCache.lgetOrPut(k):
+      var ts: TopicState
+      ts.topdir = lastPageNumImpl(k)
+      ts.group = create(PyObject)
+      ts.group[] = getTopicGroupImpl(k)
+      move ts
 
 proc getState*(topic: string): Future[(int, int)] {.async.} =
   ## Get the number of the top page, and the number of `done` pages.
   checkTrue topic != "", "gs: topic should not be empty"
-  let cache = await topicsCache.fetch(topic)
+  let cache = await Topics.fetchAsync(topic)
   var grp: PyObject
   withPyLock:
-    grp = cache.group
+    grp = cache.group[]
   doassert not grp.isnil, "gs: group is nil"
   var topdir, numdone: int
   const pgK = $topicData.pages
@@ -216,9 +235,8 @@ proc getState*(topic: string): Future[(int, int)] {.async.} =
   return (topdir, numdone)
 
 proc hasArticles*(topic: string): Future[bool] {.async.} =
-  let cache = await topicsCache.fetch(topic)
   withPyLock:
-    var grp {.inject.} = cache.group
+    var grp {.inject.} = Topics.fetch(topic).group[]
     return grp[$topicData.done].len > 0 and grp[$topicData.done][0].len > 0
 
 var topicsCount {.threadvar.}: int # Used to check if topics are in sync, but it is not perfect (in case topics deletions happen)
@@ -241,22 +259,18 @@ proc syncTopics*(force = false) {.gcsafe, async.} =
       if nTopics == 0 and (not pyisnone(pyTopicsMod[])):
         discard pyTopicsMod[].new_topic()
         pygil.release()
-        pytopics = await loadTopics()
-        await pygil.acquire()
+        try: pytopics = await loadTopics()
+        finally: await pygil.acquire()
         nTopics = pytopics.len
         assert nTopics > 0
 
     if nTopics > topicsCache.len:
       {.locks: [pyGilLock].}:
-        await pygil.acquire()
-        for topic in pytopics.slice(topicsCache.len, pytopics.len):
-          let tp = topic[0].to(string)
-          pygil.release()
-          logall "synctopics: adding topic {tp} to global"
-          # topicsCache[tp] = (topdir: td, group: tg)
-          discard topicsCache.fetch(tp)
-          await pygil.acquire()
-        pygil.release()
+        withPyLock():
+          for topic in pytopics.slice(topicsCache.len, pytopics.len):
+            let tp = topic[0].to(string)
+            logall "synctopics: adding topic {tp} to global"
+            discard Topics.fetch(tp)
   except CatchableError as e:
     let e = getCurrentException()[]
     debug "could not sync topics {e}"

@@ -76,9 +76,9 @@ proc translate*(self: GoogleTranslateObj, text, src, trg: string): Future[
     raiseTranslateError "Translation string exceeds max length of 5000 bytes."
   let uri = queryUrl(text, src, trg)
   let resp = await get(uri, proxied = true)
-  if resp.body.isnil or resp.body[].len == 0:
+  if resp.body.len == 0:
     raiseTranslateError "Translation was empty."
-  result = getTranslation(resp.body[])
+  result = getTranslation(resp.body)
 
 proc init*(_: typedesc[GoogleTranslateObj]): GoogleTranslateObj =
   let base = init(TranslateObj)

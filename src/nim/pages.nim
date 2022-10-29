@@ -133,7 +133,8 @@ proc articleEntry(ar: Article, topic = ""): Future[VNode] {.async.} =
           text "[continue]"
       hr()
   except CatchableError as e:
-    warn "articles: entry creation failed {e[]}"
+    let exc = e[]
+    warn "articles: entry creation failed {exc}"
     raise e
 
 proc buildShortPosts*(arts: seq[Article], topic = ""): Future[

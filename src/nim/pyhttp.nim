@@ -91,7 +91,8 @@ proc requestHandler() {.async.} =
         checkNil(q):
           asyncSpawn requestTask(q)
     except Exception as e:
-      warn "PyRequests handler crashed, restarting. {e[]}"
+      let exc = e[]
+      warn "PyRequests handler crashed, restarting. {exc}"
       await sleepAsync(1.seconds)
 
 proc initHttp*() {.gcsafe.} =

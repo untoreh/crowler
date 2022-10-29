@@ -173,8 +173,7 @@ proc addImg*(img: string): bool =
 proc getImg*(src: string, kind: Source): Future[string] {.async.} =
   return case kind:
     of urlsrc:
-      (await get(src.parseUri, decode = false, proxied = false)).body[]
-      # (await fetch(HttpSessionRef.new(), parseUri(src))).data.bytesToString
+      (await get(src.parseUri, decode = false, proxied = false)).body
     elif fileExists(src):
       await readFileAsync(src)
     else:

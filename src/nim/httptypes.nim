@@ -9,8 +9,8 @@ type
   Decode* = enum no, yes
   Response* = object
     code*: HttpCode
-    headers*: ref HttpHeaders
-    body*: ref string
+    headers*: HttpHeaders
+    body*: string
     size*: int
   ResponseRef* = ref Response
   Request* = object
@@ -23,7 +23,7 @@ type
     decode*: Decode
     proxied*: bool
     retries*: int
-    response*: ResponseRef
+    response*: ptr Response
   RequestRef* = ref Request
 
 var
@@ -53,10 +53,6 @@ proc key*(s: string): array[5, byte] =
 proc hash*(q: ptr Request): Hash = hash((q.id, q.meth, key(q.url.hostname), key(
     q.url.path), key(q.body)))
 
-proc init*(r: var Response) {.inline.} =
-  new(r.headers)
-  new(r.body)
-
 proc init*(r: var Request, url: Uri, met: HttpMethod = HttpGet,
              headers: HttpHeaders = nil, body = "", redir = true,
                      proxied = true, retries = 3) =
@@ -68,16 +64,3 @@ proc init*(r: var Request, url: Uri, met: HttpMethod = HttpGet,
   r.redir = redir
   r.proxied = proxied
   r.retries = retries
-
-proc `=destroy`*(o: var Response) =
-  ## The data under pointers is not deleted
-  o.code.reset
-  if not o.headers.isnil:
-    o.headers = nil
-  if not o.body.isnil:
-    o.body = nil
-
-proc free*(o: ptr Response) =
-  if not o.isnil:
-    `=destroy`(o[])
-    dealloc o

@@ -46,9 +46,9 @@ proc fetchCookies(self: YandexTranslateObj) {.async.} =
   const errMsg =  "Yandex fetch cookies failed."
   if resp.code.int == 0:
     raiseTranslateError errMsg
-  checkNil(resp.headers[], errMsg):
-    self.cookie[].setLen 0
-    self.cookie[].add resp.parseCookies
+  checkTrue(resp.headers.len > 0, errMsg)
+  self.cookie[].setLen 0
+  self.cookie[].add resp.parseCookies
 
 proc translate*(self: YandexTranslateObj, text, src, trg: string): Future[
     string] {.async.} =
@@ -68,10 +68,10 @@ proc translate*(self: YandexTranslateObj, text, src, trg: string): Future[
 
   # native
   let resp = await post(uri, headers, body, proxied = true)
-  checkNil(resp.body)
+  checkTrue(resp.body.len > 0, "yandex: empty body")
   if resp.code != Http200:
     raiseTranslateError "Yandex POST request error, response code {resp.code}".fmt
-  let respJson = resp.body[].parseJson
+  let respJson = (resp.body).parseJson
 
   if respJson.kind != JObject or "text" notin respJson or respJson["text"].len == 0:
     raiseTranslateError "Yandex respone has no translation."

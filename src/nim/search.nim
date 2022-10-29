@@ -178,7 +178,7 @@ proc pushAllSonic*(clear = true) {.async.} =
     withPyLock:
       discard pySonic[].flush(WEBSITE_DOMAIN)
   for (topic, state) in topicsCache:
-    let done = state.group["done"]
+    let done = state.group[]["done"]
     for page in done:
       var c = len(done[page])
       for n in 0..<c:

@@ -14,20 +14,15 @@ export Request, Response, RequestError, initHttp
 proc raiseRequestError(msg = "Request failed.") =
   raise newException(RequestError, msg)
 
-proc getImpl(url: Uri, meth: HttpMethod, headers: HttpHeaders = nil,
-             body = "", redir = true, proxied = true): Future[
-                 Response] {.async.} =
+proc getImpl(rqPtr: ptr Request): Future[void] {.async.} =
   ## NOTE: Response can be nil
-  var rq: Request
-  rq.init(url, meth, headers, body, redir, proxied)
-  httpIn.add rq.addr
-  let status = await httpOut.pop(rq.addr)
+  checkNil rqPtr
+  httpIn.add rqPtr
+  let status = await httpOut.pop(rqPtr)
   if not status:
     raise newException(RequestError, "GET request failed.")
-  elif rq.response.isnil:
+  elif rqPtr[].response.isnil:
     raise newException(RequestError, "GET request failed. Response is nil.")
-  else:
-    result = rq.response[]
 
 proc request*(uri: Uri,
               meth = HttpGet,
@@ -37,9 +32,12 @@ proc request*(uri: Uri,
               proxied = true,
               decode = true,
               ): Future[Response] {.async.} =
+  var rq: Request
   var resp: Response
+  rq.init(uri, meth, headers, body, redir, proxied)
+  rq.response = resp.addr
   try:
-    resp = await getImpl(uri, meth, headers, body, redir, proxied)
+    await getImpl(rq.addr)
     checkNil(resp.headers)
     return resp
   except CatchableError:

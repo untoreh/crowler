@@ -42,25 +42,25 @@ proc curPageNumber(topic: string): Future[int] {.async.} =
     return site[].get_top_page(topic).to(int)
   # return getSubdirNumber(topic, curdir)
 
-proc pubPage(topic: string, pagenum: string, pagecount: int, finalize = false, istop = false,
+proc pubPage(topic: string, pagenum: string, nPagePosts: int, finalize = false, istop = false,
         with_arts = false) {.async.} =
   ## Writes a single page (fetching its related articles, if its not a template) to storage
   topicPage(topic, pagenum, istop)
 
-  info "Updating page:{pagenum} for topic:{topic} with entries:{pagecount}"
+  info "Updating page:{pagenum} for topic:{topic} with entries:{nPagePosts}"
   await processHTML(topic,
               pagenum / "index",
               pagetree)
-  # if we pass a pagecount we mean to finalize
+  # if we pass a nPagePosts we mean to finalize
   if finalize:
     withPylock:
-      discard site[].update_page_size(topic, pagenum.parseInt, pagecount, final = true)
+      discard site[].update_page_size(topic, pagenum.parseInt, nPagePosts, final = true)
   if with_arts:
     for a in arts:
       await processHtml(topic / pagenum, a.slug, (await buildPost(a)), a)
 
 proc finalizePages(topic: string, pn: int, newpage: bool,
-    pagecount: ptr int) {.async.} =
+    nPagePosts: ptr int) {.async.} =
   ## Always update both the homepage and the previous page
   let pages = await topicPages(topic)
   var pagenum = pn.intToStr
@@ -68,7 +68,7 @@ proc finalizePages(topic: string, pn: int, newpage: bool,
   let pnStr = pagenum
   let pn = pagenum.parseInt
   # the current page is the homepage
-  await pubPage(topic, pnStr, pagecount[])
+  await pubPage(topic, pnStr, nPagePosts[])
   # Also build the previous page if we switched page
   if newpage:
     # make sure the second previous page is finalized
@@ -78,16 +78,16 @@ proc finalizePages(topic: string, pn: int, newpage: bool,
       var final: bool
       withPyLock:
         pagesize = pages[pn-2]
-        pagecount[] = pagesize[0].to(int)
+        nPagePosts[] = pagesize[0].to(int)
         final = pagesize[1].to(bool)
       if not final:
         pagenum = (pn-2).intToStr
-        await pubPage(topic, pagenum, pagecount[], finalize = true)
+        await pubPage(topic, pagenum, nPagePosts[], finalize = true)
     # now update the just previous page
     withPyLock:
-      pagecount[] = pages[pn-1][0].to(int)
+      nPagePosts[] = pages[pn-1][0].to(int)
     pagenum = (pn-1).intToStr
-    await pubPage(topic, pagenum, pagecount[], finalize = true)
+    await pubPage(topic, pagenum, nPagePosts[], finalize = true)
 
 # proc resetPages(topic: string) =
 #     ## Takes all the published articles in `done`
@@ -201,8 +201,8 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   when not cfg.SERVER_MODE:
     if newpage:
       ensureDir(SITE_PATH / pagedir)
-  let newposts = len(posts)
-  if newposts == 0:
+  let nNewPosts = len(posts)
+  if nNewPosts == 0:
     info "No new posts written for topic: {topic}"
     return false
   # only write articles after having saved LSH (within `filterDuplicates)
@@ -210,7 +210,7 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   # even if we don't publish them, but we never want duplicates
   infopub "save lsh"
   await saveLS(topic, lsh)
-  infopub "Writing {newposts} articles for topic: {topic}"
+  infopub "Writing {nNewPosts} articles for topic: {topic}"
   # FIXME: should this be here?
   for (tree, a) in posts:
     await processHtml(pagedir, a.slug, tree, a)
@@ -219,8 +219,8 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
     if newpage:
       ensureHome(topic, pagenum)
   # if its a new page, the page posts count is equivalent to the just published count
-  var pagecount: int
-  pagecount = newposts
+  var nPagePosts: int
+  nPagePosts = nNewPosts
   infopub "updating db page size"
   withPyLock:
     if not newpage:
@@ -228,11 +228,11 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
       let pagesize = site[].get_page_size(topic, pagenum)
       # In case we didn't save the count, re-read from disk
       if not pyisnone(pagesize):
-        pagecount += pagesize[0].to(int)
-    discard site[].update_page_size(topic, pagenum, pagecount)
+        nPagePosts += pagesize[0].to(int)
+    discard site[].update_page_size(topic, pagenum, nPagePosts)
 
   infopub "finalizing pages"
-  await finalizePages(topic, pagenum, newpage, pagecount.addr)
+  await finalizePages(topic, pagenum, newpage, nPagePosts.addr)
   # update feed file
   when cfg.RSS:
     infopub "updating feeds"
@@ -250,7 +250,7 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   when cfg.YDX:
     infopub "updating yandex"
     writeFeed()
-  infopub "published {len(doneArts)} new posts."
+  infopub "published {nNewPosts} new posts."
   return true
 
 
@@ -282,9 +282,9 @@ proc maybePublish*(topic: string) {.gcsafe, async.} =
       lastPubTime[] = t
       published = await pubTopic(topic)
       if published:
-          # clear homepage and topic page cache
-          deletePage("")
-          deletePage("/" & topic)
+        # clear homepage and topic page cache
+        deletePage("")
+        deletePage("/" & topic)
 
 proc resetTopic(topic: string) =
   syncPyLock():
@@ -305,12 +305,14 @@ proc pubAllPages(topic: string, clear = true) {.async.} =
       for n in 0..topdir:
         ensureDir(topic_path / $n)
   block:
-    let pagecount = await pageSize(topic, topdir)
-    await pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true, istop = true)
+    let nPagePosts = await pageSize(topic, topdir)
+    await pubPage(topic, $topdir, nPagePosts, finalize = false,
+        with_arts = true, istop = true)
   for n in 0..<topdir:
     let pagenum = n
-    var pagecount = await pageSize(topic, n)
-    await pubPage(topic, $pagenum, pagecount, finalize = true, with_arts = true)
+    var nPagePosts = await pageSize(topic, n)
+    await pubPage(topic, $pagenum, nPagePosts, finalize = true,
+        with_arts = true)
   when not cfg.SERVER_MODE:
     ensureHome(topic, topdir)
 
@@ -336,6 +338,6 @@ proc pubAllPages(topic: string, clear = true) {.async.} =
 #     quitl()
 #     let
 #         topdir = 0
-#         pagecount = pageSize(topic, topdir)
-#     # pubPage(topic, $topdir, pagecount, finalize = false, with_arts = true)
+#         nPagePosts = pageSize(topic, topdir)
+#     # pubPage(topic, $topdir, nPagePosts, finalize = false, with_arts = true)
 #     # pubPageFromTemplate("dmca.html", "DMCA")

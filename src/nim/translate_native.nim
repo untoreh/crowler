@@ -1,5 +1,5 @@
 import std/[monotimes, parsexml, uri, hashes]
-import threading/channels
+import threading/atomics
 import chronos
 
 import
@@ -17,7 +17,7 @@ type
   TranslateRotatorObj = object
     services: tuple[google: GoogleTranslate, bing: BingTranslate,
         yandex: YandexTranslate]
-    idx: int
+    idx: Atomic[int]
   TranslateRotatorPtr = ptr TranslateRotatorObj
 
 var
@@ -43,9 +43,10 @@ proc callService*(text, src, trg: string): Future[string] {.async.} =
   if unlikely(rotator.isnil):
     rotator = create(TranslateRotatorObj)
     rotator[] = initRotator()
-  if rotator.idx >= enabledTranslators.len:
-    rotator.idx = 0
-  let kind = enabledTranslators[rotator.idx]
+  template rotIdx(): int = rotator.idx.load
+  if rotIdx() >= enabledTranslators.len:
+    rotator.idx.store(0)
+  let kind = enabledTranslators[rotIdx()]
   template callTrans(srv: untyped): untyped =
     if text.len > srv.maxQuerySize:
       let s {.inject.} = srv
@@ -65,15 +66,6 @@ proc callService*(text, src, trg: string): Future[string] {.async.} =
   finally:
     rotator.idx.inc
 
-template waitTrans*(): string =
-  block:
-    discard await transOut.pop(q.addr)
-    defer: free(v)
-    if v.isnil:
-      ""
-    else:
-      v[]
-
 proc setupTranslate*() =
   transIn.notNil:
     delete(transIn)
@@ -85,33 +77,36 @@ when not defined(translateProc):
   proc translateTask(q: ptr Query) {.async.} =
     var
       tries: int
-      success: bool
-      translated: ref string
-    new(translated)
+      translated: string
     try:
       for _ in 0..3:
         try:
-          translated[].add await callService(q.text, q.src, q.trg)
-          if translated[].len == 0:
+          translated.add await callService(q.text, q.src, q.trg)
+          if translated.len == 0:
             continue
-          success = true
           break
-        except CatchableError:
+        except:
+          logexc()
           if tries > 3:
             break
           tries.inc
-    except CatchableError:
-      warn "trans: job failed, {q.src} -> {q.trg}."
+    except:
+      let
+        src = q.src
+        trg = q.trg
+      logexc()
+      warn "trans: job failed, {src} -> {trg}."
     finally:
-      q.trans = translated
+      q.trans[] = move translated
       transOut[q] = true
 
   proc asyncTransHandler() {.async.} =
     try:
+      var q: ptr Query
       while true:
-        # let qPtr = await transIn.popFirstWait()
-        let q = await transIn.pop()
-        asyncSpawn translateTask(q)
+        q = await transIn.pop()
+        checkNil(q)
+        asyncSpawn translateTask(move q)
     except: # If we quit we can catch defects too.
       let e = getCurrentException()[]
       warn "trans: trans handler crashed. {e}"
@@ -131,6 +126,7 @@ when not defined(translateProc):
     q.src = src
     q.trg = trg
     q.text = text
+    new(q.trans)
     transIn.add q.addr
     discard await transOut.pop(q.addr)
     result =

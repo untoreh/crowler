@@ -116,7 +116,7 @@ proc asyncLshHandler() {.async.} =
         if q in processing[]:
           warn "Clashing pointers found during processing lsh content."
           continue
-        asyncSpawn checkAndAddArticle(q)
+        asyncSpawn checkAndAddArticle(move q)
   except Exception as e: # If we quit we can catch defects too.
     if not e.isnil:
       echo e[]

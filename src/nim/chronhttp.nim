@@ -70,7 +70,8 @@ proc requestTask(q: ptr Request) {.async.} =
               resp.headers.toList))
         break
     except CatchableError as e:
-      debug "cronhttp: {e[]}"
+      let exc = e[]
+      debug "cronhttp: {exc}"
       discard
   httpOut[q] = true
 
@@ -84,7 +85,8 @@ proc requestHandler() {.async.} =
         checkNil(q):
           asyncSpawn requestTask(q)
     except Exception as e:
-      warn "Chronos http handler crashed, restarting. {e[]}"
+      let exc = e[]
+      warn "Chronos http handler crashed, restarting. {exc}"
       await sleepAsync(1.seconds)
 
 proc httpGet*(url: string; headers: HttpHeaders = nil;

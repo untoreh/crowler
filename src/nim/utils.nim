@@ -71,7 +71,7 @@ template withWaitLock*(l: AsyncLock, code) =
 
 template lgetOrPut*[T, K](c: T, k: K, v: untyped): untyped =
   ## Lazy `mgetOrPut`
-  mixin get, put
+  # mixin get, put
   try:
     c.get(k)
   except KeyError:
@@ -79,7 +79,7 @@ template lgetOrPut*[T, K](c: T, k: K, v: untyped): untyped =
 
 template lcheckOrPut*[T, K](c: T, k: K, v: untyped): untyped =
   ## Lazy `mgetOrPut`
-  mixin get, contains, put, `[]`, `[]=`
+  # mixin get, contains, put, `[]`, `[]=`
   if k in c:
     c[k]
   else:
@@ -88,7 +88,7 @@ template lcheckOrPut*[T, K](c: T, k: K, v: untyped): untyped =
 
 template alcheckOrPut*[T, K](c: T, k: K, v: untyped): untyped {.dirty.} =
   ## Lazy async `mgetOrPut`
-  mixin get, contains, put, `[]`, `[]=`
+  # mixin get, contains, put, `[]`, `[]=`
   if (await (k in c)):
     await c[k]
   else:
@@ -99,9 +99,16 @@ template logstring(code: untyped): untyped =
   when not compileOption("threads"):
     procName() & " " & fmt code
   else:
-    fmt"{getThreadId()} - " & fmt code
+    let tid {.inject.} = getThreadId()
+    fmt"{tid} - " & fmt code
 
 const shouldLog = logLevelMacro == lvlAll or (not defined(release))
+
+template logexc*() =
+  when shouldLog and logLevelMacro <= lvlDebug:
+    withLock(loggingLock):
+      let exc = getCurrentException()[]
+      logger[].log lvlDebug, $exc
 
 template debug*(code: untyped; dofmt = true): untyped =
   when shouldLog and logLevelMacro <= lvlDebug:

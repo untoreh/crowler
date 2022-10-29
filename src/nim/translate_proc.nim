@@ -160,7 +160,8 @@ proc translateTask(text, src, trg: string) {.async.} =
         success = true
         break
       except CatchableError as e:
-        warn "{e[]}"
+        let exc = e[]
+        warn "{exc}"
         if tries > 3:
           break
         tries.inc
@@ -272,7 +273,8 @@ proc spawnAndMonitor() {.async.} =
       while p.running:
         await sleepAsync(1.seconds)
     except CatchableError as e:
-      warn "trans: process terminated. {e[]}"
+      let exc = e[]
+      warn "trans: process terminated. {exc}"
     await sleepAsync(1.seconds)
 
 proc transForwarderLoop() =

@@ -66,8 +66,8 @@ proc getFile(path: string): Future[string] {.async.} =
     debug "getfile: getting file content from {url}"
     block:
       let resp = (await get(url, proxied = false))
-      checkNil(resp.body)
-      filesCache[path] = resp.body[]
+      checkTrue(resp.body.len > 0, "amp: body empty")
+      filesCache[path] = resp.body
     result = filesCache[path]
 
 

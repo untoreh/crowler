@@ -18,13 +18,13 @@ type
   ImgQuery = object
     id: MonoTime
     url, width, height: string
-    processed: ref Imgdata
+    processed: ptr Imgdata
 
 const rxPathImg = "/([0-9]{1,3})x([0-9]{1,3})/\\?(.+)(?=/|$)"
 
 let imgCache = initLockLruCache[string, string](32)
 
-proc imgData(imgurl: string): Future[string] {.inline, gcsafe, async.} =
+proc rawImg(imgurl: string): Future[string] {.inline, gcsafe, async.} =
   try:
     result = imgCache.lgetOrPut(imgurl):
       await getImg(imgurl, kind=urlsrc)
@@ -54,20 +54,21 @@ proc handleImg*(relpath: string): Future[(string, string)] {.async.} =
     debug "img: decoded url: {decodedUrl}"
     # block unused resize requests
     if not (fmt"{q.width}x{q.height}" in IMG_SIZES):
-      result[0] = await decodedUrl.imgData
+      result[0] = await decodedUrl.rawImg
     else:
       q.url = decodedUrl
+      var processed: ImgData
+      q.processed = processed.addr
       imgIn.add q.addr
       discard await imgOut.pop(q.addr)
-      checkNil(q.processed):
-        result = (q.processed.data, q.processed.mime)
+      result = (processed.data, processed.mime)
       debug "ifl server: img processed"
 
 proc processImgData(q: ptr ImgQuery) {.async.} =
   # push img to imageflow context
   initImageFlow() # NOTE: this initializes thread vars
   var acquired, submitted: bool
-  let data = (await q.url.imgData)
+  let data = (await q.url.rawImg)
   defer:
     if acquired: imgLock[].release
     if not submitted:
@@ -78,9 +79,8 @@ proc processImgData(q: ptr ImgQuery) {.async.} =
       acquired = true
       if addImg(data):
         let query = fmt"width={q.width}&height={q.height}&mode=max&format=webp"
-        logall "ifl server: serving image hash: {hash(await q.url.imgData)}, size: {q.width}x{q.height}"
+        logall "ifl server: serving image hash: {hash(await q.url.rawImg)}, size: {q.width}x{q.height}"
         # process and send back
-        new(q.processed)
         (q.processed.data, q.processed.mime) = processImg(query)
         imgOut[q] = true
         submitted = true
@@ -89,10 +89,11 @@ proc processImgData(q: ptr ImgQuery) {.async.} =
 
 proc asyncImgHandler() {.async.} =
   try:
+    var imq: ptr ImgQuery
     while true:
-      let q = await imgIn.pop
-      checkNil(q):
-        asyncSpawn processImgData(q)
+      imq = await imgIn.pop
+      checkNil(imq):
+        asyncSpawn processImgData(move imq)
   except:
     let e = getCurrentException()[]
     warn "imageflow: image handler crashed. {e}"
@@ -117,7 +118,8 @@ proc startImgFlow*() =
     imgLock[] = newAsyncLock()
     createThread(iflThread, imgHandler)
   except Exception as e:
-    warn "Could not init imageflow! \n {e[]}"
+    let exc = e[]
+    warn "Could not init imageflow! \n {exc}"
     quitl()
 
 # import guildenstern/ctxheader

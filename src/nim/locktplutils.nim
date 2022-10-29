@@ -152,7 +152,7 @@ proc put*[K, V](t: AsyncTable[K, V], k: K, v: V) {.async.} =
         let w = ws.pop()
         if not w.isnil:
           let f = cast[ptr Future[V]](w)
-          if if not f.isnil and not f[].finished:
+          if not f.isnil and not f[].finished:
             f[].complete(v)
     else:
       t.table[k] = v

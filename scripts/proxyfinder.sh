@@ -2,7 +2,7 @@
 
 proxies_dir="data/proxies"
 
-. .venv/bin/activate || { echo "venv not found"; exit 1; }
+[ -e .venv ] && . .venv/bin/activate
 [ -e $proxies_dir ] ||  { echo "proxies dir not found"; exit 1; }
 
 which proxybroker &>/dev/null || { echo "proxybroker not found"; exit 1; }

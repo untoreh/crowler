@@ -7,6 +7,7 @@ import types, pyutils, utils, httptypes
 from cfg import selectProxy
 
 var handler: ptr Future[void]
+var futs {.threadvar.}: seq[Future[void]]
 
 converter toUtilsMethod(m: httpcore.HttpMethod): httputils.HttpMethod =
   case m:
@@ -59,7 +60,7 @@ proc requestTask(q: ptr Request) {.async.} =
       resp = await req.fetch(followRedirects = q[].redir, raw = true)
       checkNil(resp):
         defer:
-          asyncSpawn resp.closeWait()
+          futs.add resp.closeWait()
           resp = nil
         new(q.response)
         init(q.response[])
@@ -69,9 +70,9 @@ proc requestTask(q: ptr Request) {.async.} =
           q.response.headers[] = newHttpHeaders(cast[seq[(string, string)]](
               resp.headers.toList))
         break
-    except CatchableError as e:
-      let exc = e[]
-      debug "cronhttp: {exc}"
+    except Exception as e:
+      logexc()
+      debug "cronhttp: request failed"
       discard
   httpOut[q] = true
 
@@ -82,11 +83,12 @@ proc requestHandler() {.async.} =
       while true:
         # q = await httpIn.popFirstWait()
         let q = await pop(httpIn)
+        clearFuts(futs)
         checkNil(q):
-          asyncSpawn requestTask(q)
-    except Exception as e:
-      let exc = e[]
-      warn "Chronos http handler crashed, restarting. {exc}"
+          futs.add requestTask(q)
+    except:
+      logexc()
+      warn "Chronos http handler crashed, restarting."
       await sleepAsync(1.seconds)
 
 proc httpGet*(url: string; headers: HttpHeaders = nil;

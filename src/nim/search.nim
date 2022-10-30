@@ -30,7 +30,7 @@ const bufsize = 20000 - 256 # FIXME: ingestClient.bufsize returns 0...
 
 proc isopen(): bool {.withLocks: [pyGil].} =
   try: pySonic[].isopen().to(bool)
-  except CatchableError: false
+  except: false
 
 proc toISO3(lang: string): Future[string] {.async.} =
   withPyLock:
@@ -78,9 +78,9 @@ proc push*(capts: UriCaptures, content: string) {.async.} =
       if not pushed:
         capts.addToBackLog()
         break
-    except CatchableError:
-      let e = getCurrentException()[]
-      debug "sonic: couldn't push content, {e} \n {capts} \n {key} \n {cnt}"
+    except Exception:
+      logexc()
+      debug "sonic: couldn't push content, \n {capts} \n {key} \n {cnt}"
       capts.addToBackLog()
       block:
         var f: File
@@ -232,9 +232,7 @@ proc connectSonic(reconnect=false) =
     doassert pySonic[].is_connected.to(bool), "Is Sonic running?"
 
 template restartSonic(what: string) {.dirty.} =
-  let e = getCurrentException()[]
-  let name = getCurrentException().name
-  debug what, ": {e}, {name}"
+  logexc()
   if e is OSError:
     connectSonic(reconnect=true)
 

@@ -46,6 +46,8 @@ var
   imgIn: AsyncPColl[ptr ImgQuery]
   imgOut: AsyncTable[ptr ImgQuery, bool]
   imgLock: ptr AsyncLock
+  futs {.threadvar.}: seq[Future[void]]
+
 
 proc handleImg*(relpath: string): Future[(string, string)] {.async.} =
   var q = parseImgUrl(relpath)
@@ -84,7 +86,7 @@ proc processImgData(q: ptr ImgQuery) {.async.} =
         (q.processed.data, q.processed.mime) = processImg(query)
         imgOut[q] = true
         submitted = true
-    except CatchableError:
+    except Exception:
       discard
 
 proc asyncImgHandler() {.async.} =
@@ -92,11 +94,12 @@ proc asyncImgHandler() {.async.} =
     var imq: ptr ImgQuery
     while true:
       imq = await imgIn.pop
+      clearFuts(futs)
       checkNil(imq):
-        asyncSpawn processImgData(move imq)
+        futs.add processImgData(move imq)
   except:
-    let e = getCurrentException()[]
-    warn "imageflow: image handler crashed. {e}"
+    logexc()
+    warn "imageflow: image handler crashed."
     quitl()
 
 proc imgHandler*() =
@@ -117,28 +120,10 @@ proc startImgFlow*() =
     reset(imgLock[])
     imgLock[] = newAsyncLock()
     createThread(iflThread, imgHandler)
-  except Exception as e:
-    let exc = e[]
-    warn "Could not init imageflow! \n {exc}"
+  except:
+    logexc()
+    warn "Could not init imageflow."
     quitl()
-
-# import guildenstern/ctxheader
-# proc handleGet(ctx: HttpCtx) {.gcsafe, raises: [].} =
-#     assert ctx.parseRequestLine
-#     var relpath = ctx.getUri()
-#     # relpath.removePrefix('/')
-#     try:
-#         let (resp, _) = handleImg(relpath)
-#         if resp.isSomething:
-#             ctx.reply(resp)
-#         else:
-#             debug "ifl server: bad url"
-#             ctx.reply(Http404)
-#     except:
-#         let msg = getCurrentException()[]
-#         ctx.reply(Http501)
-#         qdebug "Router failed, {msg}"
-#         discard
 
 
 # when isMainModule:

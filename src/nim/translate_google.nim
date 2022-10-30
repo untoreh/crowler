@@ -46,7 +46,9 @@ proc getTranslation(resp: string): string =
   var x: XmlParser
   let stream = newStringStream(resp)
   open(x, stream, "")
-  defer: close(x)
+  defer:
+    close(x)
+    close(stream)
   while true:
     next(x)
     case x.kind:

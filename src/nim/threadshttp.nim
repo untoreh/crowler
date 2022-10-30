@@ -8,9 +8,14 @@ const N_THREADS = 128
 var handlerThread: Thread[void]
 
 proc getClient(redir = true, timeout: int = 0, trial: int = 0): HttpClient =
+  let prx =
+    block:
+      let sel = selectProxy(trial)
+      if sel == "": nil
+      else: newProxy(sel)
   newHttpClient(
     maxRedirects = (if redir: 5 else: 0),
-    proxy = newProxy(selectProxy(trial)),
+    proxy = prx,
     sslContext = newContext(verifyMode = CVerifyNone),
     timeout = timeout
   )
@@ -29,8 +34,8 @@ template doTry(trial: int) =
   except ProtocolError as e: # timeout?
     warn "protocol error: is proxy running? {selectProxy(trial)}"
     sleep(1000)
-  except CatchableError:
-    discard
+  except Exception:
+    logexc()
   finally:
     if not cl.isnil:
       cl.close()
@@ -59,8 +64,8 @@ proc handler() =
         checkNil(rq)
         discard tp.spawn doReq(move rq)
     except:
-      let exc = getCurrentException()[]
-      warn "http: httpHandler crashed. {exc}"
+      logexc()
+      warn "http: httpHandler crashed."
 
 proc initHttp*() =
   httptypes.initHttp()

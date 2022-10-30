@@ -72,10 +72,18 @@ when declared(httpbeast):
 type Header* = enum
   hcontent = "Content-Type"
   haccept = "Accept"
+  haccenc = "Accept-Encoding"
   hencoding = "Content-Encoding"
+  hcctrl = "Cache-Control"
   hlang = "Accept-Language"
   hetag = "ETag"
   hloc = "Location"
+  href = "Referer"
+  gz = "gzip"
+  defl = "deflate"
+
+converter toString*(h: Header): string = $h
+converter toKV*(t: (string | Header, string | Header)): (string, string) = ($t[0], $t[1])
 
 # proc add*(h: Header, v: string) = baseHeaders.add $h & ": " & v
 

@@ -145,9 +145,9 @@ proc fetchBingConfig(self: BingTranslateObj, userAgent = USER_AGENT): Future[
       config.count = 0
       # exclude milliseconds
       config.tokenTs = config.key.intToStr[0..^4].parseInt.fromUnix
-  except CatchableError as e:
-    let exc = e[]
-    warn "failed to fetch global config {exc}"
+  except Exception as e:
+    logexc()
+    warn "failed to fetch global config."
     raise e
   shallowCopy self.config[], config[]
   return config

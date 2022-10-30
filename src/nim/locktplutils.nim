@@ -5,6 +5,15 @@ import locktpl
 
 template sleep() = await sleepAsync(10.milliseconds)
 
+proc clearFuts*(futs: var seq[Future[void]]) =
+  var i = 0
+  for _ in 0..<futs.len:
+    if futs[i].finished():
+      futs.delete(i)
+    else:
+      i.inc
+
+
 # NOTE: When using locktables and locklists for producer/consumer, ensure that the keys are unique.
 # (e.g. instead of `k = 123` do `k = (getMonoTime(), 123)` )
 when declared(LockTable):
@@ -60,21 +69,16 @@ proc add*[T](apc: AsyncPColl[T], v: T) =
       apc.pcoll.add v
 
 proc pop*[T](apc: AsyncPColl[T]): Future[T] {.async.} =
-  let fut = create(Future[T])
-  defer:
-    if not fut.isnil:
-      reset(fut[])
-      dealloc(fut)
-  fut[] = newFuture[T]("AsyncPColl.pop")
+  var fut = newFuture[T]("AsyncPColl.pop")
   withLock(apc.lock):
     var v: T
     if apc.pcoll.pop(v):
-      fut[].complete(v)
+      fut.complete(v)
     else:
-      apc.waiters.add fut
-  while not fut[].finished():
+      apc.waiters.add fut.addr
+  while not fut.finished():
     sleep()
-  return fut[].read()
+  return fut.read()
 
 proc delete*[T](apc: AsyncPColl[T]) =
   apc.waiters.delete()
@@ -86,6 +90,8 @@ type
   ThreadLockObj = object
     lock: Lock
   ThreadLock = ptr ThreadLockObj
+
+proc `=destroy`*(t: var ThreadLockObj) = deinitlock(t.lock)
 
 proc newThreadLock*(): ThreadLock =
   result = create(ThreadLockObj)

@@ -55,7 +55,7 @@ VOLUME ["/site/data"]
 
 FROM siteenv AS sitedeps1
 # install nimterop separately
-ARG CLEARCACHE=6
+ARG CLEARCACHE=7
 RUN curl http://ftp.de.debian.org/debian/pool/main/o/openssl/libssl1.1_1.1.1n-0+deb11u3_amd64.deb --output libssl.deb && \
     dpkg -i libssl.deb && \
     rm libssl.deb
@@ -98,10 +98,15 @@ FROM scraper AS site
 ENV NIM_DEBUG debug
 ARG NIM_ARG release
 ENV NIM $NIM_ARG
+ARG CACHE=0
 ARG LIBPYTHON_PATH /usr/lib/x86_64-linux-gnu/libpython3.10d.so
 # nim not still supporting ssl3
 # RUN apt -y install libssl1.1
 RUN /site/scripts/switchdebug.sh /site
+# HACK: refresh some nim packages
+RUN cd /site; \
+    nimble install -y https://github.com/untoreh/nimpy@#master; \
+    cd - ;
 CMD ./cli
 
 # FROM siteBase as site

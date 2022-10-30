@@ -11,6 +11,7 @@ pyObjPtr((fetchData, ut[].getAttr("fetch_data")))
 pygil.release()
 
 var handler: ptr Future[void]
+var futs {.threadvar.}: seq[Future[void]]
 
 template env() {.dirty.} =
   var rdy: bool
@@ -88,11 +89,12 @@ proc requestHandler() {.async.} =
       while true:
         # q = await httpIn.popFirstWait()
         let q = await pop(httpIn)
+        clearFuts(futs)
         checkNil(q):
-          asyncSpawn requestTask(q)
-    except Exception as e:
-      let exc = e[]
-      warn "PyRequests handler crashed, restarting. {exc}"
+          futs.add requestTask(q)
+    except:
+      logexc()
+      warn "PyRequests handler crashed, restarting."
       await sleepAsync(1.seconds)
 
 proc initHttp*() {.gcsafe.} =

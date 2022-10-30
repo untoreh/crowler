@@ -26,8 +26,8 @@ proc initCache*() =
       pageCache = create(PageCache)
       init(pageCache[])
   except:
-    let e = getCurrentException()[]
-    qdebug "{e}"
+    logexc()
+    qdebug "cache: failed init"
 
 
 proc `[]=`*[K, V](c: ptr PageCache, k: K, v: V) {.inline.} =

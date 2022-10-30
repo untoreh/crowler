@@ -27,6 +27,7 @@ var
   outputRecvIpc: ptr AsyncIpcHandle
   ipcInitialized = false
   transThread: Thread[void]
+  futs {.threadvar}: seq[Future[void]]
 
 const
   appName = "translate_proc"
@@ -159,14 +160,13 @@ proc translateTask(text, src, trg: string) {.async.} =
           continue
         success = true
         break
-      except CatchableError as e:
-        let exc = e[]
-        warn "{exc}"
+      except Exception:
+        logexc()
         if tries > 3:
           break
         tries.inc
-  except Exception as e:
-    echo e[]
+  except:
+    logexc()
     warn "trans: job failed, {src} -> {trg}."
   finally:
     withAsyncLock(outputLock[]):
@@ -198,14 +198,15 @@ proc transConsumer() {.async.} =
         src = await inputRecvIpc[].read()
         trg = await inputRecvIpc[].read()
         debug "trans: disaptching translate task {src} -> {trg}."
-        asyncSpawn translateTask(text, src, trg)
+        futs.add translateTask(text, src, trg)
+        clearFuts(futs)
         maybeRestart()
       except AsyncTimeoutError:
         maybeRestart()
         continue
   except:
-    let e = getCurrentException()[]
-    warn "trans: consumer crashed. {e}"
+    logexc()
+    warn "trans: consumer crashed."
 
 proc transForwarderAsync() {.async.} =
   ## Forwards translated text from sub process to main proc translation table.
@@ -225,8 +226,8 @@ proc transForwarderAsync() {.async.} =
         await sleepAsync(1.millisecond)
         continue
   except:
-    let e = getCurrentException()[]
-    warn "trans: forwarder crashed. {e}"
+    logexc()
+    warn "trans: forwarder crashed."
 
 proc findExe(): string =
   var exe: string
@@ -272,9 +273,9 @@ proc spawnAndMonitor() {.async.} =
       start()
       while p.running:
         await sleepAsync(1.seconds)
-    except CatchableError as e:
-      let exc = e[]
-      warn "trans: process terminated. {exc}"
+    except Exception:
+      logexc()
+      warn "trans: process terminated."
     await sleepAsync(1.seconds)
 
 proc transForwarderLoop() =

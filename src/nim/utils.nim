@@ -123,7 +123,7 @@ template logall*(code: untyped): untyped =
 
 template sdebug*(code) =
   try: debug code
-  except CatchableError: discard
+  except Exception: discard
 
 template qdebug*(code) =
   try: debug code
@@ -136,7 +136,7 @@ template warn*(code: untyped): untyped =
 
 template swarn*(code) =
   try: warn code
-  except CatchableError: discard
+  except Exception: discard
 
 template info*(code: untyped): untyped =
   when logLevelMacro <= lvlInfo:

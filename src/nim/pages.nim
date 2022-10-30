@@ -132,9 +132,9 @@ proc articleEntry(ar: Article, topic = ""): Future[VNode] {.async.} =
         a(class = "entry-more", href = relpath):
           text "[continue]"
       hr()
-  except CatchableError as e:
-    let exc = e[]
-    warn "articles: entry creation failed {exc}"
+  except Exception as e:
+    logexc()
+    warn "articles: entry creation failed."
     raise e
 
 proc buildShortPosts*(arts: seq[Article], topic = ""): Future[
@@ -169,8 +169,8 @@ proc processPage*(lang, amp: string, tree: VNode not nil,
     try:
       result = await translateLang(fc)
     except:
-      let e = getCurrentException()[]
-      debug "page: {e} \n Translation failed."
+      logexc()
+      debug "page: Translation failed."
   else:
     result = tree
   checkNil(result, "page: tree cannot be nil")

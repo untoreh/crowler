@@ -29,7 +29,7 @@ import log
 
 PROXIES_ENABLED = True
 STATIC_PROXY = True
-STATIC_PROXY_EP = "socks5://localhost:8877"
+STATIC_PROXY_EP = "http://localhost:8877"
 PROXY_EP_S5 = "socks5://localhost:8878"
 PROXY_EP_S4 = "socks4://localhost:8879"
 PROXY_EP_HTTP = "http://localhost:8880"

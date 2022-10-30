@@ -122,7 +122,8 @@ proc initTypes*() =
   except:
     try:
       let e = getCurrentException()[]
-      stdout.write fmt"types: failed to initialize default article {e}\n"
+      stdout.write $e
+      stdout.write "types: failed to initialize default article.\n"
       quit()
     except:
       echo "failed init types"

@@ -55,8 +55,8 @@ proc initHtml*() =
     if DEFAULT_IMAGE.fileExists:
       defaultImageData = readFile(DEFAULT_IMAGE)
   except:
-    let e = getCurrentException()[]
-    qdebug "Could not initialize html vars {e}"
+    logexc()
+    qdebug "Could not initialize html vars."
 
 template kxi*(): int = 0
 template addEventHandler*(n: VNode; k: EventKind; action: string; kxi: int) =

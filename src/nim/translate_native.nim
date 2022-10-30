@@ -24,6 +24,8 @@ var
   transIn: AsyncPColl[ptr Query]
   transWorker*: ptr Future[void]
   rotator: TranslateRotatorPtr
+  futs {.threadvar.}: seq[Future[void]]
+
 when not defined(translateProc):
   var transOut*: AsyncTable[ptr Query, bool]
 else:
@@ -106,10 +108,11 @@ when not defined(translateProc):
       while true:
         q = await transIn.pop()
         checkNil(q)
-        asyncSpawn translateTask(move q)
+        clearFuts(futs)
+        futs.add translateTask(move q)
     except: # If we quit we can catch defects too.
-      let e = getCurrentException()[]
-      warn "trans: trans handler crashed. {e}"
+      logexc()
+      warn "trans: trans handler crashed."
       quitl()
 
   proc startTranslate*() =

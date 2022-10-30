@@ -9,6 +9,7 @@ export minhash
 type
   PublishedArticles* = LocalitySensitive[uint64]
 var lshThread: Thread[void]
+var futs {.threadvar.}: seq[Future[void]]
 
 proc getLSPath(topic: string): string =
   DATA_PATH / "sites" / WEBSITE_NAME / "topics" / topic / "lsh"
@@ -58,11 +59,11 @@ proc loadLS*(topic: string): Future[PublishedArticles] {.async.} =
   if data.len != 0:
     try:
       result = data.toLsh
-    except CatchableError as e:
+    except Exception as e:
       warn "Couldn't load LSH for topic {topic}, trying fix."
       try:
         await fixLS(topic, data)
-      except CatchableError:
+      except Exception:
         warn "Couldn't apply fix for lsh."
         raise e
   else:
@@ -112,11 +113,12 @@ proc asyncLshHandler() {.async.} =
     var q: ptr LshQuery
     while true:
       q = await lshIn.pop
+      clearFuts(futs)
       checkNil(q):
         if q in processing[]:
           warn "Clashing pointers found during processing lsh content."
           continue
-        asyncSpawn checkAndAddArticle(move q)
+        futs.add checkAndAddArticle(move q)
   except Exception as e: # If we quit we can catch defects too.
     if not e.isnil:
       echo e[]

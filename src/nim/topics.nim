@@ -51,6 +51,8 @@ proc loadTopicsIndex*(): PyObject =
     let m = getCurrentExceptionMsg()
     if "shape is None" in m:
       sdebug "Couldn't load topics, is data dir present?"
+    else:
+      logexc()
 
 pygil.globalAcquire()
 pyObjPtrExp((isEmptyTopicPy, site[].getAttr("is_empty")))
@@ -271,9 +273,9 @@ proc syncTopics*(force = false) {.gcsafe, async.} =
             let tp = topic[0].to(string)
             logall "synctopics: adding topic {tp} to global"
             discard Topics.fetch(tp)
-  except CatchableError as e:
-    let e = getCurrentException()[]
-    debug "could not sync topics {e}"
+  except Exception as e:
+    logexc()
+    debug "could not sync topics."
 
 when isMainModule:
   initPy()

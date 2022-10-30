@@ -33,16 +33,15 @@ proc request*(uri: Uri,
               decode = true,
               ): Future[Response] {.async.} =
   var rq: Request
-  var resp: Response
   rq.init(uri, meth, headers, body, redir, proxied)
-  rq.response = resp.addr
+  rq.response = result.addr
   try:
     await getImpl(rq.addr)
-    checkNil(resp.headers)
-    return resp
-  except CatchableError:
-    echo getCurrentException()[]
-  raiseRequestError("Request failed, retries exceeded.")
+    checkNil(result.headers)
+    return
+  except:
+    logexc()
+  raiseRequestError("request: failed.")
 
 type Url = string | Uri
 

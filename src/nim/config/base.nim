@@ -39,7 +39,7 @@ export logging
 
 const
     USE_PROXIES* = true
-    PROXY_EP* = "socks5://127.0.0.1:8877"
+    PROXY_EP* = "http://127.0.0.1:8877"
     PROXY_EP_S5* = "socks5://127.0.0.1:8878"
     PROXY_EP_S4* = "socks4://127.0.0.1:8879"
     PROXY_EP_HTTP* = "http://127.0.0.1:8880"

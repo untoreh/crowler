@@ -50,9 +50,9 @@ proc initStats*()  =
     if statsDB.isnil:
       statsDB = create(StatsDB)
       statsDB[] = initStatsDB()
-  except CatchableError:
-    let e = getCurrentException()[]
-    qdebug "{e}"
+  except Exception:
+    logexc()
+    qdebug "stats: init failed."
 
 proc `[]=`*[K, V](c: ptr StatsDB, k: K, v: V) {.inline.} =
   c[][k] = v

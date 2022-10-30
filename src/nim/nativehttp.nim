@@ -5,8 +5,8 @@ import httptypes except initHttp
 import
   utils,
   # pyhttp
-  threadshttp
-  # chronhttp
+  # threadshttp
+  chronhttp
 
 
 export Request, Response, RequestError, initHttp

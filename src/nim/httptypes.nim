@@ -64,3 +64,18 @@ proc init*(r: var Request, url: Uri, met: HttpMethod = HttpGet,
   r.redir = redir
   r.proxied = proxied
   r.retries = retries
+
+
+const
+  PROXY_EP* = "http://127.0.0.1:8877"
+  PROXY_EP_S5* = "socks5://127.0.0.1:8878"
+  PROXY_EP_S4* = "socks4://127.0.0.1:8879"
+  PROXY_EP_HTTP* = "http://127.0.0.1:8880"
+proc isodd(n: int): bool {.inline.} = n.mod(2) == 1
+proc selectProxy*(n: int): string =
+  ## First try without proxies, then with self hosted, then with public
+  case n:
+    of 0: ""
+    of 1: PROXY_EP
+    elif n.isodd: PROXY_EP_S5 # Only when chronhttp is used
+    else: PROXY_EP_HTTP

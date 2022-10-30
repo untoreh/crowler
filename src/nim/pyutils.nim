@@ -204,6 +204,10 @@ proc pydate*(py: PyObject, default = getTime()): Time =
     else:
         return default
 
+var
+  pycfg*: PyObject
+  site*: ptr PyObject
+
 pygil.globalAcquire()
 let pycfg* = pyImport("config")
 doassert not pyisnone(pycfg)
@@ -223,12 +227,14 @@ discard pySched[].initPool()
 # Proxies
 discard pySched[].apply(
   pyImport("proxies_pb").proxy_sync_forever,
-  pycfg.getAttr("PROXIES_FILE")
+  pycfg.getAttr("PROXIES_FILES")
   )
 pyObjPtr(
   (pyProxies, pyImport("proxies_pb"))
 )
 pygil.release()
+
+echo "pyutils initialized." # Should eval inside try/catch but pyobj macros are not compatible (they export definitions)
 
 proc pyGetProxy*(st: bool = true): Future[string] {.async.} =
   withPyLock():
@@ -237,12 +243,12 @@ proc pyGetProxy*(st: bool = true): Future[string] {.async.} =
       return prx.to(string)
 
 proc initPy*() =
-    syncPyLock:
-        try:
-            PyNone = pybi[].getattr("None")
-        except:
-            echo "Can't initialize PyNone"
-            quit()
+  syncPyLock:
+    try:
+      PyNone = pybi[].getattr("None")
+    except:
+      echo "Can't initialize PyNone"
+      quit()
 
 pygil.globalAcquire()
 let pyslice = create(PyObject)

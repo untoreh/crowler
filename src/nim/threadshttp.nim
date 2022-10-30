@@ -1,7 +1,6 @@
 import chronos, taskpools, std/[uri, httpclient, os]
 
 import utils, httptypes
-from cfg import selectProxy
 const DEFAULT_TIMEOUT = 4.seconds
 const N_THREADS = 128
 

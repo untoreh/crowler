@@ -38,17 +38,6 @@ static: echo "cfg: debug level set to: " & $logLevelMacro
 export logging
 
 const
-    USE_PROXIES* = true
-    PROXY_EP* = "http://127.0.0.1:8877"
-    PROXY_EP_S5* = "socks5://127.0.0.1:8878"
-    PROXY_EP_S4* = "socks4://127.0.0.1:8879"
-    PROXY_EP_HTTP* = "http://127.0.0.1:8880"
     WEBSITE_DEBUG_PORT* = when releaseMode or dockerMode: "" else: os.getenv("WEBSITE_DEBUG_PORT", ":5050")
     customPages* = ["dmca", "terms-of-service", "privacy-policy"]
 
-proc selectProxy*(n: int): string =
-  ## First try without proxies, then with self hosted, then with public
-  case n:
-    of 0: ""
-    of 1: PROXY_EP
-    else: PROXY_EP_HTTP

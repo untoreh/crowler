@@ -59,7 +59,7 @@ DATA_DIR = Path(
 assert DATA_DIR is not None  # and isdir(Path(dirname(DATA_DIR)) / ".venv")
 
 PROXIES_DIR = DATA_DIR / "proxies"
-PROXIES_FILE = PROXIES_DIR / "pbproxies.json"
+PROXIES_FILES = [ PROXIES_DIR / f"{prx}proxies.json" for prx in ("socks5", "socks4", "http")]
 SOCKS5PEERS_FILE = PROXIES_DIR / "socks5peers.txt"
 SOCKS4PEERS_FILE = PROXIES_DIR / "socks4peers.txt"
 HTTPPEERS_FILE = PROXIES_DIR / "httppeers.txt"

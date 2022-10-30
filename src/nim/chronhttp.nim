@@ -4,7 +4,6 @@ import httputils
 import std/[httpcore, tables, monotimes, hashes, uri, macros, sequtils]
 
 import types, pyutils, utils, httptypes
-from cfg import selectProxy
 
 var handler: ptr Future[void]
 var futs {.threadvar.}: seq[Future[void]]
@@ -62,12 +61,10 @@ proc requestTask(q: ptr Request) {.async.} =
         defer:
           futs.add resp.closeWait()
           resp = nil
-        new(q.response)
-        init(q.response[])
         q.response.code = httpcore.HttpCode(resp.status)
         checkNil(resp.connection):
-          q.response.body[] = bytesToString (await resp.getBodyBytes)
-          q.response.headers[] = newHttpHeaders(cast[seq[(string, string)]](
+          q.response.body = bytesToString (await resp.getBodyBytes)
+          q.response.headers = newHttpHeaders(cast[seq[(string, string)]](
               resp.headers.toList))
         break
     except Exception as e:

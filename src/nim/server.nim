@@ -579,9 +579,10 @@ proc runServer(address, callback: auto) =
 
 proc startServer*(doclear = false, port = 0, loglevel = "info") =
 
-  let serverPort = if port == 0:
-                         os.getEnv("SITE_PORT", "5050").parseInt
-                     else: port
+  let serverPort =
+    if port == 0: os.getEnv("SITE_PORT", "5050").parseInt
+    else: port
+
   initThread()
   initCache()
   initStats()

@@ -101,9 +101,8 @@ proc checkAndAddArticle(q: ptr LshQuery) {.async.} =
     else:
       lshOut[q] = false
   except Exception as e:
+    logexc()
     lshOut[q] = false
-    if not e.isnil:
-      echo e[]
     warn "lsh: error adding article."
   finally:
     processing[].excl(q)
@@ -120,8 +119,7 @@ proc asyncLshHandler() {.async.} =
           continue
         futs.add checkAndAddArticle(move q)
   except Exception as e: # If we quit we can catch defects too.
-    if not e.isnil:
-      echo e[]
+    logexc()
     warn "lsh: lsh handler crashed."
 
 proc lshHandler() =

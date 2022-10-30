@@ -1,7 +1,6 @@
 import std/[parsexml, streams, uri]
 import chronos
 
-from cfg import PROXY_EP
 import types
 import utils
 import translate_native_utils

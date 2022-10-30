@@ -3,7 +3,6 @@ import std/times except seconds, milliseconds
 import chronos
 from chronos/timer import seconds, milliseconds
 
-from cfg import PROXY_EP
 import types
 import utils
 import translate_native_utils

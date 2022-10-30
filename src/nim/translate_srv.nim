@@ -66,16 +66,16 @@ template pySafeCall(code: untyped): untyped =
     pygil.release()
   logall "pysafe: lock released"
 
-proc getProxies(srv: service = deep_translator): auto =
-  case srv:
-    of deep_translator:
-      if USE_PROXIES:
-        debug "trsrv: enabling proxies with endpoint {PROXY_EP}"
-        {"https": PROXY_EP, "http": PROXY_EP}.to_table
-      else:
-        {"https": "", "http": ""}.to_table
-    else:
-      {"https": "", "http": ""}.to_table
+# proc getProxies(srv: service = deep_translator): auto =
+#   case srv:
+#     of deep_translator:
+#       if USE_PROXIES:
+#         debug "trsrv: enabling proxies with endpoint {PROXY_EP}"
+#         {"https": PROXY_EP, "http": PROXY_EP}.to_table
+#       else:
+#         {"https": "", "http": ""}.to_table
+#     else:
+#       {"https": "", "http": ""}.to_table
 
 
 proc initSlator*(srv: service = default_service, provider: string = "", source: Lang = SLang,

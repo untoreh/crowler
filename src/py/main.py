@@ -203,7 +203,7 @@ PROXY_SYNC_JOB = None
 def ensure_proxy_sync():
     global PROXY_SYNC_JOB
     if PROXY_SYNC_JOB is None or PROXY_SYNC_JOB.ready():
-        PROXY_SYNC_JOB = sched.apply(pb.proxy_sync_forever, cfg.PROXIES_FILE)
+        PROXY_SYNC_JOB = sched.apply(pb.proxy_sync_forever, cfg.PROXIES_FILES)
 
 def site_loop(site: Site, throttle=5):
     site.load_topics()

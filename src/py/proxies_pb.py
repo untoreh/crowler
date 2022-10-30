@@ -10,7 +10,7 @@ from functools import partial
 from json.decoder import JSONDecodeError
 from multiprocessing import Process, Queue
 from pathlib import Path
-from typing import Union
+from typing import List, Union
 
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
@@ -236,29 +236,35 @@ class ProxyType(Enum):
     socks4 = "socks4"
     socks5 = "socks5"
 
+def read_proxies(f):
+    with open(f, "r") as f:
+        proxies = f.read()
+    try:
+        proxies = json.loads(proxies)
+    except JSONDecodeError:
+        assert proxies.endswith(",\n")
+        proxies = proxies.rstrip(",\n")
+        proxies += "]"  # proxybroker keeps the json file unclosed open
+        proxies = json.loads(proxies)
+    return proxies
 
 @retry(tries=3, delay=1, backoff=3.0)
-def sync_from_file(proxies_file: Path):
+def sync_from_files(files: List[Path]):
     try:
-        with open(proxies_file, "r") as f:
-            proxies = f.read()
-        try:
-            proxies = json.loads(proxies)
-        except JSONDecodeError:
-            assert proxies.endswith(",\n")
-            proxies = proxies.rstrip(",\n")
-            proxies += "]"  # proxybroker keeps the json file unclosed open
-            proxies = json.loads(proxies)
         PROXIES_SET = set(PROXIES)
-        for p in proxies:
-            host = p["host"]
-            port = p["port"]
-            types = p["types"]
-            for t in types:
-                tp = t["type"]
-                tpm = typemap[tp]
-                if tpm:
-                    PROXIES_SET.add(f"{tpm}://{host}:{port}")
+        for f in files:
+            proxies = read_proxies(f)
+            if proxies is None:
+                continue
+            for p in proxies:
+                host = p["host"]
+                port = p["port"]
+                types = p["types"]
+                for t in types:
+                    tp = t["type"]
+                    tpm = typemap[tp]
+                    if tpm:
+                        PROXIES_SET.add(f"{tpm}://{host}:{port}")
         PROXIES.clear()
         PROXIES.extendleft(PROXIES_SET)
     except:
@@ -274,21 +280,21 @@ reload 5s
 
 
 @retry(tries=3, delay=1, backoff=3.0)
-def update_gost_config(proxies_file: Path, config_dir: Path, config_suffix: str = "peers"):
+def update_gost_config(proxies_files: List[Path], config_dir: Path, config_suffix: str = "peers"):
     """Updates the peers list of the GOST proxy."""
-    sync_from_file(proxies_file)
+    sync_from_files(proxies_files)
     new_config = {}
     for tp in ProxyType:
         new_config[tp] = [DEFAULT_PEER_CONFIG]
     for p in PROXIES:
-        print(p)
+        # print(p)
         match p[:6]:
             case "http:/": new_config[ProxyType.http].append(f"peer {p}")
             case "socks5": new_config[ProxyType.socks5].append(f"peer {p}")
             case "socks4": new_config[ProxyType.socks4].append(f"peer {p}")
     for k, v in new_config.items():
         path = config_dir / f"{k.value}{config_suffix}.txt"
-        print("\n".join(v))
+        # print("\n".join(v))
         with open(path, "w") as f:
             f.write("\n".join(v))
 
@@ -296,13 +302,13 @@ def update_gost_config(proxies_file: Path, config_dir: Path, config_suffix: str 
 PROXY_SYNC_RUNNING = False
 
 
-def proxy_sync_forever(proxies_file: Path, config_dir: Path, interval=60):
+def proxy_sync_forever(proxies_files: List[Path], config_dir: Path, interval=60):
     global PROXY_SYNC_RUNNING
     if not PROXY_SYNC_RUNNING:
         while True:
             try:
                 PROXY_SYNC_RUNNING = True
-                update_gost_config(proxies_file, config_dir)
+                update_gost_config(proxies_files, config_dir)
                 time.sleep(interval)
             except:
                 pass

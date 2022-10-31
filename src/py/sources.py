@@ -1,7 +1,7 @@
 import copy
 import os
 import sys
-from random import shuffle
+from random import shuffle, randint
 from time import sleep
 
 import searx
@@ -65,6 +65,12 @@ def get_engine_img():
         yield e
 
 
+searx_proxies = {"http": pb.STATIC_PROXY_EP, "https": pb.STATIC_PROXY_EP}
+def switch_searx_proxies():
+    prx = pb.get_proxy(static=True)
+    searx_proxies["http"] = prx
+    searx_proxies["https"] = prx
+
 def get_engine_params(engine, cat=None):
     cats = cat if cat is not None else "general" if engine in ENGINES else "images"
     params = {
@@ -78,7 +84,7 @@ def get_engine_params(engine, cat=None):
     }
     params["network"] = {
         "verify": False,
-        "proxies": pb.STATIC_PROXY_EP,
+        "proxies": searx_proxies,
         "retries": 3,
         "retry_on_http_error": True,
         "max_redirects": 30,
@@ -136,8 +142,9 @@ def single_search(
     return res
 
 
-def try_search(*args, depth=0, backoff=0.3, max_tries=4, **kwargs):
+def try_search(*args, depth=1, backoff=0.3, max_tries=4, **kwargs):
     ensure_engines()
+    switch_searx_proxies()
     try:
         return single_search(*args, **kwargs, depth=depth)
     except Exception as e:

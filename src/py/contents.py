@@ -27,7 +27,11 @@ def parsesource(url, topic, site: Site):
     global FEEDFINDER_DATA, LAST_SOURCE
     FEEDFINDER_DATA[url] = data = ut.fetch_data(url)
     if data:
-        f = ff2.find_feeds(url)
+        try:
+            f = ff2.find_feeds(url)
+        except:
+            import traceback
+            traceback.print_exc()
         f = exclude_blacklist(site, f)
         if f:
             logger.info("Adding %s feeds.", len(f))
@@ -76,8 +80,9 @@ def fromsources(sources, topic, site: Site, n=cfg.POOL_SIZE):
         logger.info("Fetching articles/feeds from %s", url)
         j = sched.apply(parsesource, url, topic, site)
         jobs.append(j)
+    n_jobs = len(jobs)
     for n, j in enumerate(jobs):
-        logger.info("Waiting for job: %s.", n)
+        logger.info("Waiting for job: %d/%d.", n, n_jobs)
         j.wait()
 
     logger.info("Source parsing Done")

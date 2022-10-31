@@ -12,6 +12,8 @@ from multiprocessing import Process, Queue
 from pathlib import Path
 from typing import List, Union
 
+from joblib.logger import print_function
+
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     import proxybroker as pb

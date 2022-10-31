@@ -105,8 +105,11 @@ def fetch_data(
             delay=delay + backoff,
             depth=depth + 1,
             decode=decode,
-            asresp=asresp,
+            asresp=False,
             fromcache=False,
         )
         save_data(Path(url), data)
-    return data
+    if not asresp and isinstance(data, Response):
+        return data.data
+    else:
+        return data

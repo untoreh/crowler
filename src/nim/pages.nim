@@ -142,18 +142,21 @@ proc buildShortPosts*(arts: seq[Article], topic = ""): Future[
   for a in arts:
     result.add $(await articleEntry(a, topic))
 
-template topicPage*(topic: string, pagenum: string, istop = false) {.dirty.} =
+template topicPage*(name: string, pn: string, istop = false) {.dirty.} =
   ## Writes a single page (fetching its related articles, if its not a template) to storage
-  let arts = await getDoneArticles(topic, pagenum = pagenum.parseInt)
-  debug "topics: topic page for page {pagenum} ({len(arts)})"
-  let content = await buildShortPosts(arts, topic)
+  let pnInt = pn.parseInt
+  let arts = await getDoneArticles(name, pagenum = pnInt)
+  debug "topics: name page for page {pnInt} ({len(arts)})"
+  let content = await buildShortPosts(arts, name)
   # if the page is not finalized, it is the homepage
-  let footer = await pageFooter(topic, pagenum, home = istop)
-  let pagetree = await buildPage(title = "",       # this is NOT a `title` tag
-    content = verbatim(content),
-    slug = pagenum,
-    pagefooter = footer,
-    topic = topic)
+  let footer = await pageFooter(name, pn, home = istop)
+  let pagetree =
+    await buildPage(
+      title = "",       # this is NOT a `title` tag
+      content = verbatim(content),
+      slug = pn,
+      pagefooter = footer,
+      topic = name)
 
 {.experimental: "strictnotnil".}
 {.push gcsafe.}

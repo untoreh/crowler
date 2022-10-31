@@ -293,7 +293,7 @@ proc transForwarderLoop() =
       info "transForwarder: starting forwarder..."
       waitFor transForwarderAsync()
     except:
-      echo getCurrentException()[]
+      logexc()
     sleep(1000)
 
 proc transConsumerLoop() =
@@ -302,7 +302,7 @@ proc transConsumerLoop() =
       initIpc()
       waitFor transConsumer()
     except:
-      echo getCurrentException()[]
+      logexc()
     sleep(1000)
 
 proc startTranslate*(worker = false) =

@@ -197,23 +197,26 @@ proc publishedArticles*[V](topic: string, attr: string = ""): Future[seq[(
 
 
 proc fetchAsync*(_: typedesc[Topics], k: string): Future[TopicState] {.async.} =
-  result =
-    topicsCache.lgetOrPut(k):
-      var ts: TopicState
-      ts.topdir = await lastPageNum(k)
-      ts.group = create(PyObject)
-      ts.group[] = await getTopicGroup(k)
-      move ts
+  var ts: TopicState
+  if k in topicsCache:
+    ts = topicsCache[k]
+  if ts.group.isnil or ts.group[].isnil:
+    ts.topdir = await lastPageNum(k)
+    ts.group = create(PyObject)
+    ts.group[] = await getTopicGroup(k)
+    topicsCache[k] = ts
+  return move ts
 
 proc fetch*(_: typedesc[Topics], k: string): TopicState  =
-  checkNil(topicsCache)
-  result =
-    topicsCache.lgetOrPut(k):
-      var ts: TopicState
-      ts.topdir = lastPageNumImpl(k)
-      ts.group = create(PyObject)
-      ts.group[] = getTopicGroupImpl(k)
-      move ts
+  var ts: TopicState
+  if k in topicsCache:
+    ts = topicsCache[k]
+  if ts.group.isnil or ts.group[].isnil:
+    ts.topdir = lastPageNumImpl(k)
+    ts.group = create(PyObject)
+    ts.group[] = getTopicGroupImpl(k)
+    topicsCache[k] = ts
+  return move ts
 
 proc getState*(topic: string): Future[(int, int)] {.async.} =
   ## Get the number of the top page, and the number of `done` pages.
@@ -227,7 +230,8 @@ proc getState*(topic: string): Future[(int, int)] {.async.} =
   const pgK = $topicData.pages
   const doneK = $topicData.done
   withPyLock:
-    doassert not grp[pgK].isnil
+    doassert not grp[pgK].isnil, "gs: {topic} group doesn't have pages entry.".fmt
+    doassert not pyErrOccurred(), "gs: py error occurred during getstate for topic {topic}".fmt
     if not pyisnone(grp[pgK].shape):
       topdir = max(grp[pgK].shape[0].to(int)-1, 0)
       numdone = max(len(grp[doneK]) - 1, 0)

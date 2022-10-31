@@ -29,8 +29,7 @@ proc rawImg(imgurl: string): Future[string] {.inline, gcsafe, async.} =
     result = imgCache.lgetOrPut(imgurl):
       await getImg(imgurl, kind=urlsrc)
   except:
-    echo getCurrentException()[]
-    discard
+    logexc()
 
 proc parseImgUrl*(relpath: string): ImgQuery =
   let

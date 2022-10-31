@@ -25,7 +25,7 @@ RUN curl -L https://github.com/ginuerzh/gost/releases/download/v${GOST_V}/gost-l
 FROM gost AS nimrt
 RUN apt -y install git lld file
 # This should install nim version 1.6.x
-ARG CACHE=0
+ARG CACHE=1
 RUN curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
 RUN echo PATH=/root/.nimble/bin:\$PATH >> /root/.profile
 RUN ln -sr /root/.choosenim/toolchains/*/tools /root/.nimble

@@ -1,4 +1,4 @@
-import nimpy, std/[os, strutils, hashes], nimdbx
+import nimpy, std/[os, strutils, hashes, times, parseutils], nimdbx
 import
   utils,
   quirks,
@@ -8,32 +8,57 @@ import
   translate_db
 
 export translate_db
-type PageCache {.borrow: `.`.} = LRUTrans
-var pageCache*: ptr PageCache
-let searchCache* = initLockLruCache[int64, string](32)
+type DataCache {.borrow: `.`.} = LRUTrans
 
-proc init*(pg: var PageCache) =
-  let dbpath = DATA_PATH / "sites" / WEBSITE_NAME / "page.db"
+const pageCacheTtl = initDuration(days = 1)
+let searchCache* = initLockLruCache[int64, string](32)
+var pageCache*: ptr DataCache
+var imgCache*: ptr DataCache
+
+proc init*(cache: var DataCache, name: string) =
+  let dbpath = DATA_PATH / "sites" / WEBSITE_NAME / name
   translate_db.MAX_DB_SIZE = 40 * 1024 * 1024 * 1024
   debug "cache: storing cache at {dbpath}"
   translate_db.DB_PATH[] = dbpath
-  pg = initLRUTrans()
-  openDB(pg)
+  cache = initLRUTrans()
+  openDB(cache)
 
 proc initCache*() =
   try:
     if pageCache.isnil:
-      pageCache = create(PageCache)
-      init(pageCache[])
+      pageCache = create(DataCache)
+      init(pageCache[], "page")
+    if imgCache.isnil:
+      imgCache = create(DataCache)
+      init(imgCache[], "image")
   except:
     logexc()
     qdebug "cache: failed init"
 
+template getOrCache*(k: int64 | string, code: untyped): string =
+  template process(): string =
+    page = code
+    pageCache[k] = $getTime().toUnix & ";" & page
+    move page
+  block:
+    var n: int
+    if k in pageCache[]:
+      let spl = pageCache[k].split(";", maxsplit = 1)
+      if spl.len == 2: # cache data is correct, check for staleness
+        let ttlTime = parseInt(spl[0], n).fromUnix
+        if getTime() - ttlTime > pageCacheTtl: # cache data is stale
+          process()
+        else: # cache data is still valid
+          spl[1]
+      else: # cache data is corrupted, purge and re-process
+        process()
+    else: # cache miss
+      process()
 
-proc `[]=`*[K, V](c: ptr PageCache, k: K, v: V) {.inline.} =
+proc `[]=`*[K, V](c: ptr DataCache, k: K, v: V) {.inline.} =
   c[][k] = v
 
-proc `[]`*[K](c: ptr PageCache, k: K): string = c[][k]
+proc `[]`*[K](c: ptr DataCache, k: K): string = c[][k]
 
 proc suffixPath*(relpath: string): string =
   var relpath = relpath
@@ -61,4 +86,4 @@ proc deletePage*(relpath: string) {.gcsafe.} =
     pageCache[].del(hash(SITE_PATH / "amp" / lang / sfx))
     pageCache[].del(hash(SITE_PATH / lang / sfx))
 
-# proc `get`*[K](c: ptr PageCache, k: K): string = c[].get(k)
+# proc `get`*[K](c: ptr DataCache, k: K): string = c[].get(k)

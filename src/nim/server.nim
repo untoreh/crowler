@@ -40,9 +40,6 @@ import
 
 from nativehttp import initHttp
 
-# lockedStore(LruCache)
-# lockedStore(Table)
-
 type
   ReqContext = object of RootObj
     rq: Table[ReqId, HttpRequestRef]
@@ -126,13 +123,17 @@ template setEncoding() {.dirty.} =
       reqCtx.respBody[] = comp
       debug "reply: compressing body (deflate)"
 
+template setNone(id, val) =
+  if id.isNone:
+    id.ok(val)
+
 template setResponse() =
-  reqCtx.rq[rqid].response =
-    Opt[HttpResponseRef].ok(await reqCtx.rq[rqid].respond(
+  reqCtx.rq[rqid].response.setNone:
+    await reqCtx.rq[rqid].respond(
         code = reqCtx.respCode,
         content = reqCtx.respBody[],
         headers = reqCtx.respHeaders,
-        ))
+        )
 
 proc doReply(reqCtx: ref ReqContext, body: string, rqid: ReqId, scode = Http200,
              headers: HttpTable = default(HttpTable)) {.async.} =
@@ -160,12 +161,7 @@ proc doReply(reqCtx: ref ReqContext, body: string, rqid: ReqId, scode = Http200,
     reqCtx.respCode = scode
     # assert len(respbody) > 0, "reply: Can't send empty body!"
     debug "reply: sending response {reqCtx.key}"
-    reqCtx.rq[rqid].response =
-      Opt[HttpResponseRef].ok(await reqCtx.rq[rqid].respond(
-        code = reqCtx.respCode,
-        content = reqCtx.respBody[],
-        headers = reqCtx.respHeaders,
-        ))
+    setResponse()
     sdebug "reply: sent: {size}"
   except:
     logexc()
@@ -195,7 +191,7 @@ import htmlparser, xmltree
 template handleHomePage(relpath: string, capts: UriCaptures,
     ctx: HttpRequestRef) =
   const homePath = hash(SITE_PATH / "index.html")
-  page = pageCache[].lcheckOrPut(reqCtx.key):
+  page = getOrCache(reqCtx.key):
     # in case of translations, we to generate the base page first
     # which we cache too (`setPage only caches the page that should be served)
     let (tocache, toserv) = await buildHomePage(capts.lang, capts.amp)
@@ -243,7 +239,7 @@ template dispatchImg() =
   imgPath.removePrefix("/i")
   reqCtx.key = hash(reqCtx.file)
   try:
-    (mime, page) = pageCache[].get(reqCtx.key).split(";", maxsplit = 1)
+    (mime, page) = imgCache[].get(reqCtx.key).split(";", maxsplit = 1)
     debug "img: fetched from cache {reqCtx.key} {imgPath}"
   except KeyError, AssertionDefect:
     debug "img: not found handling image, {imgPath}"
@@ -253,7 +249,7 @@ template dispatchImg() =
       debug "img: could not handle image {imgPath}."
     if page != "":
       # append the mimetype before the img data
-      pageCache[][reqCtx.key] = mime & ";" & page
+      imgCache[][reqCtx.key] = mime & ";" & page
       debug "img: saved to cache {reqCtx.key} : {reqCtx.url}"
   if page != "":
     reqCtx.mime = mime
@@ -266,9 +262,9 @@ template dispatchImg() =
 template handleTopic(capts: auto, ctx: HttpRequestRef) =
   debug "topic: looking for {capts.topic}"
   if capts.topic in topicsCache:
-    page = pageCache[].lcheckOrPut(reqCtx.key):
+    page = getOrCache(reqCtx.key):
       let topic = capts.topic
-      let pagenum = if capts.page == "": $(await topic.lastPageNum()) else: capts.page
+      let pagenum = if capts.page == "": $(await topic.lastPageNum) else: capts.page
       debug "topic: page: ", capts.page
       topicPage(topic, pagenum, false)
       checkNil pagetree, "topic: pagetree couldn't be generated."
@@ -287,7 +283,7 @@ template handleTopic(capts: auto, ctx: HttpRequestRef) =
     await reqCtx.doReply(page, rqid, )
   elif capts.topic in customPages:
     debug "topic: looking for custom page"
-    page = pageCache[].lcheckOrPut(reqCtx.key):
+    page = getOrCache(reqCtx.key):
       let ppage = await pageFromTemplate(capts.topic, capts.lang, capts.amp)
       checkTrue ppage.len > 0, "topic custom page gen failed."
       ppage
@@ -296,7 +292,7 @@ template handleTopic(capts: auto, ctx: HttpRequestRef) =
     var filename = capts.topic.extractFilename()
     debug "topic: looking for assets {filename:.120}"
     if filename in assetsFiles[]:
-      page = pageCache[].lcheckOrPut(filename):
+      page = getOrCache(filename):
         # allow to cache this unconditionally of the file existing or not
         await readFileAsync(DATA_ASSETS_PATH / filename)
       await reqCtx.doReply(page, rqid, )
@@ -311,7 +307,7 @@ template handleArticle(capts: auto, ctx: HttpRequestRef) =
   checkNil(tg.group)
   if tg.topdir != -1:
     try:
-      page = pageCache[].lcheckOrPut(reqCtx.key):
+      page = getOrCache(reqCtx.key):
         debug "article: generating article"
         let ppage = await articleHtml(capts)
         checkTrue ppage.len > 0, "article: page gen failed."
@@ -357,7 +353,7 @@ template handleSuggest(relpath: string, ctx: HttpRequestRef) =
   await reqCtx.doReply(page, rqid, )
 
 template handlePwa() =
-  page = pageCache[].lcheckOrPut(reqCtx.key):
+  page = getOrCache(reqCtx.key):
     let ppage = siteManifest()
     checkTrue ppage.len > 0, "pwa: page gen failed."
     ppage
@@ -380,7 +376,7 @@ template handleSiteMap(kind) =
   await reqCtx.doReply(page, rqid)
 
 template handleRobots() =
-  page = pageCache[].lcheckOrPut(reqCtx.key):
+  page = getOrCache(reqCtx.key):
     let ppage = buildRobots()
     checkTrue ppage.len > 0, "robots: page gen failed."
     ppage
@@ -536,7 +532,7 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
         discard
     reqCtx.cached = true
   except:
-    echo getCurrentException()[]
+    logexc()
     abort()
   finally:
     reqCtx.rq.del(rqid)

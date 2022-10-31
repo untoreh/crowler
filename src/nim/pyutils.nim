@@ -204,10 +204,6 @@ proc pydate*(py: PyObject, default = getTime()): Time =
     else:
         return default
 
-var
-  pycfg*: PyObject
-  site*: ptr PyObject
-
 pygil.globalAcquire()
 let pycfg* = pyImport("config")
 doassert not pyisnone(pycfg)

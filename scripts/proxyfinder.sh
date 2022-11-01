@@ -29,6 +29,6 @@ findproxies() {
         --lvl High Anonymous
 }
 
+findproxies httpproxies.json HTTP CONNECT:80 CONNECT:25
 findproxies socks5proxies.json SOCKS5
 findproxies socks4proxies.json SOCKS4
-findproxies httpproxies.json HTTP CONNECT:80 CONNECT:25

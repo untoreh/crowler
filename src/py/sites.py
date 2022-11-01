@@ -286,10 +286,12 @@ class Site:
         match kind:
             case Job.parse:
                 assert isinstance(topic, str)
-                return self._sources_check(self.load_articles(topic))
+                arts = self.load_articles(topic)
+                return len(arts) == 0 or self._sources_check()
             case Job.feed:
                 assert isinstance(topic, str)
-                return self._sources_check(self.load_feeds(topic))
+                feeds = self.load_feeds(topic)
+                return len(feeds) == 0 or self._sources_check()
             case Job.reddit:
                 return self.has_reddit and time.time() - self._last_reddit > kind.value
             case Job.facebook:

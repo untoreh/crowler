@@ -72,26 +72,30 @@ proc push*(capts: UriCaptures, content: string) {.async.} =
           "default", # TODO: Should we restrict search to `capts.topic`?
           key,
           cnt,
-          lang = if capts.lang != "en": lang else: "")
+          lang = if capts.lang != "en": lang else: ""
+          )
       j = await j.pywait()
-      pushed = not pyisnone(j) and j.to(bool)
-      if not pushed:
-        capts.addToBackLog()
-        break
+      withPyLock:
+        pushed = not pyisnone(j) and j.to(bool)
+      when not defined(release):
+        if not pushed:
+          capts.addToBackLog()
+          break
     except Exception:
       logexc()
       debug "sonic: couldn't push content, \n {capts} \n {key} \n {cnt}"
-      capts.addToBackLog()
-      block:
-        var f: File
-        try:
-          await pushLock[].acquire
-          f = open("/tmp/sonic_debug.log", fmWrite)
-          write(f, cnt)
-        finally:
-          pushLock[].release
-          if not f.isnil:
-            f.close()
+      when not defined(release):
+        capts.addToBackLog()
+        block:
+          var f: File
+          try:
+            await pushLock[].acquire
+            f = open("/tmp/sonic_debug.log", fmWrite)
+            write(f, cnt)
+          finally:
+            pushLock[].release
+            if not f.isnil:
+              f.close()
       break
 
 proc push*(relpath: string) {.async.} =
@@ -177,7 +181,12 @@ proc pushAllSonic*(clear = true) {.async.} =
   if clear:
     withPyLock:
       discard pySonic[].flush(WEBSITE_DOMAIN)
+  defer:
+    pygil.release
+    withPyLock:
+      discard pySonic[].trigger("consolidate")
   for (topic, state) in topicsCache:
+    await pygil.acquire
     let done = state.group[]["done"]
     for page in done:
       var c = len(done[page])
@@ -189,10 +198,10 @@ proc pushAllSonic*(clear = true) {.async.} =
           let
             capts = uriTuple(relpath)
             content = ar.pyget("content").sanitize
+          pygil.release
           echo "pushing ", relpath
           await push(capts, content)
-  withPyLock:
-    discard pySonic[].trigger("consolidate")
+          await pygil.acquire
 
 from chronos/timer import seconds, Duration
 
@@ -242,14 +251,17 @@ proc initSonic*() {.gcsafe.} =
   connectSonic()
 
 when isMainModule:
+  initPy()
+  syncPyLock:
+    discard pysched[].initPool()
   initSonic()
-  # pushAllSonic()
-  debug "nice"
-  let q = waitFor query("mini", "crossword", "it")
-  echo q
-  let qq = waitFor query("mini", "mini", "es")
-  echo qq
-  debug "done"
+  waitFor pushAllSonic()
+  # debug "nice"
+  # let q = waitFor query("mini", "crossword", "it")
+  # echo q
+  # let qq = waitFor query("mini", "mini", "es")
+  # echo qq
+  # debug "done"
   # let qq = waitFor suggest("mini", "mini")
   # echo qq
   # push(relpath)

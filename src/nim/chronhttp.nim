@@ -34,7 +34,7 @@ converter tobytes(s: string): seq[byte] = cast[seq[byte]](s.toSeq())
 # converter toHeaders(t: HttpTable) =
 
 const proxiedFlags = {NoVerifyHost, NoVerifyServerName, NewConnectionAlways}
-const sessionFlags = {NoVerifyHost, NoVerifyServerName}
+const sessionFlags = {NoVerifyHost, NoVerifyServerName, NoInet6Resolution}
 proc requestTask(q: ptr Request) {.async.} =
   var trial = 0
   while trial < q[].retries:

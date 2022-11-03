@@ -185,6 +185,52 @@ template lockedList*(name: untyped): untyped {.dirty.} =
     withLock(tbl.lock):
       result = $tbl.storage
 
+template lockedSet*(name: untyped): untyped {.dirty.} =
+  type
+    `Lock name Obj`[T] = object
+      lock*: Lock
+      storage* {.guard: lock.}: name[T]
+    `Lock name`*[T] = ptr `Lock name Obj`[T]
+
+  proc `lock name Impl`*[T](store: name[T]): `Lock name`[T] =
+    result = create(`Lock name Obj`[T])
+    initLock(result.lock)
+    withLock(result.lock):
+      result.storage = store
+
+  template `init Lock name`*[T](args: varargs[untyped]): `Lock name`[T] =
+    var store: name[T] # FIXME: this is incompatible with `notnil` pragma
+    store =
+      when compiles(`init name`):
+        when varargsLen(args) > 0:
+            `init name`[T](args)
+        else:
+            `init name`[T]()
+      elif compiles(`new name`):
+          when varargsLen(args) > 0:
+              `new name`[T](args)
+          else:
+              `new name`[T]()
+      else:
+          `name`[T]()
+    `lock name Impl`[T](store)
+
+  proc `contains`*[T](tbl: `Lock name`[T], v: T): bool =
+    withLock(tbl.lock):
+      return v in tbl.storage
+
+  proc `incl`*[T](tbl: `Lock name`[T], v: T) =
+    withLock(tbl.lock):
+      tbl.storage.incl(v)
+
+  proc `excl`*[T](tbl: `Lock name`[T], v: T) =
+    withLock(tbl.lock):
+      tbl.storage.excl(v)
+
+  proc `clear`*[T](tbl: `Lock name`[T]) =
+    withLock(tbl.lock):
+      tbl.storage.clear()
+
 when isMainModule:
   import tables, lrucache
   lockedStore(LruCache)

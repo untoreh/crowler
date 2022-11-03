@@ -1,7 +1,8 @@
 import std/[importutils, strutils, marshal, tables, sets, algorithm, os, monotimes, strformat], chronos,
     minhash {.all.}
 
-import cfg, types, utils, sharedqueue
+import cfg, types, utils, sharedqueue, locktpl
+lockedSet(HashSet)
 privateAccess(LocalitySensitive)
 export minhash
 {.experimental: "notnil".}
@@ -78,7 +79,7 @@ type
 # these should be generalized since it's the same from `imageflow_server`
 var lshIn: AsyncPColl[ptr LshQuery]
 var lshOut: AsyncTable[ptr LshQuery, bool]
-var processing: ptr HashSet[pointer]
+var processing: LockHashSet[ptr LshQuery]
 
 proc addArticle*(lsh: PublishedArticles, content: ptr string): Future[bool] {.async.} =
   var q: LshQuery
@@ -91,7 +92,7 @@ proc addArticle*(lsh: PublishedArticles, content: ptr string): Future[bool] {.as
 # {.experimental: "strictnotnil".}
 proc checkAndAddArticle(q: ptr LshQuery) {.async.} =
   try:
-    processing[].incl q
+    processing.incl q
     checkNil(q.lsh)
     checkNil(q.content)
     if not isDuplicate(q.lsh[], q.content[]):
@@ -105,7 +106,7 @@ proc checkAndAddArticle(q: ptr LshQuery) {.async.} =
     lshOut[q] = false
     warn "lsh: error adding article."
   finally:
-    processing[].excl(q)
+    processing.excl(q)
 
 proc asyncLshHandler() {.async.} =
   try:
@@ -114,7 +115,7 @@ proc asyncLshHandler() {.async.} =
       q = await lshIn.pop
       clearFuts(futs)
       checkNil(q):
-        if q in processing[]:
+        if q in processing:
           warn "Clashing pointers found during processing lsh content."
           continue
         futs.add checkAndAddArticle(move q)
@@ -134,10 +135,8 @@ proc startLsh*() =
   setNil(lshOut):
     newAsyncTable[ptr LshQuery, bool]()
   setNil(processing):
-    create(HashSet[pointer])
-  processing[].clear()
-  processing[].reset()
-  processing[] = initHashSet[pointer]()
+    initLockHashSet[ptr LshQuery]()
+  processing.clear()
   createThread(lshThread, lshHandler)
 
 when isMainModule:

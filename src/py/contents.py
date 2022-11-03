@@ -103,8 +103,13 @@ def fromfeeds(sources, site: Site, n=cfg.POOL_SIZE) -> List:
     ARTICLES[site.name] = []
     jobs = []
     for entry in sources:
-        url = entry.get("url")
-        topic = entry.get("topic")
+        try:
+            url = entry.get("url")
+            topic = entry.get("topic")
+        except:
+            import traceback
+            traceback.print_exc()
+            print("feed source error: ", entry)
         if not url:
             continue
         logger.info("Fetching articles from %s", url)

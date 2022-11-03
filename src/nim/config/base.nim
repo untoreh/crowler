@@ -40,4 +40,4 @@ export logging
 const
     WEBSITE_DEBUG_PORT* = when releaseMode or dockerMode: "" else: os.getenv("WEBSITE_DEBUG_PORT", ":5050")
     customPages* = ["dmca", "terms-of-service", "privacy-policy"]
-
+    webDomains* = ["wsl", "wsl"]

@@ -75,7 +75,7 @@ proc cliPubTopic(topic: string) =
 
 proc cliReindexSearch() =
   initAll()
-  waitFor pushAllSonic(clear = true)
+  waitFor pushAllSonic()
 
 # import system/nimscript
 # import os

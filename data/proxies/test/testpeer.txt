@@ -1,5 +1,5 @@
 strategy      round
-max_fails     1
+max_fails     0
 fail_timeout  24h
 reload        5s
 retries       3

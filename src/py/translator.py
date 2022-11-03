@@ -118,7 +118,7 @@ class Translator:
         for (_, code) in TLangs:
             self._translate[(self._sl, code)] = self._tr(source=self._sl, target=code)
         sched.initPool(procs=False)
-        sched.apply(pb.proxy_sync_forever, cfg.PROXIES_FILES)
+        pb.proxy_sync_forever(cfg.PROXIES_FILES, cfg.PROXIES_DIR)
         log.info("translator: initialized.")
 
     @staticmethod

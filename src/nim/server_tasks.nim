@@ -23,6 +23,7 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
     # start the topic sync thread from python
     withPyLock:
       let watcher = site[].getAttr("topics_watcher")
+      discard pySched[].initPool()
       discard pySchedApply[](watcher)
 
     while len(topicsCache) == 0:

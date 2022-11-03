@@ -15,7 +15,8 @@ import
   translate_srv,
   cache,
   topics,
-  articles
+  articles,
+  json
 
 pygil.globalAcquire()
 pyObjPtr(
@@ -104,34 +105,35 @@ proc push*(relpath: string) {.async.} =
   let
     fpath = vrelpath.fp()
     capts = uriTuple(vrelpath)
-  let content = if pageCache[][fpath.hash] != "":
-                      let page = pageCache[].get(fpath.hash).parseHtml
-                      assert capts.lang == "" or page.findel("html").getAttr(
-                          "lang") == (capts.lang)
-                      page.findclass(HTML_POST_SELECTOR).innerText()
-                  else:
-                      if capts.art != "":
-                        await getArticleContent(capts.topic, capts.page, capts.art)
-                      else: ""
+  let content =
+    if pageCache[][fpath.hash] != "":
+      let page = pageCache[].get(fpath.hash).parseHtml
+      assert capts.lang == "" or page.findel("html").getAttr("lang") == (capts.lang)
+      page.findclass(HTML_POST_SELECTOR).innerText()
+    else:
+      if capts.art != "": await getArticleContent(capts.topic, capts.page, capts.art)
+      else: ""
   if content == "":
     warn "search: content matching path {vrelpath} not found."
   else:
     await push(capts, content.sanitize)
 
-proc resumeSonic() {.async.} =
-  ## Push all backlogged articles to search database
-  withPyLock:
-    assert isopen()
-  for l in lines(SONIC_BACKLOG):
-    let
-      s = l.split(",")
-      topic = s[0]
-      page = s[1]
-      slug = s[2]
-      lang = s[3]
-    var relpath = lang / topic / page / slug
-    await push(relpath)
-  await writeFileAsync(SONIC_BACKLOG, "")
+when not defined(release):
+  proc resumeSonic() {.async.} =
+    ## Push all backlogged articles to search database
+    withPyLock:
+      assert isopen()
+    for l in lines(SONIC_BACKLOG):
+      let
+        s = l.split(",")
+        topic = s[0]
+        page = s[1]
+        slug = s[2]
+        lang = s[3]
+      var relpath = lang / topic / page / slug
+      await push(relpath)
+    await writeFileAsync(SONIC_BACKLOG, "")
+
 
 type
   SonicQueryArgsTuple = tuple[topic: string, keywords: string, lang: string, limit: int]
@@ -176,32 +178,54 @@ proc deleteFromSonic*(capts: UriCaptures): int =
   syncPyLock:
     discard pySonic[].flush(WEBSITE_DOMAIN, object_name = key)
 
-proc pushAllSonic*(clear = true) {.async.} =
+const pushLogFile = "/tmp/sonic_push_log.json"
+proc readPushLog(): Future[JsonNode] {.async.} =
+  if fileExists(pushLogFile):
+    let log = await readFileAsync(pushLogFile)
+    result = log.parseJson
+  else:
+    result = newJObject()
+
+proc writePushLog(log: JsonNode) {.async.} =
+  await writeFileAsync(pushLogFile, $log)
+
+proc pushAllSonic*() {.async.} =
   await syncTopics()
-  if clear:
+  var c, pagenum: int
+  let pushLog = await readPushLog()
+  if pushLog.len == 0:
     withPyLock:
       discard pySonic[].flush(WEBSITE_DOMAIN)
   defer:
-    pygil.release
     withPyLock:
-      discard pySonic[].trigger("consolidate")
+      discard pySonic[].consolidate()
   for (topic, state) in topicsCache:
+    if topic notin pushLog:
+      pushLog[topic] = %0
     await pygil.acquire
+    defer: pygil.release
     let done = state.group[]["done"]
     for page in done:
-      var c = len(done[page])
+      pagenum = ($page).parseint
+      c = len(done[page])
+      if pushLog[topic].to(int) >= pagenum:
+        continue
+      var futs: seq[Future[void]]
       for n in 0..<c:
         let ar = done[page][n]
-        if not pyisnone(ar):
+        if ar.isValidArticlePy:
           var relpath = getArticlePath(ar, topic)
           relpath.removeSuffix("/")
           let
             capts = uriTuple(relpath)
             content = ar.pyget("content").sanitize
-          pygil.release
           echo "pushing ", relpath
-          await push(capts, content)
-          await pygil.acquire
+          futs.add push(capts, content)
+      pygil.release
+      await allFutures(futs)
+      pushLog[topic] = %pagenum
+      await writePushLog(pushLog)
+      await pygil.acquire
 
 from chronos/timer import seconds, Duration
 

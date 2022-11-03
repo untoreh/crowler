@@ -199,18 +199,12 @@ def new_topic(site: Site, force=False):
         newtopic = tpm.new_topic(site)
         logger.info("topics: added new topic %s", newtopic)
 
-PROXY_SYNC_JOB = None
-def ensure_proxy_sync():
-    global PROXY_SYNC_JOB
-    if PROXY_SYNC_JOB is None or PROXY_SYNC_JOB.ready():
-        PROXY_SYNC_JOB = sched.apply(pb.proxy_sync_forever, cfg.PROXIES_FILES)
-
 def site_loop(site: Site, throttle=5):
     site.load_topics()
     sched.initPool()
     backoff = 0
     while True:
-        ensure_proxy_sync()
+        pb.proxy_sync_forever(cfg.PROXIES_FILE, cfg.PROXIES_DIR)
         try:
             topics = site.sorted_topics(key=Topic.UnpubCount)
             # print(h.heap())
@@ -256,15 +250,20 @@ def site_loop(site: Site, throttle=5):
 def run_server(sites):
     # from guppy import hpy
     # h = hpy()
+    if len(sites) == 0:
+        logger.warn("no sites provided.")
+        return
     sched.initPool()
-    jobs = []
+    jobs = {}
     for sitename in sites:
         site = Site(sitename)
-        j = sched.apply(site_loop, site)
-        jobs.append(j)
+        jobs[site] = sched.apply(site_loop, site)
     # NOTE: this runs indefinitely
-    for j in jobs:
-        j.wait()
+    while True:
+        for (site, j) in jobs.items():
+            if j.ready():
+                jobs[site] = sched.apply(site_loop, site)
+        time.sleep(5)
 
 
 JOBS_MAP = {

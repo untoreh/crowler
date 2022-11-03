@@ -198,7 +198,6 @@ proc fetchSiteMap*(topic: string, _: bool): Future[string] {.async.} =
       let sm = (await buildTopicPagesSitemap(topic)).toXmlString
       checkSitemapSize sm
 
-from std/strutils import parseInt
 template fetchSiteMap*(topic: string, page: string): untyped = fetchSiteMap(topic, page.parseInt)
 proc fetchSiteMap*(topic: string, page: int): Future[string] {.async.} =
   checkTrue topic != "" and page >= 0, "topic and page must be valid"

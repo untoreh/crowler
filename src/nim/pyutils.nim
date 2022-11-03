@@ -219,12 +219,7 @@ pyObjPtrExp(
     (pySchedApply, pySched[].getAttr("apply"))
 )
 doassert not pyisnone(pySched[])
-discard pySched[].initPool()
 # Proxies
-discard pySched[].apply(
-  pyImport("proxies_pb").proxy_sync_forever,
-  pycfg.getAttr("PROXIES_FILES")
-  )
 pyObjPtr(
   (pyProxies, pyImport("proxies_pb"))
 )
@@ -348,7 +343,7 @@ proc pywait*(j: PyObject): Future[PyObject] {.async, gcsafe.} =
       break
     await sleepAsync(250.milliseconds)
   withPyLock:
-    if (not res.isnil) and (not res.pyisnone) and (not pyErrOccurred()):
+    if (not res.isnil) and (not pyisnone(res)) and (not pyErrOccurred()):
       return res
     else:
       raise newException(ValueError, "Python job failed.")

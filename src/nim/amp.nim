@@ -56,7 +56,6 @@ proc getFile(path: string): Future[string] {.async.} =
   try:
     result = filesCache[path]
   except KeyError:
-    let filePath = DATA_PATH / "cache" / $hash(path) & splitFile(path).ext
     parseUri(path, fileUri)
     url =
       if fileUri.scheme.isEmptyOrWhitespace:
@@ -65,9 +64,17 @@ proc getFile(path: string): Future[string] {.async.} =
         path
     debug "getfile: getting file content from {url}"
     block:
-      let resp = (await get(url, proxied = false))
-      checkTrue(resp.body.len > 0, "amp: body empty")
-      filesCache[path] = resp.body
+      # FIXME: We can't fetch local urls because cloudflare TLS and chronhttp fail to handshake
+      # ...therefore read from local files
+      parseUri(url, fileUri)
+      if fileUri.hostname in webDomains:
+        let path = SITE_PATH / fileUri.path
+        checkTrue(fileExists(path), "amp: file Not Found")
+        filesCache[path] = await readfileAsync(path)
+      else:
+        let resp = (await get(url, proxied = false))
+        checkTrue(resp.body.len > 0, "amp: body empty")
+        filesCache[path] = resp.body
     result = filesCache[path]
 
 

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from multiprocessing.pool import ThreadPool, Pool
-import config
 from time import sleep
 import sys
 
@@ -9,7 +8,8 @@ import sys
 
 POOL: None | ThreadPool = None
 PROC_POOL: None | Pool = None
-
+# This should affect http requests mostly
+POOL_SIZE = 64
 
 def initPool(restart=False, thr=True, procs=False):
     global POOL, PROC_POOL
@@ -17,13 +17,13 @@ def initPool(restart=False, thr=True, procs=False):
         if POOL is not None:
             POOL.close()
             POOL.terminate()
-        POOL = ThreadPool(processes=config.POOL_SIZE)
+        POOL = ThreadPool(processes=POOL_SIZE)
     if procs:
         if PROC_POOL is None or restart:
             if PROC_POOL is not None:
                 PROC_POOL.close()
                 PROC_POOL.terminate()
-            PROC_POOL = Pool(processes=config.POOL_SIZE)
+            PROC_POOL = Pool(processes=POOL_SIZE)
 
 
 def apply(f, *args, **kwargs):

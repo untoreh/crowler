@@ -5,6 +5,7 @@ import warnings
 from pathlib import Path
 
 from proxies_pb import REQ_TIMEOUT
+from scheduler import POOL_SIZE
 
 if os.getenv("LIBPYTHON_PATH", "").endswith("d.so"):
     sys.path.extend(
@@ -17,7 +18,6 @@ if os.getenv("LIBPYTHON_PATH", "").endswith("d.so"):
     )
 if os.getenv("PYTHON_NO_WARNINGS"):
     warnings.simplefilter("ignore")
-
 
 def strtobool(val):
     """Convert a string representation of truth to true (1) or false (0).
@@ -32,10 +32,6 @@ def strtobool(val):
         return 0
     else:
         raise ValueError("invalid truth value %r" % (val,))
-
-
-# How many concurrent requests, An high number for many http requests
-POOL_SIZE = 64 # os.cpu_count()
 
 PROJECT_DIR = Path(
     os.path.realpath(

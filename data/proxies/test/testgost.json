@@ -1,7 +1,7 @@
 {
     "Timeout": 10,
     "ServeNodes": [
-        "socks5://:8878"
+        "socks5://:8876"
     ],
     "ChainNodes": [
         ":?peer=testpeer.txt"

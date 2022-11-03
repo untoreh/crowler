@@ -67,9 +67,8 @@ def get_engine_img():
 
 searx_proxies = {"http": pb.STATIC_PROXY_EP, "https": pb.STATIC_PROXY_EP}
 def switch_searx_proxies():
-    prx = pb.get_proxy(static=True)
-    searx_proxies["http"] = prx
-    searx_proxies["https"] = prx
+    searx_proxies["http"] = pb.get_proxy(static=False, http=True)
+    searx_proxies["https"] = pb.get_proxy(static=False, http=False)
 
 def get_engine_params(engine, cat=None):
     cats = cat if cat is not None else "general" if engine in ENGINES else "images"

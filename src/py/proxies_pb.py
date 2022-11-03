@@ -12,8 +12,6 @@ from multiprocessing import Process, Queue
 from pathlib import Path
 from typing import List, Union
 
-from joblib.logger import print_function
-
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     import proxybroker as pb
@@ -27,6 +25,7 @@ from trafilatura import downloads as tradl
 from trafilatura import settings as traset
 from user_agent import generate_user_agent
 
+import scheduler as sched
 import log
 
 PROXIES_ENABLED = True
@@ -201,25 +200,29 @@ TYPES = [
 ]
 
 PROXIES_SET = set()
+PROXIES_HTTP_SET = set()
 N_PROXIES = 200
 PROXIES = deque(maxlen=N_PROXIES)
+PROXIES_HTTP = deque(maxlen=N_PROXIES)
 PROXIES.extendleft([STATIC_PROXY_EP])
+PROXIES_HTTP.extendleft([STATIC_PROXY_EP])
 PB: Union[Broker, None] = None
 
 
-def next_proxy():
+def next_proxy(proxies):
     i = 0
     while True:
-        if len(PROXIES) > 0:
-            if i >= len(PROXIES):
+        if len(proxies) > 0:
+            if i >= len(proxies):
                 i = 0
-            yield PROXIES[i]
+            yield proxies[i]
             i += 1
         else:
             yield STATIC_PROXY_EP
 
 
-PROXY_ITER = iter(next_proxy())
+PROXY_ITER = iter(next_proxy(PROXIES))
+PROXY_HTTP_ITER = iter(next_proxy(PROXIES_HTTP))  # for non https proxies
 
 import json
 
@@ -227,6 +230,7 @@ typemap = {
     "CONNECT:80": "http",
     "CONNECT:25": "http",
     "HTTP": "http",
+    "HTTPS": "http",
     "SOCKS4": "socks4",
     "SOCKS5": "socks5",
 }
@@ -237,6 +241,7 @@ class ProxyType(Enum):
     http = "http"
     socks4 = "socks4"
     socks5 = "socks5"
+
 
 def read_proxies(f):
     with open(f, "r") as f:
@@ -249,6 +254,7 @@ def read_proxies(f):
         proxies += "]"  # proxybroker keeps the json file unclosed open
         proxies = json.loads(proxies)
     return proxies
+
 
 @retry(tries=3, delay=1, backoff=3.0)
 def sync_from_files(files: List[Path]):
@@ -265,24 +271,31 @@ def sync_from_files(files: List[Path]):
                 for t in types:
                     tp = t["type"]
                     tpm = typemap[tp]
-                    if tpm:
-                        PROXIES_SET.add(f"{tpm}://{host}:{port}")
+                    url = f"{tpm}://{host}:{port}"
+                    if tp == "http":
+                        PROXIES_HTTP_SET.add(url)
+                    else:
+                        PROXIES_SET.add(url)
         PROXIES.clear()
         PROXIES.extendleft(PROXIES_SET)
+        PROXIES_HTTP.clear()
+        PROXIES_HTTP.extendleft(PROXIES_HTTP_SET)
     except:
         log.logger.debug("Could't sync proxies, was the file being written?")
 
 
 DEFAULT_PEER_CONFIG = """
 strategy round
-max_fails 1
+max_fails 0
 fail_timeout 24h
 reload 5s
 """
 
 
 @retry(tries=3, delay=1, backoff=3.0)
-def update_gost_config(proxies_files: List[Path], config_dir: Path, config_suffix: str = "peers"):
+def update_gost_config(
+    proxies_files: List[Path], config_dir: Path, config_suffix: str = "peers"
+):
     """Updates the peers list of the GOST proxy."""
     sync_from_files(proxies_files)
     new_config = {}
@@ -291,9 +304,12 @@ def update_gost_config(proxies_files: List[Path], config_dir: Path, config_suffi
     for p in PROXIES:
         # print(p)
         match p[:6]:
-            case "http:/": new_config[ProxyType.http].append(f"peer {p}")
-            case "socks5": new_config[ProxyType.socks5].append(f"peer {p}")
-            case "socks4": new_config[ProxyType.socks4].append(f"peer {p}")
+            case "http:/":
+                new_config[ProxyType.http].append(f"peer {p}")
+            case "socks5":
+                new_config[ProxyType.socks5].append(f"peer {p}")
+            case "socks4":
+                new_config[ProxyType.socks4].append(f"peer {p}")
     for k, v in new_config.items():
         path = config_dir / f"{k.value}{config_suffix}.txt"
         # print("\n".join(v))
@@ -301,25 +317,35 @@ def update_gost_config(proxies_files: List[Path], config_dir: Path, config_suffi
             f.write("\n".join(v))
 
 
-PROXY_SYNC_RUNNING = False
+PROXY_SYNC_JOB = None
 
 
 def proxy_sync_forever(proxies_files: List[Path], config_dir: Path, interval=60):
-    global PROXY_SYNC_RUNNING
-    if not PROXY_SYNC_RUNNING:
-        while True:
-            try:
-                PROXY_SYNC_RUNNING = True
-                update_gost_config(proxies_files, config_dir)
-                time.sleep(interval)
-            except:
-                pass
+    global PROXY_SYNC_JOB
+    if PROXY_SYNC_JOB is None or PROXY_SYNC_JOB.ready():
+
+        def job():
+            while True:
+                try:
+                    update_gost_config(proxies_files, config_dir)
+                    time.sleep(interval)
+                except:
+                    pass
+
+        sched.initPool()
+        PROXY_SYNC_JOB = sched.apply(job)
 
 
-def get_proxy(static=True) -> str:
+def get_proxy(static=True, http=False) -> str:
     try:
-        return STATIC_PROXY_EP if static else next(PROXY_ITER)
-    except Exception as e:
+        return (
+            STATIC_PROXY_EP
+            if static
+            else next(PROXY_ITER)
+            if not http or len(PROXIES_HTTP_SET) <= 1
+            else next(PROXY_HTTP_ITER)
+        )
+    except:
         return STATIC_PROXY_EP
 
 

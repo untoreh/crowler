@@ -43,11 +43,11 @@ module.exports = {
         let abspath = asset.absolutePath
         let nametrail = `${process.env.CONFIG_NAME}/`
         if (nametrail && nametrail != devpath && abspath.includes(devpath)) {
-          return `${abspath.replace(devpath, nametrail)}`
-        } else if (asset.pathname) {
-          return asset.pathname
-        } else {
-          return asset.url
+          if (asset.pathname) {
+            return `${abspath.replace(devpath, nametrail)}`
+          } else {
+            return asset.url
+          }
         }
       },
     }

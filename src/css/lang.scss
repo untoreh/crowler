@@ -86,9 +86,9 @@ body.dark .translationNotification .loader {
     width: 2rem;
     position: relative;
     height: 100%;
-    content: url("https://api.iconify.design/line-md/downloading-loop.svg");
+    @include downloading-loop;
     &.fail {
-      content: url("https://api.iconify.design/akar-icons/circle-x.svg");
+      @include circle-x;
       width: 100%;
       padding: 0;
       margin: 0;

@@ -39,6 +39,12 @@ proc join*(tup: UriCaptures, sep = "/", n = 0): string =
       c += 1
   s.join(sep)
 
+proc path*(capts: UriCaptures): string =
+  if capts.topic == "": "index"
+  elif capts.page == "": capts.topic
+  elif capts.art == "": join([capts.topic, capts.page], "/")
+  else: join([capts.topic, capts.page, capts.art], "/")
+
 var mimes: ptr MimeDB
 var mimeLock: Lock
 proc mimePath*(url: string): string {.gcsafe.} =

@@ -1,7 +1,6 @@
 import nimpy,
        os,
        sugar,
-       times,
        strutils,
        strformat,
        algorithm,
@@ -10,6 +9,8 @@ import nimpy,
        std / importutils,
        tables,
        macros
+
+import times except milliseconds
 
 import cfg,
        types,

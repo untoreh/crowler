@@ -1,4 +1,5 @@
 @import "mixins.scss";
+@import "loadbar.scss";
 
 .langs-dropdown-wrapper {
   cursor: pointer;
@@ -44,6 +45,55 @@
 
 .menu-lang-btn::before {
   border-radius: 25% 25% 25% 50% !important;
+}
+
+body.dark .translationNotification .loader {
+  filter: invert(1);
+}
+.translationNotification {
+  cursor: wait;
+  position: fixed;
+  background: var(--mdc-theme-primary);
+  right: -100vw;
+  transition: right ease-in 0.2s, grayscale 0.2s, opacity 0.2s;
+  top: 5rem;
+  border: 0.1rem solid;
+  padding: 0 1rem;
+  display: block;
+  width: 6rem;
+  height: 4rem;
+  border-radius: 0.25rem;
+  overflow: hidden;
+  &.waiting {
+    right: 2rem;
+  }
+  > * {
+    display: inline-block;
+    vertical-align: middle;
+    margin: 0 0.25rem;
+  }
+  .flag.trg {
+    // @include fade-in;
+    @include recv;
+  }
+  .flag.src {
+    // @include fade-out;
+    @include send;
+  }
+
+  .loader {
+    rotate: -90deg; // should we account for RTL here?
+    width: 2rem;
+    position: relative;
+    height: 100%;
+    content: url("https://api.iconify.design/line-md/downloading-loop.svg");
+    &.fail {
+      content: url("https://api.iconify.design/akar-icons/circle-x.svg");
+      width: 100%;
+      padding: 0;
+      margin: 0;
+    }
+  }
 }
 
 @media (max-width: 680px) {

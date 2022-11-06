@@ -77,4 +77,8 @@ proc translateLang*(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath
   (await translateDom(fc))[1]
 
 proc translateLang*(fc: FileContext, ar = emptyArt[]): Future[VNode] {.gcsafe, async.} =
-  result = (await translateDom(fc))[1]
+  try:
+    result = (await translateDom(fc))[1]
+  except:
+    logexc()
+    debug "page: Translation failed."

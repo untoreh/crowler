@@ -107,8 +107,10 @@ const shouldLog = logLevelMacro == lvlAll or (not defined(release))
 template logexc*() =
   when shouldLog and logLevelMacro <= lvlDebug:
     withLock(loggingLock):
-      let exc = getCurrentException()[]
-      logger[].log lvlDebug, $exc
+      let excref = getCurrentException()
+      if not excref.isnil:
+        let exc = excref[]
+        logger[].log lvlDebug, $exc
 
 template debug*(code: untyped; dofmt = true): untyped =
   when shouldLog and logLevelMacro <= lvlDebug:
@@ -712,6 +714,8 @@ proc splitSentences*(text: string): seq[string] =
   sents = replace(sents, sre"(\bMrs\.)\n", "$1 ")
 
   sents.split(sre"\n")
+
+proc isnull*(c: char): bool {.inline.} = c == '\0'
 
 proc readBytes*(f: string): seq[uint8] =
   let s = open(f)

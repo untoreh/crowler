@@ -7,7 +7,8 @@ import
   xmltree,
   algorithm,
   chronos,
-  htmlparser
+  htmlparser,
+  lrucache
 
 import html_misc,
        translate,
@@ -152,13 +153,15 @@ template topicPage*(name: string, pn: string, istop = false) {.dirty.} =
   let footer = await pageFooter(name, pn, home = istop)
   let pagetree =
     await buildPage(
-      title = "",       # this is NOT a `title` tag
+      title = "", # this is NOT a `title` tag
       content = verbatim(content),
       slug = pn,
       pagefooter = footer,
       topic = name)
 
-{.experimental: "strictnotnil".}
+{.experimental: "notnil".}
+proc transId(lang, relpath: string): string = SLang.code & lang & relpath
+
 {.push gcsafe.}
 proc processPage*(lang, amp: string, tree: VNode not nil,
     relpath = "index"): Future[VNode] {.async.} =
@@ -166,19 +169,33 @@ proc processPage*(lang, amp: string, tree: VNode not nil,
     let
       filedir = SITE_PATH
       tpath = filedir / lang / relpath
-    let fc = init(FileContext, tree, filedir, relpath,
+    var fc = init(FileContext, tree, filedir, relpath,
           (src: SLang.code, trg: lang), tpath)
     debug "page: translating page to {lang}"
-    try:
-      result = await translateLang(fc)
-    except:
-      logexc()
-      debug "page: Translation failed."
+    let fut = translateLang(move fc)
+    discard await race(fut, sleepAsync(TRANSLATION_WAITTIME.milliseconds))
+    result =
+      if fut.finished:
+        fut.read()
+      else:
+        let jobId = transId(lang, relpath)
+        debug "page: eager translation timed out. (transId: {jobId})"
+        translateFuts[jobId] = fut
+        tree
   else:
     result = tree
   checkNil(result, "page: tree cannot be nil")
   if amp != "":
-    debug "page: amping"
+    result = await result.ampPage
+
+proc processTranslatedPage*(lang: string, amp: string, relpath: string): Future[VNode] {.async.} =
+  let jobId = transId(lang, relpath)
+  if jobId notin translateFuts:
+    raise newException(ValueError, fmt"Translation was not scheduled. (transId: {jobId})")
+  let fut = translateFuts[jobId]
+  result = await fut
+  translateFuts.del(jobId)
+  if amp != "":
     result = await result.ampPage
 
 proc pageFromTemplate*(tpl, lang, amp: string): Future[string] {.async.} =
@@ -212,7 +229,8 @@ proc articleTree*(capts: auto): Future[VNode] {.async.} =
     let post = await buildPost(a)
     if not post.isnil:
       debug "article: processing"
-      return await processPage(capts.lang, capts.amp, post, relpath = capts.art)
+      let path = join([capts.topic, capts.page, capts.art], "/")
+      return await processPage(capts.lang, capts.amp, post, relpath = path)
   debug "article: could not fetch python article."
 
 proc articleHtml*(capts: auto): Future[string] {.gcsafe, async.} =
@@ -221,7 +239,7 @@ proc articleHtml*(capts: auto): Future[string] {.gcsafe, async.} =
                t.asHtml(minify_css = (capts.amp == ""))
            else: ""
 
-proc buildHomePage*(lang, amp: string): Future[(VNode, VNode)] {.async.} =
+proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
   await syncTopics()
   var a: Article
   withPyLock:
@@ -253,7 +271,7 @@ proc buildHomePage*(lang, amp: string): Future[(VNode, VNode)] {.async.} =
                        slug = "",
                        desc = WEBSITE_DESCRIPTION)
   checkNil(pagetree):
-    return (pagetree, await processPage(lang, amp, pagetree))
+    return await processPage(lang, amp, pagetree)
 
 proc buildSearchPage*(topic: string, kws: string, lang: string): Future[
     string] {.async.} =

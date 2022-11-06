@@ -2,6 +2,7 @@ import { MDCRipple } from "@material/ripple";
 import { MDCTopAppBar } from "@material/top-app-bar";
 import { getCookie, $, $$ } from "./lib.js";
 import { setupSuggest } from "./suggest.js";
+import { ensureTranslation } from "./tredir.js";
 // import "../css/app.scss";
 /** after `app.scss` **/
 // import "uno.css";
@@ -82,7 +83,7 @@ function closeMenus(e) {
   }
 }
 
-window.onload = function () {
+export function main() {
   // dark light
   $$(".dk-toggle").forEach((el) => (el.onclick = toggleTheme));
   toggleTheme();
@@ -107,5 +108,8 @@ window.onload = function () {
   const menuBtn = $(".menu-btn");
 
   topAppBar.setScrollTarget(mainContentEl);
+  ensureTranslation();
   setupSuggest();
-};
+}
+
+window.onload = main

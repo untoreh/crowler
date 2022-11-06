@@ -1,4 +1,4 @@
-import std/[os, times, monotimes, cpuinfo, strformat, strutils, json, tables, strtabs, sugar, locks, options, uri, hashes],
+import std/[os, times, monotimes, cpuinfo, strformat, strutils, sequtils, json, tables, strtabs, sugar, locks, options, uri, hashes],
        fusion/matching,
        nimpy,
        karax/vdom,
@@ -22,7 +22,6 @@ import
   utils,
   html,
   publish,
-  translate,
   translate_db,
   rss,
   amp,
@@ -38,16 +37,23 @@ import
   stats,
   lsh
 
+import translate except get
 from nativehttp import initHttp
 
 type
+  ParamKey = enum
+    none, q, p,
+    c, # cache
+    t  # translations
+  Params = Table[ParamKey, string]
+
   ReqContext = object of RootObj
     rq: Table[ReqId, HttpRequestRef]
     url: uri.Uri
+    params: Params
     mime: string
     file: string
     key: int64
-    headers: HttpTable
     norm_capts: UriCaptures
     respHeaders: HttpTable
     respBody: ref string
@@ -62,8 +68,9 @@ proc getReqId(path: string): ReqId = hash((getMonoTime(), path))
 
 var
   threadInitialized {.threadvar.}: bool
+  threadInitLock: Lock
   reqCtxCache {.threadvar.}: LockLruCache[string, ref ReqContext]
-  urlCache {.threadvar.}: LockLruCache[string, ref Uri]
+  assetsCache {.threadvar.}: LockLruCache[int64, string]
 
 proc initThreadBase() {.gcsafe.} =
   initPy()
@@ -89,7 +96,7 @@ proc initThreadImpl() {.gcsafe.} =
   initTranslate()
 
   reqCtxCache = initLockLruCache[string, ref ReqContext](32)
-  urlCache = initLockLruCache[string, ref Uri](32)
+  assetsCache = initLockLruCache[int64, string](256)
   waitFor syncTopics()
   loadAssets()
   readAdsConfig()
@@ -98,7 +105,9 @@ proc initThreadImpl() {.gcsafe.} =
 
 proc initThread*() =
   try:
-    initThreadImpl()
+    initLock(threadInitLock)
+    withLock(threadInitLock):
+      initThreadImpl()
   except:
     logexc()
     warn "Failed to init thread."
@@ -133,7 +142,7 @@ template setResponse() =
         code = reqCtx.respCode,
         content = reqCtx.respBody[],
         headers = reqCtx.respHeaders,
-        )
+      )
 
 proc doReply(reqCtx: ref ReqContext, body: string, rqid: ReqId, scode = Http200,
              headers: HttpTable = default(HttpTable)) {.async.} =
@@ -181,27 +190,37 @@ template handle301*(loc: string = $WEBSITE_URL) =
     await reqCtx.doReply($Http301, rqid, scode = Http301, headers = headers)
 
 const redirectJs = fmt"""<script>window.location.replace("{WEBSITE_URL}");</script>"""
+template ifHtml(els): string =
+  if reqCtx.mime == "text/html": redirectJs
+  else: $els
+
 template handle404*(loc = $WEBSITE_URL) =
-  await reqCtx.doReply(redirectJs, rqid, scode = Http404)
+  await reqCtx.doReply(ifHtml(Http404), rqid, scode = Http404)
 
 template handle502*(loc = $WEBSITE_URL) =
-  await reqCtx.doReply(redirectJs, rqid, scode = Http502)
+  await reqCtx.doReply(ifHtml(Http502), rqid, scode = Http502)
+
+template abort(m: string) =
+  debug m & ", aborting."
+  logexc()
+  sdebug "Router failed."
+  handle502()
+  if unlikely(reqCtx.cached):
+    reqCtx.cached = false
+    reqCtx.respBody[].setLen(0)
+    reset(reqCtx.respHeaders)
+    reset(reqCtx.respCode)
 
 import htmlparser, xmltree
 template handleHomePage(relpath: string, capts: UriCaptures,
     ctx: HttpRequestRef) =
-  const homePath = hash(SITE_PATH / "index.html")
+  # const homePath = hash(SITE_PATH / "index.html")
   page = getOrCache(reqCtx.key):
-    # in case of translations, we to generate the base page first
-    # which we cache too (`setPage only caches the page that should be served)
-    let (tocache, toserv) = await buildHomePage(capts.lang, capts.amp)
-    checkTrue not tocache.isnil and not toserv.isnil, "homepage: page generation failed."
-    let hpage = tocache.asHtml(minify_css = (capts.amp == ""))
+    let tree = await buildHomePage(capts.lang, capts.amp)
+    checkNil tree, "homepage: page tree is nil"
+    let hpage = tree.asHtml(minify_css = (capts.amp == ""))
     checkTrue hpage.len > 0, "homepage: minification 1 failed"
-    pageCache[homePath] = hpage
-    let ppage = toserv.asHtml(minify_css = (capts.amp == ""))
-    checkTrue ppage.len > 0, "homepage: minification 2 failed.."
-    ppage
+    hpage
   await reqCtx.doReply(page, rqid)
 
 template handleAsset() =
@@ -210,13 +229,13 @@ template handleAsset() =
   when not defined(noAssetsCaching):
     reqCtx.mime = mimePath(reqCtx.file)
     try:
-      page = pageCache[].get(reqCtx.key)
+      page = assetsCache.get(reqCtx.key)
       await reqCtx.doReply(page, rqid, )
-    except KeyError:
+    except [KeyError, ValueError]:
       try:
         page = await readFileAsync(reqCtx.file)
         if page != "":
-          pageCache[reqCtx.key] = page
+          assetsCache[reqCtx.key] = page
           await reqCtx.doReply(page, rqid, )
         else:
           handle404()
@@ -264,17 +283,21 @@ template handleTopic(capts: auto, ctx: HttpRequestRef) =
   if capts.topic in topicsCache:
     page = getOrCache(reqCtx.key):
       let topic = capts.topic
-      let pagenum = if capts.page == "": $(await topic.lastPageNum) else: capts.page
+      let pagenum = if capts.page == "": $(
+          await topic.lastPageNum) else: capts.page
       debug "topic: page: ", capts.page
       topicPage(topic, pagenum, false)
       checkNil pagetree, "topic: pagetree couldn't be generated."
-      let pageReqKey = (capts.topic / capts.page).fp.hash
+      let
+        pagepath = capts.topic / capts.page
+        pageReqKey = pagepath.fp.hash.int64
       var ppage = pagetree.asHtml
       checkTrue ppage.len > 0, "topic: page gen 1 failed."
-      pageCache[pageReqKey] = ppage
+      setCache(pageReqKey, ppage)
       ppage = ""
       checkNil(pagetree):
-        let processed = await processPage(capts.lang, capts.amp, pagetree)
+        let path = join([capts.topic, capts.page], "/")
+        let processed = await processPage(capts.lang, capts.amp, pagetree, relpath = capts.path)
         checkNil(processed):
           ppage = processed.asHtml(minify_css = (capts.amp == ""))
       checkTrue ppage.len > 0, "topic: page gen 2 failed."
@@ -382,46 +405,89 @@ template handleRobots() =
     ppage
   await reqCtx.doReply(page, rqid, )
 
+
 template handleCacheClear() =
-  case nocache:
-    of '0':
-      const notTopics = ["assets", "i", "robots.txt", "feed.xml", "index.xml",
-          "sitemap.xml", "s", "g"].toHashSet
-      reqCtx.cached = false
-      reqCtx.norm_capts = uriTuple(reqCtx.url.path)
-      try:
-        if reqCtx.norm_capts.art != "" and
-          not (reqCtx.norm_capts.topic in notTopics) and
-          not (reqCtx.norm_capts.page in notTopics):
-          debug "cache: deleting article cache {reqCtx.norm_capts.art:.40}"
-          await deleteArt(reqCtx.norm_capts, cacheOnly = true)
-        elif reqCtx.norm_capts.topic == "i":
-          let k = hash(reqCtx.url.path & reqCtx.url.query)
-          pageCache[].del(k)
-        elif reqCtx.norm_capts.topic in notTopics:
-          debug "cache: deleting key {reqCtx.key}"
-          pageCache[].del(reqCtx.key)
-        else:
-          debug "cache: deleting page {reqCtx.url.path}"
-          deletePage(reqCtx.url.path)
-      except:
-        warn "cache: deletion failed for {reqCtx.norm_capts:.120}"
-    of '1':
-      pageCache[].clear()
-      reqCtxCache.clear() # FIXME: should account for running requests...
-      warn "cache: cleared all pages"
-    else:
-      discard
+  if cacheParam != '\0':
+    case cacheParam:
+      of '0':
+        const notTopics = ["assets", "i", "robots.txt", "feed.xml", "index.xml",
+            "sitemap.xml", "s", "g"].toHashSet
+        reqCtx.cached = false
+        reqCtx.norm_capts = uriTuple(reqCtx.url.path)
+        try:
+          if reqCtx.norm_capts.art != "" and
+            not (reqCtx.norm_capts.topic in notTopics) and
+            not (reqCtx.norm_capts.page in notTopics):
+            debug "cache: deleting article cache {reqCtx.norm_capts.art:.40}"
+            await deleteArt(reqCtx.norm_capts, cacheOnly = true)
+          elif reqCtx.norm_capts.topic == "i":
+            let k = hash(reqCtx.url.path & reqCtx.url.query)
+            imgCache[].del(k)
+          elif reqCtx.norm_capts.topic in notTopics:
+            debug "cache: deleting key {reqCtx.key}"
+            pageCache[].del(reqCtx.key)
+          elif reqCtx.norm_capts.topic == "assets":
+            assetsCache.del(reqCtx.key)
+          else:
+            debug "cache: deleting page {reqCtx.url.path}"
+            deletePage(reqCtx.url.path)
+        except:
+          warn "cache: deletion failed for {reqCtx.norm_capts:.120}"
+      of '1':
+        pageCache[].clear()
+        reqCtxCache.clear() # FIXME: should account for running requests...
+        warn "cache: cleared all pages"
+      else:
+        discard
 
-template abort() =
-  if unlikely(reqCtx.cached):
-    reqCtxCache.del(relpath)
+proc parseParams(url: var Uri): Params =
+  result = initTable[ParamKey, string]()
+  for (k, v) in url.query.decodeQuery:
+    let par: ParamKey = parseEnum(k, none)
+    result[par] = v
+  if none in result:
+    result.del(none)
 
-  logexc()
-  sdebug "Router failed."
-  handle502()
+template handleParams() =
+  # parse url and check cache key
+  var
+    url = ctx.uri
+    cacheParam: char
+    transParam: char
+
+  var params = parseParams(url)
+  if c in params:
+    cacheParam = params[c][0]
+    params.del(c)
+  if t in params:
+    transParam = params[t][0]
+    params.del(t)
+  let pars = collect(for (k, v) in params.pairs(): ($k, v))
+  url.query = encodeQuery(pars)
+
+
+template handleTranslation() =
+  if transParam != '\0':
+    try:
+      let tree = await processTranslatedPage(capts.lang, capts.amp, relpath = capts.path)
+      page = tree.asHtml(minify_css = (capts.amp == ""))
+      setCache(reqCtx.key, page)
+      await reqCtx.doReply(page, rqid)
+      reqCtx.cached = true
+    except:
+      logexc()
+      echo "server.nim:482"
+      if reqCtx.respBody[].len > 0:
+        echo "server.nim:484"
+        await reqCtx.doReply(rqid)
+      else:
+        echo "server.nim:487"
+        handle502()
+    return
 
 {.pop dirty.}
+
+template isTranslationReq(): bool = transParam != '\0'
 
 proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
   initThread()
@@ -429,19 +495,10 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
   var
     relpath = ctx.rawPath
     page: string
-    nocache: char
   relpath.removeSuffix('/')
   debug "handling: {relpath:.120}"
 
-  # parse url and check cache key
-  var url = urlCache.lcheckOrPut(relpath):
-    let u = new(Uri)
-    parseUri(relpath, u[]); u
-  let cacheParam = url.query.getParam("cache")
-  if cacheParam.len > 0:
-    nocache = cacheParam[0]
-  if nocache != '\0':
-    url.query = url.query.replace(sre "&?cache=[0-9]&?", "")
+  handleParams()
 
   # generate request super context
   let acceptEncodingStr = ctx.headers.getString(haccenc)
@@ -449,7 +506,7 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
   let reqCtx = reqCtxCache.lcheckOrPut(reqCacheKey):
     let reqCtx {.gensym.} = new(ReqContext)
     reqCtx.lock = newAsyncLock()
-    reqCtx.url = url[]
+    reqCtx.url = move url
     reqCtx.file = reqCtx.url.path.fp
     reqCtx.key = hash(reqCtx.file)
     new(reqCtx.respBody)
@@ -457,20 +514,27 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
   # don't replicate works on unfinished requests
   if not reqCtx.cached:
     await reqCtx.lock.acquire
+    # defer:
+    #   if not reqCtx.isnil:
+    #     reqCtx.lock.release
+    # after lock acquisition reqCtx could have been swiched to `cached`
   let rqid = getReqId(relpath)
   reqCtx.rq[rqid] = ctx
-  if nocache != '\0':
-    handleCacheClear()
-  if reqCtx.cached:
+
+  handleCacheClear()
+
+  if reqCtx.cached and not isTranslationReq():
     try:
-      logall "cache: serving nocache reply, {reqCtx.key} addr: {cast[uint](reqCtx)}"
+      logall "cache: serving cached reply, {reqCtx.key} addr: {cast[uint](reqCtx)}"
       await reqCtx.doReply(rqid, )
-    except Exception:
+    except:
       logexc()
-      debug "cache: aborting."
-      abort()
+      abort("cache")
+    return
+
   try:
     let capts = uriTuple(reqCtx.url.path)
+    handleTranslation()
     case capts:
       of (topic: ""):
         info "router: serving homepage rel: {reqCtx.url.path:.20}, fp: {reqCtx.file:.20}, {reqCtx.key}"
@@ -533,12 +597,11 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
     reqCtx.cached = true
   except:
     logexc()
-    abort()
+    abort("capts")
   finally:
-    reqCtx.rq.del(rqid)
     reqCtx.lock.release
+    reqCtx.rq.del(rqid)
     debug "router: caching req {cast[uint](reqCtx)}"
-    # reset(reqCtx.rq)
 
 proc callback(ctx: RequestFence): Future[HttpResponseRef] {.async.} =
   if likely(not ctx.iserr):
@@ -556,8 +619,8 @@ proc doServe*(address: string, callback: HttpProcessCallback) =
   let srv =
     HttpServerRef.new(ta, callback).get
   defer:
-    if srv.state == ServerRunning:
-      waitFor srv.join()
+    if not srv.isnil:
+      waitfor srv.closeWait()
   srv.start()
   waitFor srv.join()
 
@@ -565,13 +628,13 @@ proc runServer(address, callback: auto) =
   try:
     info "server: starting http server"
     doServe(address, callback)
-  except Exception:
+  except:
     logexc()
     warn "server: restarting server..."
-  except Defect:
-    logexc()
-    warn "server: quitting..."
-    quitl()
+  # except:
+  #   logexc()
+  #   warn "server: quitting..."
+  #   quitl()
 
 proc startServer*(doclear = false, port = 0, loglevel = "info") =
 

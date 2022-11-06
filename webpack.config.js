@@ -36,16 +36,18 @@ module.exports = {
       // extract: true,
       ignore: {
         atrule: ['@font-face'],
-        rule: [/\.i-mdi-.*/, /\.flag/],
+        rule: [/\.i-mdi-.*/, /\.flag/]
       },
-      rebase: asset => { // inlined sttyles requires specifing absolute assets path (since assets with name only use the path relative to style source link)
+      rebase: asset => { // inlined styles requires specifing absolute assets path (since assets with name only use the path relative to style source link)
         let devpath = "dev/"
         let abspath = asset.absolutePath
         let nametrail = `${process.env.CONFIG_NAME}/`
         if (nametrail && nametrail != devpath && abspath.includes(devpath)) {
           return `${abspath.replace(devpath, nametrail)}`
+        } else if (asset.pathname) {
+          return asset.pathname
         } else {
-          return `${abspath}`
+          return asset.url
         }
       },
     }

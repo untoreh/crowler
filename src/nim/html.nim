@@ -1,18 +1,11 @@
 import
   karax / [karaxdsl, vdom, vstyles],
-  os,
-  strformat,
-  xmltree,
-  sugar,
-  strutils,
-  times,
-  uri,
+  std / [os, strformat, strutils, xmltree, uri, unicode, json, hashes, sugar],
   normalize,
-  unicode,
-  json,
-  hashes,
   chronos,
   nimpy
+
+import times except milliseconds
 
 import cfg,
        types,

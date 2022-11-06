@@ -1,0 +1,30 @@
+.loadbar {
+  animation-duration: 60s;
+  animation-name: load;
+  animation-iteration-count: 1;
+  width: 0;
+  height: 0.5rem;
+  background: var(--mdc-theme-on-background);
+  top: calc(100% - 0.5rem);
+  position: absolute;
+  left: -0.25rem;
+  box-shadow: 0 0 0.1rem var(--mdc-theme-on-primary);
+  &.fail {
+    animation-name: unset;
+    background: unset;
+    width: 100%;
+    box-shadow: unset;
+  }
+}
+
+@keyframes load {
+  0% {
+    width: 0%;
+  }
+  99% {
+    width: 100%;
+  }
+  100% {
+    content: "failed";
+  }
+}

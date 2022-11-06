@@ -43,6 +43,7 @@ const
   APPLE_PNG180_URL* = $(LOGO_PATH / "apple-touch-icon.png")
   MAX_DIR_FILES* = 10
   ARTICLE_EXCERPT_SIZE* = 300 ## Size (in bytes) of the excerpt
+  TRANSLATION_WAITTIME* = 200 ## in milliseconds
   MAX_TRANSLATION_TRIES* = 3
   DEFAULT_LANG_CODE* = "en"
   DEFAULT_LOCALE* = "en_US"

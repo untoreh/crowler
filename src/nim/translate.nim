@@ -44,6 +44,7 @@ let htmlcache = newLRUCache[string, XmlNode](32)
 var vbtmcache* {.threadvar.}: LruCache[array[5, byte], XmlNode]
 var rxcache {.threadvar.}: LruCache[string, Regex]
 let trOut* = initLockTable[string, VNode]()
+var translateFuts* {.threadvar.}: LruCache[string, Future[VNode]]
 
 proc get*[K, V](c: LruCache[K, V], k: K): V = c[k]
 
@@ -307,13 +308,14 @@ when defined(weaveRuntime):
 proc initTranslate*() =
   try:
     initPunctRgx()
-    if vbtmcache.isnil:
-        vbtmcache = newLRUCache[array[5, byte], XmlNode](32)
+    setNil(vbtmcache):
+      newLRUCache[array[5, byte], XmlNode](32)
     initGlues()
     initSlations()
     initTforms()
     when nativeTranslator:
       startTranslate()
+    translateFuts = newLruCache[string, Future[VNode]](10000)
   except:
     qdebug "Failed to init translate."
 

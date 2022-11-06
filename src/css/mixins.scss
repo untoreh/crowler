@@ -1,11 +1,67 @@
 @mixin border-style {
-    border: solid;
-    border-color: var(--mdc-theme-secondary);
-    border-width: 1px;
-    box-shadow: 0px 0px 4px var(--mdc-theme-secondary);
+  border: solid;
+  border-color: var(--mdc-theme-secondary);
+  border-width: 1px;
+  box-shadow: 0px 0px 4px var(--mdc-theme-secondary);
 }
 
 @mixin width-available {
-    width: -moz-available;
-    width: -webkit-fill-available;
+  width: -moz-available;
+  width: -webkit-fill-available;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@mixin fade {
+  animation-duration: 1s;
+  animation-name: fade;
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+}
+@mixin fade-in {
+  @include fade;
+  animation-direction: alternate;
+}
+@mixin fade-out {
+  @include fade;
+  animation-direction: alternate-reverse;
+}
+
+@mixin sling-kf($name, $pos-start, $pos-stop, $op-start, $op-stop) {
+  @keyframes #{$name} {
+    0% {
+      opacity: $op-start;
+      left: $pos-start;
+    }
+    100% {
+      opacity: $op-stop;
+      left: $pos-stop;
+    }
+  }
+}
+
+@mixin sling {
+  animation-duration: 1s;
+  animation-iteration-count: infinite;
+  animation-direction: normal;
+  // animation-timing-function: ease-in-out;
+}
+
+@include sling-kf(send, 0%, 50%, 1, 0);
+@mixin send {
+  @include sling;
+  animation-name: send;
+}
+
+@include sling-kf(recv, -50%, 0%, 0, 1);
+@mixin recv {
+  @include sling;
+  animation-name: recv;
 }

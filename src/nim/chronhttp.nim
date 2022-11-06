@@ -7,6 +7,12 @@ import types, pyutils, utils, httptypes
 
 var handler: ptr Future[void]
 var futs {.threadvar.}: seq[Future[void]]
+const chronHttpDebug {.booldefine.} = false
+
+template cdebug(code) =
+  # Failed requests stacktraces are too noisy
+  when chronHttpDebug:
+    debug code
 
 converter toUtilsMethod(m: httpcore.HttpMethod): httputils.HttpMethod =
   case m:
@@ -67,9 +73,9 @@ proc requestTask(q: ptr Request) {.async.} =
           q.response.headers = newHttpHeaders(cast[seq[(string, string)]](
               resp.headers.toList))
         break
-    except Exception as e:
+    except:
       logexc()
-      debug "cronhttp: request failed"
+      cdebug "cronhttp: request failed"
       discard
   httpOut[q] = true
 

@@ -35,22 +35,35 @@ proc initCache*() =
     logexc()
     qdebug "cache: failed init"
 
+proc setCache*[V](k: int64 | string, v: V) {.inline.} =
+  pageCache[k] = $getTime().toUnix & ";" & $v
+
+
+template getCacheImpl(k, code): untyped =
+  bind parseInt, pageCacheTtl
+  var n: int
+  let spl = pageCache[k].split(";", maxsplit = 1)
+  if spl.len == 2: # cache data is correct, check for staleness
+    let ttlTime = parseInt(spl[0], n).fromUnix
+    if getTime() - ttlTime > pageCacheTtl: # cache data is stale
+      code
+    else: # cache data is still valid
+      spl[1]
+  else:
+    code
+
+proc getCache*(k: int64 | string): string {.inline.} =
+  return getCacheImpl(k):
+    raise newException(ValueError, "page cache expired.")
+
 template getOrCache*(k: int64 | string, code: untyped): string =
   template process(): string =
     page = code
-    pageCache[k] = $getTime().toUnix & ";" & page
+    setCache(k, page)
     move page
   block:
-    var n: int
     if k in pageCache[]:
-      let spl = pageCache[k].split(";", maxsplit = 1)
-      if spl.len == 2: # cache data is correct, check for staleness
-        let ttlTime = parseInt(spl[0], n).fromUnix
-        if getTime() - ttlTime > pageCacheTtl: # cache data is stale
-          process()
-        else: # cache data is still valid
-          spl[1]
-      else: # cache data is corrupted, purge and re-process
+      getCacheImpl(k):
         process()
     else: # cache miss
       process()

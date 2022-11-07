@@ -43,7 +43,7 @@ proc buildImgUrl*(ar: Article; cls = "image-link"): VNode =
   var srcsetstr, bsrc: string
   if ar.imageUrl != "":
     # add `?` because chromium doesn't treat it as a string otherwise
-    let burl = "?" & ar.imageUrl.toBString(true)
+    let burl = "?u=" & ar.imageUrl.toBString(true)
     bsrc = "//" & $(WEBSITE_URL_IMG / IMG_SIZES[1] / burl)
     for (view, size) in zip(IMG_VIEWPORT, IMG_SIZES):
       srcsetstr.add "//" & $(WEBSITE_URL_IMG / size / burl)

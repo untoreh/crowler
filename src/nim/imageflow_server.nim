@@ -20,7 +20,7 @@ type
     url, width, height: string
     processed: ptr Imgdata
 
-const rxPathImg = "/([0-9]{1,3})x([0-9]{1,3})/\\?(.+)(?=/|$)"
+const rxPathImg = "/([0-9]{1,3})x([0-9]{1,3})/\\?u=(.+)(?=/|$)"
 
 let imgCache = initLockLruCache[string, string](32)
 
@@ -32,9 +32,9 @@ proc rawImg(imgurl: string): Future[string] {.inline, gcsafe, async.} =
     logexc()
 
 proc parseImgUrl*(relpath: string): ImgQuery =
-  let
-      m = relpath.match(sre rxPathImg).get
-      imgCapts = m.captures.toSeq
+  let m = relpath.match(sre rxPathImg).get
+  let imgCapts = m.captures.toSeq
+
   result.id = getMonoTime()
   result.url = imgCapts[2].get
   result.width = imgCapts[0].get

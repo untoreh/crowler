@@ -44,7 +44,8 @@ type
   ParamKey = enum
     none, q, p,
     c, # cache
-    t  # translations
+    t,  # translations
+    u # imgUrls
   Params = Table[ParamKey, string]
 
   ReqContext = object of RootObj
@@ -443,6 +444,9 @@ template handleCacheClear() =
 proc parseParams(url: var Uri): Params =
   result = initTable[ParamKey, string]()
   for (k, v) in url.query.decodeQuery:
+    echo "server.nim:446"
+    echo k
+    echo v
     let par: ParamKey = parseEnum(k, none)
     result[par] = v
   if none in result:

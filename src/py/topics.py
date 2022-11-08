@@ -11,7 +11,7 @@ import config as cfg
 import log
 import proxies_pb as pb
 import utils as ut
-from sites import Site
+from sites import Site, TopicState
 
 CATEGORIES = None
 _CAT_FILE = cfg.DATA_DIR / "google" / "categories.json"
@@ -90,30 +90,31 @@ def get_category(site: Site, force=False):
 def gen_topic(site: Site, check_sentiment=True, max_cat_tries=3):
     global _KEYWORDS
     cat_tries = 0
+    topic = TopicState()
     while cat_tries < max_cat_tries:
-        cat = get_category(site)
-        if cat not in BLACKLIST:
+        topic.name = get_category(site)
+        if topic.name not in BLACKLIST:
             break
         cat_tries += 1
-    tpslug = ut.slugify(cat)
-    topic_dir = site.topic_dir(tpslug)
+    topic.slug = ut.slugify(topic.name)
+    topic_dir = site.topic_dir(topic.slug)
     try:
         os.makedirs(topic_dir)
     except:
         pass
-    suggestions = suggest(cat)
+    suggestions = suggest(topic.name)
     assert suggestions is not None
     sugstr = "\n".join(suggestions)
     sentiment = TextBlob(sugstr).sentiment.polarity
     if (not check_sentiment) or (sentiment >= MIN_SENTIMENT):
         with open(topic_dir / "list.txt", "w") as f:
             f.write(sugstr)
-        site.add_topics_idx([(tpslug, cat, 0)])
+        site.add_topic(topic)
         # clear last topic since we saved
-        return tpslug
+        return topic.slug
     else:
         log.warn(
-            f"topic: generation skipped for {cat}, sentiment low {sentiment} < {MIN_SENTIMENT}"
+            f"topic: generation skipped for {topic.name}, sentiment low {sentiment} < {MIN_SENTIMENT}"
         )
         set_last_topic(site, {"name": "", "time": 0})
         return None

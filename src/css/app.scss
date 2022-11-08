@@ -135,6 +135,11 @@ footer {
       display: block;
       height: 32px;
       margin: auto;
+      // & div:last-child {
+      //   position: absolute;
+      //   left: calc(100% - 36px);
+      //   top: calc(100% - 36px);
+      // }
     }
   }
 }
@@ -500,6 +505,8 @@ section[role="toolbar"] {
     border-top: 1px dotted var(--mdc-theme-surface);
     height: 3rem;
     line-height: 3rem;
+    // line-height: calc(100% - 0.25rem);
+    list-style: none;
     a {
       // position: relative; // for tooltips positioning
       width: 100%;
@@ -521,7 +528,7 @@ section[role="toolbar"] {
 }
 [dir="rtl"] form.search {
   & .clear-search-btn {
-    left: 3rem;
+    right: 0.25rem;
     transform: scaleX(-1);
   }
 }
@@ -547,6 +554,7 @@ form.search {
     top: 0;
     height: 100%;
     margin: 0;
+    font-size: 1.25rem;
   }
   .search-suggest {
     color: black;

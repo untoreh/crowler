@@ -69,6 +69,20 @@ def isnoise(content, thresh=0.005) -> bool:
     return False
 
 
+def purge_bad_articles(s: Site):
+    def clear_topic(topic):
+        done = s.load_done(topic)
+        for n in range(len(done)):
+            page_arts = done[n]
+            for n, a in enumerate(page_arts):
+                if a and len(a.get("content", "")) > 0:
+                    if isnoise(a["content"]):
+                        page_arts[n] = None
+
+    for topic in s.load_topics()[1].keys():
+        clear_topic(topic)
+
+
 class Relevance:
     content = chars = noise = body = True
 

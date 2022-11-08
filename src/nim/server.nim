@@ -226,7 +226,6 @@ template handleHomePage(relpath: string, capts: UriCaptures,
 
 template handleAsset() =
 
-  var data: seq[byte]
   when not defined(noAssetsCaching):
     reqCtx.mime = mimePath(reqCtx.file)
     try:
@@ -444,9 +443,6 @@ template handleCacheClear() =
 proc parseParams(url: var Uri): Params =
   result = initTable[ParamKey, string]()
   for (k, v) in url.query.decodeQuery:
-    echo "server.nim:446"
-    echo k
-    echo v
     let par: ParamKey = parseEnum(k, none)
     result[par] = v
   if none in result:

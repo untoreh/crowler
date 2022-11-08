@@ -281,3 +281,12 @@ proc runAssetsWatcher*() =
   assetsFirstRead = true
   var thr {.global.}: Thread[(string, WatchKind)]
   createThread(thr, pollWatcher, (DATA_ASSETS_PATH, WatchKind.assets))
+
+when isMainModule:
+  import std/strtabs {.all.}
+  import std/importutils
+  privateAccess(StringTableObj)
+  runAdsWatcher()
+  for (key, val, hasValue) in ADS_HEAD[][2].attrs.data:
+    if hasValue:
+      echo key

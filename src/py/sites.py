@@ -6,7 +6,17 @@ from collections import deque
 from datetime import datetime
 from pathlib import Path
 from random import choice, randint
-from typing import Dict, Iterator, List, MutableSequence, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterator, List, MutableSequence, Optional, Tuple, Union
+import json
+import os
+import re
+import time
+from collections import deque
+from datetime import datetime
+from enum import IntEnum
+from pathlib import Path
+from random import choice, randint
+from typing import Any, Callable, Dict, Iterator, List, MutableSequence, Optional, Tuple
 
 import numpy as np
 import tomli
@@ -24,7 +34,6 @@ import config as cfg
 import log
 import proxies_pb as pb
 import utils as ut
-from enum import IntEnum
 from utils import ZarrKey, load_zarr, save_zarr
 
 SITES = {}
@@ -36,6 +45,21 @@ class Topic(IntEnum):
     PubDate = 2
     PubCount = 3
     UnpubCount = 4
+
+
+class TopicState:
+    slug: str
+    name: str
+    pub_date: datetime
+    pub_count: int
+    unpub_count: int
+
+    def __init__(self, slug="", name="", pub_date: Any = 0, pub_count=0, unpub_count=0):
+        self.slug = slug
+        self.name = name
+        self.pub_date = pub_date
+        self.pub_count = pub_count
+        self.unpub_count = unpub_count
 
 
 def read_sites_config(sitename: str, ensure=False, force=False):
@@ -475,20 +499,18 @@ class Site:
                 arts.resize(len(tosave))
                 arts[:] = tosave
 
-    def add_topics_idx(self, tp: List[Tuple[str, str, int]]):
-        assert isinstance(tp, list), "ati: list instance error"
+    def add_topic(self, tp: TopicState):
+        assert isinstance(tp, TopicState), "ati: not a topic state"
         (topics, tpset) = self.load_topics()
         if topics.shape == (0, 0):
             topics.resize(0, 3)
-        for t in tp:
-            tpslug = t[0]
-            assert ut.slugify(tpslug) == tpslug, "ati: slugs should be equal"
-            if tpslug in tpset:
-                continue
-            d = np.asarray(t)
-            topics.append([d])
-            tpset[tpslug] = t[1]
-            self.reset_topic_data(tpslug)
+        assert ut.slugify(tp.slug) == tp.slug, "ati: slugs should be equal"
+        if tp.slug in tpset:
+            return
+        d = np.asarray([tp.slug, tp.name, tp.pub_date, tp.pub_count, tp.unpub_count])
+        topics.append([d])
+        tpset[tp.slug] = tp.name
+        self.reset_topic_data(tp.slug)
 
     def reset_topics_idx(self, tp):
         """The Topics index holds ordered topics metadata:
@@ -639,7 +661,9 @@ class Site:
         else:
             idx = self.get_topic_idx(topic)
             t = arr[idx]
-            assert t[Topic.Slug] == topic, f"Topic mismatch: {t[Topic.Slug]} != {topic} "
+            assert (
+                t[Topic.Slug] == topic
+            ), f"Topic mismatch: {t[Topic.Slug]} != {topic} "
             arr[idx] = self._update_topic_articles(t)
 
     def sorted_topics(self, key=Topic.UnpubCount, force=False, full=False):

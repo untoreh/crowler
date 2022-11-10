@@ -374,6 +374,7 @@ template handleSuggest(ctx: HttpRequestRef) =
   let
     prefix = reqCtx.params.getOrDefault(ParamKey.p, "")
     searchq = reqCtx.params.getOrDefault(ParamKey.q, capts.art)
+  logall "suggest: searchq -- {searchq}"
   page = await buildSuggestList(capts.topic, searchq, prefix)
   await reqCtx.doReply(page, rqid, )
 
@@ -509,6 +510,7 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
     let reqCtx {.gensym.} = new(ReqContext)
     reqCtx.lock = newAsyncLock()
     reqCtx.url = move url
+    reqCtx.params = params
     reqCtx.file = reqCtx.url.path.fp
     reqCtx.key = hash(reqCtx.file)
     new(reqCtx.respBody)

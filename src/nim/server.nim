@@ -479,12 +479,9 @@ template handleTranslation() =
       reqCtx.cached = true
     except:
       logexc()
-      echo "server.nim:482"
       if reqCtx.respBody[].len > 0:
-        echo "server.nim:484"
         await reqCtx.doReply(rqid)
       else:
-        echo "server.nim:487"
         handle502()
     return
 

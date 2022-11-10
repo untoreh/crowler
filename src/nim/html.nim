@@ -290,8 +290,6 @@ proc buildMenu*(crumbs: string; topicUri: Uri; path: string): Future[
         await topicsList(ucls = "app-bar-topics", icls = "topic-item", small = false)
       section(class = "mdc-top-app-bar__section mdc-top-app-bar__section--align-end",
               role = "toolbar"):
-        echo "html.nim:293"
-        echo topicUri
         buildSearch(topicUri, true)
         when TRENDS:
           a(class = "trending", href = ($(topicUri / "trending"))):

@@ -197,7 +197,7 @@ proc writePushLog(log: JsonNode) {.async.} =
 
 proc pushAllSonic*() {.async.} =
   await syncTopics()
-  var c, pagenum: int
+  var total, c, pagenum: int
   let pushLog = await readPushLog()
   if pushLog.len == 0:
     withPyLock:
@@ -227,11 +227,13 @@ proc pushAllSonic*() {.async.} =
             content = ar.pyget("content").sanitize
           echo "pushing ", relpath
           futs.add push(capts, content)
+          total.inc
       pygil.release
       await allFutures(futs)
       pushLog[topic] = %pagenum
       await writePushLog(pushLog)
       await pygil.acquire
+  info "Indexed search for {WEBSITE_DOMAIN} with {total} objects."
 
 from chronos/timer import seconds, Duration
 
@@ -279,6 +281,8 @@ proc initSonic*() {.gcsafe.} =
   pushLock = create(AsyncLock)
   pushLock[] = newAsyncLock()
   connectSonic()
+  syncPyLock:
+    discard pysched[].initPool()
 
 when isMainModule:
   initPy()

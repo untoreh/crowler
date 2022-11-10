@@ -124,15 +124,15 @@ def single_search(
     res = []
     logger.info(f"Processing single search, engine: {engine}")
     for p in range(pages):
-        with pb.http_opts(proxy=depth):
-            s = SearchQuery(
-                kw,
-                [EngineRef(engine, category)],
-                timeout_limit=timeout,
-                pageno=p,
-                lang=lang,
-            )
-            q = search.Search(s).search()
+        switch_searx_proxies()
+        s = SearchQuery(
+            kw,
+            [EngineRef(engine, category)],
+            timeout_limit=timeout,
+            pageno=p,
+            lang=lang,
+        )
+        q = search.Search(s).search()
         if len(q.unresponsive_engines) > 0:
             raise ValueError(q.unresponsive_engines.pop())
         q_res = q.get_ordered_results()
@@ -143,7 +143,6 @@ def single_search(
 
 def try_search(*args, depth=1, backoff=0.3, max_tries=4, **kwargs):
     ensure_engines()
-    switch_searx_proxies()
     try:
         return single_search(*args, **kwargs, depth=depth)
     except Exception as e:

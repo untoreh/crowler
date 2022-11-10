@@ -56,7 +56,6 @@ Http.onreadystatechange = (e) => {
     if (isTrReq(e)) {
       let resp = Http.responseText
       if (resp.startsWith("<!doctype")) {
-        console.log(resp)
         trBox.classList.remove("waiting")
         sleep(100).then(() => {
           document.open()

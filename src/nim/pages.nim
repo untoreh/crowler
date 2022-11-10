@@ -15,7 +15,8 @@ import html_misc,
        translate_lang,
        amp,
        search,
-       ads
+       ads,
+       server_types
 
 const tplRep = @{"WEBSITE_DOMAIN": WEBSITE_DOMAIN}
 const ppRep = @{"WEBSITE_URL": $WEBSITE_URL.combine(),
@@ -273,7 +274,7 @@ proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
   checkNil(pagetree):
     return await processPage(lang, amp, pagetree)
 
-proc buildSearchPage*(topic: string, kws: string, lang: string): Future[
+proc buildSearchPage*(topic: string, kws: string, lang: string, capts: UriCaptures): Future[
     string] {.async.} =
   ## Builds a search page with 10 entries
   debug "search: lang:{lang}, topic:{topic}, kws:{kws}"
@@ -307,9 +308,9 @@ proc buildSearchPage*(topic: string, kws: string, lang: string): Future[
                       content = verbatim(content),
                       slug = "/s/" & kws,
                       pagefooter = footer,
-                      topic = topic)
-  if not tree.isnil:
-    return (await processPage(lang, "", tree)).asHtml(minify_css = true)
+                      topic = "") # NOTE: Search box is sitewide
+  checkNil(tree):
+    return (await processPage(lang, "", tree, relpath = capts.path)).asHtml(minify_css = true)
 
 proc buildSuggestList*(topic, input: string, prefix = ""): Future[
     string] {.async.} =

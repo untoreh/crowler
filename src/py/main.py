@@ -204,7 +204,7 @@ def site_loop(site: Site, throttle=5):
     sched.initPool()
     backoff = 0
     while True:
-        pb.proxy_sync_forever(cfg.PROXIES_FILE, cfg.PROXIES_DIR)
+        pb.proxy_sync_forever(cfg.PROXIES_FILES, cfg.PROXIES_DIR)
         try:
             topics = site.sorted_topics(key=Topic.UnpubCount)
             # print(h.heap())

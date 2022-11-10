@@ -140,23 +140,29 @@ type
   SonicMessageTuple = tuple[args: SonicQueryArgsTuple, id: MonoTime]
   SonicMessage = ptr SonicMessageTuple
 
+when false:
+  proc translateKws(kws: string, lang: string): Future[string] {.async.} =
+    if lang in TLangsTable and lang != "en":
+      # echo "ok"
+      let lp = (src: lang, trg: SLang.code)
+      # echo "?? ", translate(keywords, lp)
+      var tkw: string
+      tkw = await callTranslator(kws, lp)
+      something tkw, kws
+    else: kws
+
 proc querySonic(msg: SonicMessage): Future[seq[string]] {.async.} =
   ## translate the query to source language, because we only index
   ## content in source language
   ## the resulting entries are in the form {page}/{slug}
   let (topic, keywords, lang, limit) = msg.args
-  let kws = if lang in TLangsTable and lang != "en":
-                # echo "ok"
-                let lp = (src: lang, trg: SLang.code)
-                # echo "?? ", translate(keywords, lp)
-                var tkw: string
-                tkw = await callTranslator(keywords, lp)
-                something tkw, keywords
-            else: keywords
-  logall "query: kws -- {kws}, keys -- {keywords}"
+  # FIXME: this is too expensive
+  # let kws = await translateKws(keywords, lang)
+  # logall "sonic: kws -- {kws}, query -- {keywords}"
+  logall "sonic: query -- {keywords}"
   let lang3 = await SLang.code.toISO3
   withPyLock:
-    let res = pySonic[].query(WEBSITE_DOMAIN, "default", kws, lang = lang3, limit = limit)
+    let res = pySonic[].query(WEBSITE_DOMAIN, "default", keywords, lang = lang3, limit = limit)
     if not pyisnone(res):
       let s = res.pyToSeqStr()
       return s

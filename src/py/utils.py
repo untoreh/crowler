@@ -162,7 +162,7 @@ def save_zarr(
     contents,
     root,
     k: ZarrKey = ZarrKey.articles,
-    subk="",
+    subk: int | str ="",
     reset=False,
 ):
     if len(contents) > cfg.MAX_BACKLOG_SIZE:
@@ -224,7 +224,7 @@ def arr_key(k=ZarrKey.articles, subk="", root=cfg.DATA_DIR):
 
 def load_zarr(
     k=ZarrKey.articles,
-    subk="",
+    subk: int | str ="",
     root=cfg.DATA_DIR,
     dims=1,
     overwrite=OVERWRITE_FLAG,

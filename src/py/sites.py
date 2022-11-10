@@ -61,6 +61,14 @@ class TopicState:
         self.pub_count = pub_count
         self.unpub_count = unpub_count
 
+    def __str__(self):
+        return f"""
+        slug: {self.slug}
+        name: {self.name}
+        date: {datetime.fromtimestamp(self.pub_date)}
+        pub_count: {self.pub_count}
+        unpub_count: {self.unpub_count}
+        """
 
 def read_sites_config(sitename: str, ensure=False, force=False):
     global SITES_CONFIG
@@ -311,11 +319,11 @@ class Site:
             case Job.parse:
                 assert isinstance(topic, str)
                 arts = self.load_articles(topic)
-                return len(arts) == 0 or self._sources_check()
+                return len(arts) == 0 or self._sources_check(arts)
             case Job.feed:
                 assert isinstance(topic, str)
                 feeds = self.load_feeds(topic)
-                return len(feeds) == 0 or self._sources_check()
+                return len(feeds) == 0 or self._sources_check(feeds)
             case Job.reddit:
                 return self.has_reddit and time.time() - self._last_reddit > kind.value
             case Job.facebook:
@@ -342,7 +350,7 @@ class Site:
     def name(self):
         return self._name
 
-    def load_articles(self, topic: str, k=ZarrKey.articles, subk=""):
+    def load_articles(self, topic: str, k=ZarrKey.articles, subk: int | str =""):
         return load_zarr(k=k, subk=subk, root=self.topic_dir(topic))
 
     def load_feeds(self, topic: str):
@@ -431,6 +439,8 @@ class Site:
     def get(self, topic: str):
         return self.topic_group(topic)
 
+
+
     def reset_topic_data(self, topic: str):
         assert topic != "", "the topic exist to be reset"
         print("utils: resetting topic data for topic: ", topic)
@@ -477,6 +487,15 @@ class Site:
     def get_topic_count(self):
         return len(self.topics_dict)
 
+    def status(self, check_count=False):
+        for s in self.load_topics()[0]:
+            tp = TopicState(*s)
+            print(tp)
+            if check_count:
+                n_done = sum([len(p) for p in self.load_done(tp.slug)])
+                assert tp.pub_count == n_done
+                assert tp.unpub_count == len(self.load_articles(tp.slug))
+
     def is_topic(self, topic: str):
         self.load_topics()
         return topic in self.topics_dict
@@ -512,17 +531,16 @@ class Site:
         tpset[tp.slug] = tp.name
         self.reset_topic_data(tp.slug)
 
-    def reset_topics_idx(self, tp):
+    def reset_topics_idx(self, topics):
         """The Topics index holds ordered topics metadata:
         - 0: name
         - 1: descritpion
         - 2: last publication date
         """
-        assert isinstance(tp, (tuple, list, np.ndarray))
-        assert isinstance(tp[0], (tuple, list, np.ndarray))
-        tp = np.asarray(tp)
-        save_zarr(tp, self.topics_idx, ZarrKey.topics, reset=True)
-        del ut.PUBCACHE[ut.arr_key(root=tp, k=ZarrKey.topics)[0]]
+        assert isinstance(topics, (tuple, list, np.ndarray))
+        assert isinstance(topics[0], (tuple, list, np.ndarray))
+        save_zarr(topics, self.topics_idx, ZarrKey.topics, reset=True)
+        del ut.PUBCACHE[ut.arr_key(root=self.topics_idx, k=ZarrKey.topics)[0]]
         self.topics_arr = None
         self.topics_dict = dict()
 
@@ -531,7 +549,7 @@ class Site:
             import shutil
         self.load_topics()
         assert self.topics_arr is not None
-        cleared = [t for t in self.topics_arr[:] if t[0] != topic]
+        cleared = [t for t in self.topics_arr[:] if t[Topic.Slug] != topic]
         try:
             shutil.rmtree(self.topic_dir(topic))
         except FileNotFoundError:

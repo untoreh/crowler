@@ -345,7 +345,7 @@ template handleArticle(capts: auto, ctx: HttpRequestRef) =
     handle404()
     # handle301($(WEBSITE_URL / capts.amp / capts.lang))
 
-template handleSearch(relpath: string, ctx: HttpRequestRef) =
+template handleSearch(ctx: HttpRequestRef) =
   # extract the referer to get the correct language
   let
     refuri = parseUri(ctx.headers.getString(href))
@@ -355,23 +355,25 @@ template handleSearch(relpath: string, ctx: HttpRequestRef) =
   else:
     page = searchCache.lcheckOrPut(reqCtx.key):
       # there is no specialized capture for the query
-      var searchq = reqCtx.url.query.getParam("q")
       let lang = something(capts.lang, refcapts.lang)
       # this is for js-less form redirection
-      if searchq == "" and ($reqCtx.url.query == ""):
-        searchq = capts.art.strip()
-      let ppage = (await buildSearchPage(if capts.topic !=
-          "s": capts.topic else: "", searchq, lang)).asHtml
+      let searchq = reqCtx.params.getOrDefault(ParamKey.q, capts.art.strip())
+      let ppage =
+        block:
+          let tp =
+            if capts.topic != "s": capts.topic
+            else: ""
+          (await buildSearchPage(tp, searchq, lang, capts)).asHtml
       checkTrue ppage.len > 0, "search: page gen failed."
       ppage
     reqCtx.mime = mimePath("index.html")
     await reqCtx.doReply(page, rqid, )
 
-template handleSuggest(relpath: string, ctx: HttpRequestRef) =
+template handleSuggest(ctx: HttpRequestRef) =
   # there is no specialized capture for the query
   let
-    prefix = reqCtx.url.query.getParam("p")
-    searchq = something(reqCtx.url.query.getParam("q"), capts.art)
+    prefix = reqCtx.params.getOrDefault(ParamKey.p, "")
+    searchq = reqCtx.params.getOrDefault(ParamKey.q, capts.art)
   page = await buildSuggestList(capts.topic, searchq, prefix)
   await reqCtx.doReply(page, rqid, )
 
@@ -559,16 +561,16 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
         handlePwa()
       of (topic: "s"):
         info "router: serving search {relpath:.20}"
-        handleSearch(relpath, ctx)
+        handleSearch(ctx)
       of (topic: "g"):
         info "router: serving suggestion {relpath:.20}"
-        handleSuggest(relpath, ctx)
+        handleSuggest(ctx)
       of (page: "s"):
         info "router: serving search {relpath:.20}"
-        handleSearch(relpath, ctx)
+        handleSearch(ctx)
       of (page: "g"):
         info "router: serving suggestion {relpath:.20}"
-        handleSuggest(relpath, ctx)
+        handleSuggest(ctx)
       of (page: "feed.xml"):
         info "router: serving feed for topic {capts.topic:.20}"
         handleFeed(fTopic)

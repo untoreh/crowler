@@ -123,8 +123,8 @@ def single_search(
 ):
     res = []
     logger.info(f"Processing single search, engine: {engine}")
+    switch_searx_proxies()
     for p in range(pages):
-        switch_searx_proxies()
         s = SearchQuery(
             kw,
             [EngineRef(engine, category)],

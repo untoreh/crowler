@@ -206,36 +206,27 @@ proc getAuthor*(a: Article): string {.inline.} =
   else: a.author
 
 proc deleteArt*(capts: UriCaptures, cacheOnly = false) {.async, gcsafe.} =
-  let
-    artPath = getArticlePath(capts)
-    fpath = SITE_PATH / artPath
   !! (capts.topic != "")
   !! (capts.art != "")
   !! (capts.page != "")
-  pageCache[].del(fpath)
-  pageCache[].del(SITE_PATH / "amp" / artPath)
+  # Delete article cached pages
+  deletePage(capts)
   # remove statistics about article
   statsDB.del(capts)
-  for lang in TLangsCodes:
-    pageCache[].del(SITE_PATH / "amp" / lang / artPath)
-    pageCache[].del(SITE_PATH / lang / artPath)
   if not cacheOnly:
-    let
-      ts = Topics.fetch(capts.topic)
-      tg = ts.group[]
-    await pygil.acquire()
-    defer:
-      if pygil.locked:
-        pygil.release()
-    let pageArts = tg[$topicData.done][capts.page]
-    let pyslug = capts.art.nimValueToPy().newPyObject
-    var toRemove: seq[int]
-    for (n, a) in enumerate(pageArts):
-      if (not pyisnone(a)) and a["slug"] == pyslug:
-        toRemove.add n
-        break
-    for n in toRemove:
-      pageArts[n] = PyNone
+    withPyLock:
+      let
+        ts = Topics.fetch(capts.topic)
+        tg = ts.group[]
+        pageArts = tg[$topicData.done][capts.page]
+        pyslug = capts.art.nimValueToPy().newPyObject
+      var toRemove: seq[int]
+      for (n, a) in enumerate(pageArts):
+        if (not pyisnone(a)) and a["slug"] == pyslug:
+          toRemove.add n
+          break
+      for n in toRemove:
+        pageArts[n] = PyNone
 
 when isMainModule:
   # echo waitFor getLastArticles("mini", 3)

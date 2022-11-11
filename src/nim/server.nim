@@ -42,8 +42,10 @@ from nativehttp import initHttp
 
 type
   ParamKey = enum
-    none, q, p,
+    none,
+    q, p, # sonic
     c, # cache
+    d, # delete
     t,  # translations
     u # imgUrls
   Params = Table[ParamKey, string]
@@ -184,10 +186,8 @@ template handle301*(loc: string = $WEBSITE_URL) =
   let headers = init(HttpTable, [($hloc, loc)])
   # headers[$hloc] = loc
   block:
-    let e = getCurrentException()
-    if not e.isnil:
-      logexc()
-      debug "server: redirecting."
+    logexc()
+    debug "server: redirecting."
     await reqCtx.doReply($Http301, rqid, scode = Http301, headers = headers)
 
 const redirectJs = fmt"""<script>window.location.replace("{WEBSITE_URL}");</script>"""
@@ -215,7 +215,6 @@ template abort(m: string) =
 import htmlparser, xmltree
 template handleHomePage(relpath: string, capts: UriCaptures,
     ctx: HttpRequestRef) =
-  # const homePath = hash(SITE_PATH / "index.html")
   page = getOrCache(reqCtx.key):
     let tree = await buildHomePage(capts.lang, capts.amp)
     checkNil tree, "homepage: page tree is nil"
@@ -250,22 +249,26 @@ template handleAsset() =
     except:
       handle404()
 
+proc imgFile(reqCtx: ref ReqContext): string {.inline.} =
+  result = reqCtx.url.path & "?" & reqCtx.url.query
+  # fix for image handling, since images use queries, therefore paths are not unique
+  result.removePrefix("/i")
+
+proc imgKey(reqCtx: ref ReqContext): int64 {.inline.} = hash(reqCtx.imgFile)
+
 template dispatchImg() =
   var mime: string
-  var imgPath = reqCtx.url.path & "?" & reqCtx.url.query
-  # fix for image handling, since images use queries, therefore paths are not unique
-  reqCtx.file = imgPath
-  imgPath.removePrefix("/i")
-  reqCtx.key = hash(reqCtx.file)
+  reqCtx.file = reqCtx.imgFile
+  reqCtx.key = reqCtx.imgKey
   try:
     (mime, page) = imgCache[].get(reqCtx.key).split(";", maxsplit = 1)
-    debug "img: fetched from cache {reqCtx.key} {imgPath}"
+    debug "img: fetched from cache {reqCtx.key} {reqCtx.file}"
   except KeyError, AssertionDefect:
-    debug "img: not found handling image, {imgPath}"
-    try: (page, mime) = await handleImg(imgPath)
+    debug "img: not found handling image, {reqCtx.file}"
+    try: (page, mime) = await handleImg(reqCtx.file)
     except:
       logexc()
-      debug "img: could not handle image {imgPath}."
+      debug "img: could not handle image {reqCtx.file}."
     if page != "":
       # append the mimetype before the img data
       imgCache[][reqCtx.key] = mime & ";" & page
@@ -408,14 +411,19 @@ template handleRobots() =
     ppage
   await reqCtx.doReply(page, rqid, )
 
+proc reset(reqCtx: ref ReqContext) =
+  reqCtx.cached = false
+  reqCtx.respBody[].setLen(0)
+  reqCtx.respHeaders.reset
+  reqCtx.respCode.reset
 
 template handleCacheClear() =
-  if cacheParam != '\0':
+  if not cacheParam.isnull:
     case cacheParam:
       of '0':
         const notTopics = ["assets", "i", "robots.txt", "feed.xml", "index.xml",
             "sitemap.xml", "s", "g"].toHashSet
-        reqCtx.cached = false
+        reqCtx.reset()
         reqCtx.norm_capts = uriTuple(reqCtx.url.path)
         try:
           if reqCtx.norm_capts.art != "" and
@@ -424,8 +432,7 @@ template handleCacheClear() =
             debug "cache: deleting article cache {reqCtx.norm_capts.art:.40}"
             await deleteArt(reqCtx.norm_capts, cacheOnly = true)
           elif reqCtx.norm_capts.topic == "i":
-            let k = hash(reqCtx.url.path & reqCtx.url.query)
-            imgCache[].del(k)
+            imgCache[].del(reqCtx.imgKey)
           elif reqCtx.norm_capts.topic in notTopics:
             debug "cache: deleting key {reqCtx.key}"
             pageCache[].del(reqCtx.key)
@@ -433,7 +440,7 @@ template handleCacheClear() =
             assetsCache.del(reqCtx.key)
           else:
             debug "cache: deleting page {reqCtx.url.path}"
-            deletePage(reqCtx.url.path)
+            deletePage(reqCtx.norm_capts)
         except:
           warn "cache: deletion failed for {reqCtx.norm_capts:.120}"
       of '1':
@@ -457,6 +464,7 @@ template handleParams() =
     url = ctx.uri
     cacheParam: char
     transParam: char
+    delParam: char
 
   var params = parseParams(url)
   if c in params:
@@ -465,12 +473,14 @@ template handleParams() =
   if t in params:
     transParam = params[t][0]
     params.del(t)
+  if d in params:
+    delParam = params[d][0]
+    params.del(d)
   let pars = collect(for (k, v) in params.pairs(): ($k, v))
   url.query = encodeQuery(pars)
 
-
 template handleTranslation() =
-  if transParam != '\0':
+  if not transParam.isnull:
     try:
       let tree = await processTranslatedPage(capts.lang, capts.amp, relpath = capts.path)
       page = tree.asHtml(minify_css = (capts.amp == ""))
@@ -484,6 +494,29 @@ template handleTranslation() =
       else:
         handle502()
     return
+
+template handleDeletion() =
+  if not delParam.isnull:
+    var capts = uriTuple(reqCtx.url.path)
+    if capts.art.len > 0:
+      await deleteArt(capts)
+    else:
+      deletePage(capts)
+    block:
+      template doReset(pref) =
+        for enc in ["gzip", "deflate", "gzip, deflate"]:
+          let rck = pref & enc
+          if rck in reqCtxCache:
+            withAsyncLock(reqCtxCache[rck].lock):
+              reqCtxCache[rck].reset()
+      # Delete main topic page
+      capts.art = ""
+      deletePage(capts)
+      doReset(capts.path(slash=true))
+      # delete homepage
+      deletePage("")
+      doReset("/")
+    abort("deleted")
 
 {.pop dirty.}
 
@@ -515,13 +548,17 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
   # don't replicate works on unfinished requests
   if not reqCtx.cached:
     await reqCtx.lock.acquire
-    # defer:
-    #   if not reqCtx.isnil:
-    #     reqCtx.lock.release
+  defer:
+    if reqCtx.lock.locked:
+      reqCtx.lock.release
     # after lock acquisition reqCtx could have been swiched to `cached`
   let rqid = getReqId(relpath)
   reqCtx.rq[rqid] = ctx
+  defer: reqCtx.rq.del(rqid)
 
+  handleDeletion()
+  if not delParam.isnull: # NOTE: this can't be put inside the template...
+    return
   handleCacheClear()
 
   if reqCtx.cached and not isTranslationReq():
@@ -539,6 +576,7 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
     case capts:
       of (topic: ""):
         info "router: serving homepage rel: {reqCtx.url.path:.20}, fp: {reqCtx.file:.20}, {reqCtx.key}"
+        echo "HOME: ", reqCacheKey
         handleHomePage(reqCtx.url.path, capts, ctx)
       of (topic: "assets"):
         logall "router: serving assets {relpath:.20}"
@@ -600,8 +638,8 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
     logexc()
     abort("capts")
   finally:
-    reqCtx.lock.release
-    reqCtx.rq.del(rqid)
+    # reqCtx.lock.release
+    # reqCtx.rq.del(rqid)
     debug "router: caching req {cast[uint](reqCtx)}"
 
 proc callback(ctx: RequestFence): Future[HttpResponseRef] {.async.} =
@@ -623,7 +661,8 @@ proc doServe*(address: string, callback: HttpProcessCallback) =
     if not srv.isnil:
       waitfor srv.closeWait()
   srv.start()
-  waitFor srv.join()
+  if not srv.isnil:
+    waitFor srv.join()
 
 proc runServer(address, callback: auto) =
   try:
@@ -631,7 +670,7 @@ proc runServer(address, callback: auto) =
     doServe(address, callback)
   except:
     logexc()
-    warn "server: restarting server..."
+    warn "server: server crashed..."
   # except:
   #   logexc()
   #   warn "server: quitting..."

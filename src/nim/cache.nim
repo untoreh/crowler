@@ -5,7 +5,8 @@ import
   cfg,
   types,
   translate_types,
-  translate_db
+  translate_db,
+  server_types
 
 export translate_db
 type DataCache {.borrow: `.`.} = LRUTrans
@@ -87,16 +88,44 @@ proc fp*(relpath: string): string =
   # NOTE: Only Unix paths make sense! because `/` operator would output `\` on windows
   SITE_PATH / relpath.suffixPath()
 
-proc deletePage*(relpath: string) {.gcsafe.} =
-  logall "cache: deleting page {relpath}"
-  let
-    sfx = relpath.suffixPath()
-    fpath = SITE_PATH / sfx
-    fkey = fpath.hash
-  pageCache[].del(fkey)
-  pageCache[].del(hash(SITE_PATH / "amp" / sfx))
+proc cacheKey*(capts: UriCaptures): Hash {.inline.} =
+  var path = capts.join
+  if not path.startsWith("/"):
+    path = "/" & path
+  return path.fp.hash
+
+proc cacheKey*(relPath: string): Hash =
+  let capts = uriTuple(relPath)
+  return cacheKey(capts)
+
+proc deletePage*(capts: UriCaptures) {.gcsafe.} =
+  logall "cache: deleting page {capts}"
+  var capts = capts
+  let k = capts.cacheKey
+  template doDel() =
+    capts.amp = ""
+    pageCache[].del(capts.cacheKey)
+    capts.amp = "/amp"
+    pageCache[].del(capts.cacheKey)
+
+  doDel()
+
   for lang in TLangsCodes:
-    pageCache[].del(hash(SITE_PATH / "amp" / lang / sfx))
-    pageCache[].del(hash(SITE_PATH / lang / sfx))
+    capts.lang = lang
+    doDel()
+
+proc deletePage*(s: string) = deletePage(uriTuple(s))
+
+# proc deletePage*(relpath: string) {.gcsafe.} =
+#   logall "cache: deleting page {relpath}"
+#   let
+#     sfx = relpath.suffixPath()
+#     fpath = SITE_PATH / sfx
+#     fkey = fpath.hash
+#   pageCache[].del(fkey)
+#   pageCache[].del(hash(SITE_PATH / "amp" / sfx))
+#   for lang in TLangsCodes:
+#     pageCache[].del(hash(SITE_PATH / "amp" / lang / sfx))
+#     pageCache[].del(hash(SITE_PATH / lang / sfx))
 
 # proc `get`*[K](c: ptr DataCache, k: K): string = c[].get(k)

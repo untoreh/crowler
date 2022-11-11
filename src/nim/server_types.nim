@@ -39,11 +39,14 @@ proc join*(tup: UriCaptures, sep = "/", n = 0): string =
       c += 1
   s.join(sep)
 
-proc path*(capts: UriCaptures): string =
-  if capts.topic == "": "index"
-  elif capts.page == "": capts.topic
-  elif capts.art == "": join([capts.topic, capts.page], "/")
-  else: join([capts.topic, capts.page, capts.art], "/")
+proc path*(capts: UriCaptures, slash: static[bool] = false): string =
+  let p =
+    if capts.topic == "": "index"
+    elif capts.page == "": capts.topic
+    elif capts.art == "": join([capts.topic, capts.page], "/")
+    else: join([capts.topic, capts.page, capts.art], "/")
+  when slash: "/" & p
+  else: p
 
 var mimes: ptr MimeDB
 var mimeLock: Lock

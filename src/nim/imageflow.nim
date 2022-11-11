@@ -225,7 +225,7 @@ when isMainModule:
   let img = "https://picjumbo.com/wp-content/uploads/maltese-dog-puppy-1570x1047.jpg"
   # let img = PROJECT_PATH / "vendor" / "imageflow.dist" / "data" / "cat.jpg"
   let data = waitFor getImg(img, kind = urlsrc)
-  echo data.len
+  # echo data.len
   doassert data.addImg
   let query = "width=100&height=100&mode=max"
   let (i, mime) = processImg(query)

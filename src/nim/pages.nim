@@ -173,28 +173,24 @@ proc processPage*(lang, amp: string, tree: VNode not nil,
     var fc = init(FileContext, tree, filedir, relpath,
           (src: SLang.code, trg: lang), tpath)
     debug "page: translating page to {lang}"
-    let fut = translateLang(move fc)
-    discard await race(fut, sleepAsync(TRANSLATION_WAITTIME.milliseconds))
-    result =
-      if fut.finished:
-        fut.read()
-      else:
-        let jobId = transId(lang, relpath)
-        debug "page: eager translation timed out. (transId: {jobId})"
-        translateFuts[jobId] = fut
-        tree
+    let jobId = transId(lang, relpath)
+    result = await translateLang(move fc,
+        timeout = TRANSLATION_WAITTIME, jobId = jobId)
   else:
     result = tree
   checkNil(result, "page: tree cannot be nil")
   if amp != "":
     result = await result.ampPage
 
-proc processTranslatedPage*(lang: string, amp: string, relpath: string): Future[VNode] {.async.} =
+proc processTranslatedPage*(lang: string, amp: string, relpath: string): Future[
+    VNode] {.async.} =
   let jobId = transId(lang, relpath)
   if jobId notin translateFuts:
     raise newException(ValueError, fmt"Translation was not scheduled. (transId: {jobId})")
   let fut = translateFuts[jobId]
   result = await fut
+  # signal that full translation is complete to js
+  result.find(VNodeKind.html).setAttr("translation", "complete")
   translateFuts.del(jobId)
   if amp != "":
     result = await result.ampPage
@@ -274,8 +270,8 @@ proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
   checkNil(pagetree):
     return await processPage(lang, amp, pagetree)
 
-proc buildSearchPage*(topic: string, kws: string, lang: string, capts: UriCaptures): Future[
-    string] {.async.} =
+proc buildSearchPage*(topic: string, kws: string, lang: string,
+    capts: UriCaptures): Future[string] {.async.} =
   ## Builds a search page with 10 entries
   debug "search: lang:{lang}, topic:{topic}, kws:{kws}"
   var content, keywords: string
@@ -310,7 +306,8 @@ proc buildSearchPage*(topic: string, kws: string, lang: string, capts: UriCaptur
                       pagefooter = footer,
                       topic = "") # NOTE: Search box is sitewide
   checkNil(tree):
-    return (await processPage(lang, "", tree, relpath = capts.path)).asHtml(minify_css = true)
+    return (await processPage(lang, "", tree, relpath = capts.path)).asHtml(
+        minify_css = true)
 
 proc buildSuggestList*(topic, input: string, prefix = ""): Future[
     string] {.async.} =

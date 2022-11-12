@@ -114,8 +114,8 @@ function toFlagLang(iso2) {
 
 export function ensureTranslation() {
   let capts = uriTuple()
-  let orig = $("html").getAttribute("lang")
-  if (capts.lang && orig != capts.lang) {
+  let orig = $("html").getAttribute("srclang")
+  if (orig && $("html").getAttribute("translation") == "processing") {
     $("body").appendChild(trBox)
     srcLangIcon.classList.add("flag-" + toFlagLang(orig))
     if (toFlagLang(capts.lang) == null) {

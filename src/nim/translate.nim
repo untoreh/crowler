@@ -46,7 +46,7 @@ var rxcache {.threadvar.}: LruCache[string, Regex]
 let trOut* = initLockTable[string, VNode]()
 var translateFuts* {.threadvar.}: LruCache[string, Future[VNode]]
 
-proc get*[K, V](c: LruCache[K, V], k: K): V = c[k]
+# proc get*[K, V](c: LruCache[K, V], k: K): V = c[k]
 
 proc getDirRx*(dir: string): Regex =
     try:

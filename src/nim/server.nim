@@ -548,13 +548,15 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
   # don't replicate works on unfinished requests
   if not reqCtx.cached:
     await reqCtx.lock.acquire
-  defer:
-    if reqCtx.lock.locked:
-      reqCtx.lock.release
+  # defer:
+  #   if reqCtx.lock.locked:
+  #     reqCtx.lock.release
     # after lock acquisition reqCtx could have been swiched to `cached`
   let rqid = getReqId(relpath)
   reqCtx.rq[rqid] = ctx
-  defer: reqCtx.rq.del(rqid)
+  # defer:
+  #   if rqid in reqCtx.rq:
+  #     reqCtx.rq.del(rqid)
 
   handleDeletion()
   if not delParam.isnull: # NOTE: this can't be put inside the template...
@@ -638,8 +640,8 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
     logexc()
     abort("capts")
   finally:
-    # reqCtx.lock.release
-    # reqCtx.rq.del(rqid)
+    reqCtx.lock.release
+    reqCtx.rq.del(rqid)
     debug "router: caching req {cast[uint](reqCtx)}"
 
 proc callback(ctx: RequestFence): Future[HttpResponseRef] {.async.} =

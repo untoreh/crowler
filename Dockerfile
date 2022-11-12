@@ -96,7 +96,7 @@ COPY / /site/
 CMD /site/scripts/scraper.sh
 
 FROM scraper AS site
-ENV NIM_DEBUG debug
+ENV NIM_DEBUG warn
 ARG NIM_ARG release
 ENV NIM $NIM_ARG
 ARG CACHE=0

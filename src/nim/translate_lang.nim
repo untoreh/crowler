@@ -4,7 +4,8 @@ import
   strutils,
   xmltree,
   htmlparser,
-  chronos
+  chronos,
+  lrucache
 
 import
   cfg,
@@ -18,9 +19,7 @@ import
 
 template translateVbtm(node: VNode, q: QueueDom) =
   assert node.kind == VNodeKind.verbatim
-  let
-    s = $node
-    tree = vbtmcache.lgetOrPut(s.key): parseHtml(s)
+  let tree = node.toXmlNode
   if tree.kind == xnElement and tree.tag == "document":
     tree.tag = "div"
   takeOverFields(tree.toVNode, node)
@@ -51,34 +50,53 @@ template translateIter(otree; vbtm: static[bool] = true) =
             translate(q.addr, el, srv)
 
 proc translateDom(fc: FileContext, hostname = WEBSITE_DOMAIN): Future[(
-    QueueDom, VNode)] {.async.} =
+    QueueDom, VNode, Future[bool])] {.async.} =
   translateEnv(dom)
   for node in otree.preorder():
     case node.kind:
       of vdom.VNodeKind.html:
         node.setAttr("lang", pair.trg)
+        node.setAttr("srclang", pair.src)
         if pair.trg in RTL_LANGS:
           node.setAttr("dir", "rtl")
         break
       else: continue
   translateIter(otree, vbtm = true)
   debug "dom: finishing translations"
-  discard await translate(q.addr, srv, finish = true)
-  return (q, otree)
+  return (q, otree, translate(q.addr, srv, finish = true))
+
+template withTimeout(): VNode =
+  bind translateDom
+  let td = await translateDom(fc)
+  when timeout > 0:
+    discard await race(td[2], sleepAsync(timeout.milliseconds))
+    if not td[2].finished():
+      debug "trans: eager translation timed out. (transId: {jobId})"
+      proc f(node: sink VNode, fut: sink Future[bool]): Future[VNode] {.async.} =
+        discard await fut
+        return node
+      translateFuts[jobId] = f(td[1], td[2])
+      # signal that full translation is underway to js
+      td[1].find(VNodeKind.html).setAttr("translation", "processing")
+  else:
+    discard await td[2]
+  td[1]
 
 proc translateLang*(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath = "",
-        ar = emptyArt[]): Future[VNode] {.gcsafe, async.} =
+                    ar = emptyArt[], timeout: static[int] = 0,
+                        jobId = ""): Future[VNode] {.gcsafe, async.} =
   let
     (filedir, relpath) = splitUrlPath(rx, file)
     t_path = if targetPath == "": filedir / lang.trg / (if relpath ==
         "": "index.html" else: relpath)
                  else: targetPath
   let fc = init(FileContext, tree, filedir, relpath, lang, t_path)
-  (await translateDom(fc))[1]
+  return withTimeout()
 
-proc translateLang*(fc: FileContext, ar = emptyArt[]): Future[VNode] {.gcsafe, async.} =
+proc translateLang*(fc: FileContext, ar = emptyArt[], timeout: static[int] = 0,
+    jobId = ""): Future[VNode] {.gcsafe, async.} =
   try:
-    result = (await translateDom(fc))[1]
+    result = withTimeout()
   except:
     logexc()
     debug "page: Translation failed."

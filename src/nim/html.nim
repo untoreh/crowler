@@ -525,12 +525,14 @@ proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode =
     body(class = "", topic = topic, style = preline_style):
       await buildMenu(crumbs, topicUri, path)
       await buildMenuSmall(crumbs, topicUri, path)
+      for ad in insertAd(ADS_HEADER): ad
       main(class = "mdc-top-app-bar--fixed-adjust"):
         if title != "":
           pageTitle(title, slug)
         content
         if not pagefooter.isNil():
           pageFooter
+        for ad in insertAd(ADS_SIDEBAR): ad
       await buildFooter(topic, slug)
 
 import macros

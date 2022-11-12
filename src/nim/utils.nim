@@ -18,8 +18,8 @@ import os,
        normalize,
        chronos
 
-# import std/segfaults
-# export segfaults
+import std/segfaults
+export segfaults
 
 # import translate_types
 import locktpl

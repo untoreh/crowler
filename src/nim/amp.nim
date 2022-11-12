@@ -122,6 +122,13 @@ proc fetchStyle(el: VNode) {.async.} =
       await getFile(src)
   data.maybeStyle
 
+template processNoScript() =
+  if level == 0:
+    let elNoScript = newVNode(VNodeKind.noscript)
+    await processHead(el, elNoScript, level = 1)
+    if len(elNoscript) > 0:
+      outHead.add elNoScript
+
 proc processHead(inHead: VNode, outHead: VNode, level = 0) {.async.} =
   var canonicalUnset = level == 0
   debug "iterating over {inHead.kind}"
@@ -151,9 +158,11 @@ proc processHead(inHead: VNode, outHead: VNode, level = 0) {.async.} =
         else:
           outHead.add el
       of VNodeKind.verbatim:
-        let data = ($el).parseHtml
+        let data = el.toXmlNode
         if data.kind == xnElement:
-          if data.tag == "script" or data.tag == "noscript":
+          if data.tag == "noscript":
+            processNoScript()
+          elif data.tag == "script":
             continue
           elif data.tag == "style":
             if data.len > 0:
@@ -161,24 +170,20 @@ proc processHead(inHead: VNode, outHead: VNode, level = 0) {.async.} =
           else:
             outHead.add el
       of VNodekind.noscript:
-        if level == 0:
-          let elNoScript = newVNode(VNodeKind.noscript)
-          await processHead(el, elNoScript, level = 1)
-          if len(elNoscript) > 0:
-            outHead.add elNoScript
+        processNoScript()
       else:
         debug "amphead: adding element {el.kind} to outHead."
         outHead.add el
 
-proc parseNode(node: VNode): XmlNode =
-  let
-    s = node.text
-    tree = try:
-             vbtmcache[s.key]
-           except:
-             vbtmcache[s.key] = parseHtml(s)
-             vbtmcache[s.key]
-  return deepcopy(tree)
+# proc parseNode(node: VNode): XmlNode =
+#   let
+#     s = node.text
+#     tree = try:
+#              vbtmcache[s.key]
+#            except:
+#              vbtmcache[s.key] = parseHtml(s)
+#              vbtmcache[s.key]
+#   return deepcopy(tree)
 
 # proc removeNodes(el: XmlNode) =
 #   ## parses an XmlNode removing tags defined by `skipNodesXml`
@@ -281,7 +286,7 @@ proc processBody(inEl, outBody, outHead: VNode, lv = false) {.async.} =
     if not isprocessed:
       if el.kind == VNodeKind.verbatim:
         var processed: string
-        let xEl = parseHtml($el)
+        let xEl = el.toXmlNode
         if xEl.kind == xnElement and xEl.tag ==
             "document": # verbatim included a list of tags, process each one singularly
           for k in xEl:

@@ -271,7 +271,9 @@ proc `slice`*[S](s: PySequence[S], start: int | PyObject, stop: int | PyObject, 
 proc `[]=`*[S, K, V](s: PySequence[S], k: K, v: S) =
     s.setitem(k, v)
 
-proc `$`*(s: PySequence): string = $s.py
+proc `$`*(s: PySequence): string =
+  assert not s.py.isnil
+  $s.py
 
 proc len*(s: PySequence): int = s.py.len
 

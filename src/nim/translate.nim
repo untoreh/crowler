@@ -44,7 +44,7 @@ let htmlcache = newLRUCache[string, XmlNode](32)
 var vbtmcache* {.threadvar.}: LruCache[array[5, byte], XmlNode]
 var rxcache {.threadvar.}: LruCache[string, Regex]
 let trOut* = initLockTable[string, VNode]()
-var translateFuts* {.threadvar.}: LruCache[string, Future[VNode]]
+var translateFuts* {.threadvar.}: LruCache[string, (VNode, Future[bool])]
 
 # proc get*[K, V](c: LruCache[K, V], k: K): V = c[k]
 
@@ -315,7 +315,7 @@ proc initTranslate*() =
     initTforms()
     when nativeTranslator:
       startTranslate()
-    translateFuts = newLruCache[string, Future[VNode]](10000)
+    translateFuts = newLruCache[string, (VNode, Future[bool])](10000)
   except:
     qdebug "Failed to init translate."
 

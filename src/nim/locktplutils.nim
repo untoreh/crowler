@@ -1,5 +1,6 @@
 ## This file should be included
 
+import std/wrapnils
 import chronos
 import locktpl
 
@@ -63,19 +64,23 @@ proc add*[T](apc: AsyncPColl[T], v: T) =
   withLock(apc.lock):
     if apc.waiters.len > 0:
       var w: ptr Future[T]
-      doassert apc.waiters.pop(w)
-      w[].complete(v)
+      while true:
+        doassert apc.waiters.pop(w)
+        if w.isnil or w[].isnil:
+          continue
+        w[].complete(v)
+        break
     else:
       apc.pcoll.add v
 
 proc pop*[T](apc: AsyncPColl[T]): Future[T] {.async.} =
-  var fut = newFuture[T]("AsyncPColl.pop")
+  let fut = newFuture[T]("AsyncPColl.pop")
   withLock(apc.lock):
     var v: T
     if apc.pcoll.pop(v):
       fut.complete(v)
     else:
-      apc.waiters.add fut.addr
+      apc.waiters.add fut.unsafeAddr
   while not fut.finished():
     sleep()
   return fut.read()
@@ -134,9 +139,7 @@ proc pop*[K, V](t: AsyncTable[K, V], k: K): Future[V] {.async.} =
     if k in t.table:
       var v: V
       doassert t.table.pop(k, v)
-      reset(fut)
-      assert fut.isnil
-      return v
+      fut.complete(v)
     else:
       if k notin t.waiters:
         t.waiters[k] = newSeq[ptr Future[V]]()
@@ -153,13 +156,10 @@ proc put*[K, V](t: AsyncTable[K, V], k: K, v: V) {.async.} =
     if k in t.waiters:
       var ws: seq[ptr Future[V]]
       doassert t.waiters.pop(k, ws)
-      # defer: dealloc(ws)
       while ws.len > 0:
         let w = ws.pop()
-        if not w.isnil:
-          let f = cast[ptr Future[V]](w)
-          if not f.isnil and not f[].finished:
-            f[].complete(v)
+        if not w.isnil and not w[].isnil and not w[].finished:
+          w[].complete(v)
     else:
       t.table[k] = v
 

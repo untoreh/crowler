@@ -79,7 +79,6 @@ type
 # these should be generalized since it's the same from `imageflow_server`
 var lshIn: AsyncPColl[ptr LshQuery]
 var lshOut: AsyncTable[ptr LshQuery, bool]
-var processing: LockHashSet[ptr LshQuery]
 
 proc addArticle*(lsh: PublishedArticles, content: ptr string): Future[bool] {.async.} =
   var q: LshQuery
@@ -92,12 +91,12 @@ proc addArticle*(lsh: PublishedArticles, content: ptr string): Future[bool] {.as
 # {.experimental: "strictnotnil".}
 proc checkAndAddArticle(q: ptr LshQuery) {.async.} =
   try:
-    processing.incl q
     checkNil(q.lsh)
     checkNil(q.content)
     if not isDuplicate(q.lsh[], q.content[]):
       let id = $(len(q.lsh.fingerprints) + 1)
-      q.lsh[].add(q.content[], id)
+      let cnt = deepcopy(q.content[])
+      q.lsh[].add(cnt, id)
       lshOut[q] = true
     else:
       lshOut[q] = false
@@ -105,20 +104,14 @@ proc checkAndAddArticle(q: ptr LshQuery) {.async.} =
     logexc()
     lshOut[q] = false
     warn "lsh: error adding article."
-  finally:
-    processing.excl(q)
 
 proc asyncLshHandler() {.async.} =
   try:
-    var q: ptr LshQuery
     while true:
-      q = await lshIn.pop
+      let q = await lshIn.pop
       clearFuts(futs)
       checkNil(q):
-        if q in processing:
-          warn "Clashing pointers found during processing lsh content."
-          continue
-        futs.add checkAndAddArticle(move q)
+        futs.add checkAndAddArticle(q)
   except Exception as e: # If we quit we can catch defects too.
     logexc()
     warn "lsh: lsh handler crashed."
@@ -134,9 +127,6 @@ proc startLsh*() =
     newAsyncPColl[ptr LshQuery]()
   setNil(lshOut):
     newAsyncTable[ptr LshQuery, bool]()
-  setNil(processing):
-    initLockHashSet[ptr LshQuery]()
-  processing.clear()
   createThread(lshThread, lshHandler)
 
 when isMainModule:

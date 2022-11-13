@@ -83,11 +83,9 @@ proc requestTask(q: ptr Request) {.async.} =
   httpOut[q] = true
 
 proc requestHandler() {.async.} =
-  # var q: Request
   while true:
     try:
       while true:
-        # q = await httpIn.popFirstWait()
         let q = await pop(httpIn)
         clearFuts(futs)
         checkNil(q):

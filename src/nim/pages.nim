@@ -187,13 +187,16 @@ proc processTranslatedPage*(lang: string, amp: string, relpath: string): Future[
   let jobId = transId(lang, relpath)
   if jobId notin translateFuts:
     raise newException(ValueError, fmt"Translation was not scheduled. (transId: {jobId})")
-  let fut = translateFuts[jobId]
-  result = await fut
+  let (node, fut) = translateFuts[jobId]
+  echo "pages.nim:193"
+  discard await fut
   # signal that full translation is complete to js
-  result.find(VNodeKind.html).setAttr("translation", "complete")
+  node.find(VNodeKind.html).setAttr("translation", "complete")
+  echo node
   translateFuts.del(jobId)
-  if amp != "":
-    result = await result.ampPage
+  result =
+    if amp != "": await node.ampPage
+    else: node
 
 proc pageFromTemplate*(tpl, lang, amp: string): Future[string] {.async.} =
   var txt = await readfileAsync(ASSETS_PATH / "templates" / tpl & ".html")

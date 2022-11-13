@@ -90,12 +90,11 @@ proc processImgData(q: ptr ImgQuery) {.async.} =
 
 proc asyncImgHandler() {.async.} =
   try:
-    var imq: ptr ImgQuery
     while true:
-      imq = await imgIn.pop
+      let imq = await imgIn.pop
       clearFuts(futs)
       checkNil(imq):
-        futs.add processImgData(move imq)
+        futs.add processImgData(imq)
   except:
     logexc()
     warn "imageflow: image handler crashed."

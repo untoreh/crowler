@@ -65,18 +65,15 @@ proc getDoneArticles*(topic: string, pagenum: int, rev = true): Future[seq[
       grp = site[].topic_group(topic)
       arts = pyget(grp, $topicData.done / pagenum.intToStr, PyNone)
 
-    if arts.isnil or pyisnone(arts):
-      result = @[]
-    else:
-      info "Fetching {arts.shape[0]} published articles for {topic}/{pagenum}"
+    if not arts.pyisnone:
+      let n_arts = arts.shape[0]
+      info "Fetching {n_arts} published articles for {topic}/{pagenum}"
       template addArt(iter) =
         for data in iter:
           if data.isValidArticlePy: # blacklisted articles are set to None
             result.add(initArticle(data, pagenum))
-      if rev:
-        addArt(pybi[].reversed(arts))
-      else:
-        addArt(arts)
+      addArt(if rev: pybi[].reversed(arts)
+             else: arts)
 
 proc allDoneContent*(topic: string): Future[seq[string]] {.async.} =
   ## Iterate over all published content of one topic.

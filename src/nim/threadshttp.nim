@@ -53,15 +53,14 @@ proc doReq(rq: ptr Request, timeout = DEFAULT_TIMEOUT): bool =
   return true
 
 proc handler() =
-  var rq: ptr Request
   let tp = Taskpool.new(num_threads = N_THREADS)
   while true:
     try:
       warn "http: starting httpHandler..."
       while true:
-        rq = waitFor httpIn.pop
+        let rq = waitFor httpIn.pop
         checkNil(rq)
-        discard tp.spawn doReq(move rq)
+        discard tp.spawn doReq(rq)
     except:
       logexc()
       warn "http: httpHandler crashed."

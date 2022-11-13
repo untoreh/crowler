@@ -65,32 +65,43 @@ proc translateDom(fc: FileContext, hostname = WEBSITE_DOMAIN): Future[(
   debug "dom: finishing translations"
   return (q, otree, translate(q.addr, srv, finish = true))
 
+proc replace[T, V](fut: sink Future[T], val: sink V): Future[V] {.async.} =
+  discard await fut
+  return val
+
 template withTimeout(): VNode =
   bind translateDom
-  let td = await translateDom(fc)
   when timeout > 0:
-    discard await race(td[2], sleepAsync(timeout.milliseconds))
-    if not td[2].finished():
-      debug "trans: eager translation timed out. (transId: {jobId})"
-      proc f(node: sink VNode, fut: sink Future[bool]): Future[VNode] {.async.} =
-        discard await fut
-        return node
-      translateFuts[jobId] = f(td[1], td[2])
-      # signal that full translation is underway to js
-      td[1].find(VNodeKind.html).setAttr("translation", "processing")
+    assert jobId != "", "trans: timeout requires a jobid."
+    if jobId in translateFuts:
+      # Concurrent requests can wait the same timeout number (for consistency), could be removed
+      # and instead just serve the incomplete results...
+      discard await race(translateFuts[jobId][1], sleepAsync(timeout.milliseconds))
+      translateFuts[jobId][0]
+    else:
+      let td = await translateDom(fc)
+      discard await race(td[2], sleepAsync(timeout.milliseconds))
+      if not td[2].finished():
+        debug "trans: eager translation timed out. (transId: {jobId})"
+        translateFuts[jobId] = (td[1], td[2])
+        # signal that full translation is underway to js
+        td[1].find(VNodeKind.html).setAttr("translation", "processing")
+      td[1]
   else:
+    let td = await translateDom(fc)
     discard await td[2]
-  td[1]
+    td[1]
 
 proc translateLang*(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath = "",
                     ar = emptyArt[], timeout: static[int] = 0,
                         jobId = ""): Future[VNode] {.gcsafe, async.} =
-  let
-    (filedir, relpath) = splitUrlPath(rx, file)
-    t_path = if targetPath == "": filedir / lang.trg / (if relpath ==
-        "": "index.html" else: relpath)
-                 else: targetPath
-  let fc = init(FileContext, tree, filedir, relpath, lang, t_path)
+  when timeout <= 0 or jobId notin translateFuts:
+    let
+      (filedir, relpath) = splitUrlPath(rx, file)
+      t_path = if targetPath == "": filedir / lang.trg / (if relpath ==
+          "": "index.html" else: relpath)
+                  else: targetPath
+    let fc = init(FileContext, tree, filedir, relpath, lang, t_path)
   return withTimeout()
 
 proc translateLang*(fc: FileContext, ar = emptyArt[], timeout: static[int] = 0,

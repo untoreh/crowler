@@ -548,15 +548,17 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
   # don't replicate works on unfinished requests
   if not reqCtx.cached:
     await reqCtx.lock.acquire
-  # defer:
-  #   if reqCtx.lock.locked:
-  #     reqCtx.lock.release
+  defer:
+    checkNil(reqCtx):
+      if reqCtx.lock.locked:
+        reqCtx.lock.release
     # after lock acquisition reqCtx could have been swiched to `cached`
   let rqid = getReqId(relpath)
   reqCtx.rq[rqid] = ctx
-  # defer:
-  #   if rqid in reqCtx.rq:
-  #     reqCtx.rq.del(rqid)
+  defer:
+    checkNil(reqCtx):
+      if rqid in reqCtx.rq:
+        reqCtx.rq.del(rqid)
 
   handleDeletion()
   if not delParam.isnull: # NOTE: this can't be put inside the template...
@@ -578,7 +580,6 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
     case capts:
       of (topic: ""):
         info "router: serving homepage rel: {reqCtx.url.path:.20}, fp: {reqCtx.file:.20}, {reqCtx.key}"
-        echo "HOME: ", reqCacheKey
         handleHomePage(reqCtx.url.path, capts, ctx)
       of (topic: "assets"):
         logall "router: serving assets {relpath:.20}"
@@ -640,13 +641,13 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
     logexc()
     abort("capts")
   finally:
-    reqCtx.lock.release
-    reqCtx.rq.del(rqid)
     debug "router: caching req {cast[uint](reqCtx)}"
 
 proc callback(ctx: RequestFence): Future[HttpResponseRef] {.async.} =
   if likely(not ctx.iserr):
     await handleGet(ctx.get)
+  else:
+    new(result)
 
 template wrapInit(code: untyped): proc() =
   proc task(): void =
@@ -672,6 +673,8 @@ proc runServer(address, callback: auto) =
     doServe(address, callback)
   except:
     logexc()
+    let exc = getCurrentException()
+    echo exc[]
     warn "server: server crashed..."
   # except:
   #   logexc()

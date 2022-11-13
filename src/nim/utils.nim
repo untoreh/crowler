@@ -18,8 +18,8 @@ import os,
        normalize,
        chronos
 
-import std/segfaults
-export segfaults
+# import std/segfaults
+# export segfaults
 
 # import translate_types
 import locktpl
@@ -104,13 +104,15 @@ template logstring(code: untyped): untyped =
 
 const shouldLog = logLevelMacro == lvlAll or (not defined(release))
 
-template logexc*() =
+template logexc*() {.dirty.} =
+  bind shouldLog, logLevelMacro, lvlDebug, loggingLock, logger, log
   when shouldLog and logLevelMacro <= lvlDebug:
-    withLock(loggingLock):
+    block:
       let excref = getCurrentException()
-      if not excref.isnil:
-        let exc = excref[]
-        logger[].log lvlDebug, $exc
+      withLock(loggingLock):
+        if not excref.isnil:
+          let exc = excref[]
+          logger[].log lvlDebug, $exc
 
 template debug*(code: untyped; dofmt = true): untyped =
   when shouldLog and logLevelMacro <= lvlDebug:

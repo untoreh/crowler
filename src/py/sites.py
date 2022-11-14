@@ -584,9 +584,14 @@ class Site:
         assert self.topics_arr is not None
         return int(self.topics_arr[idx, 2]) if len(self.topics_arr) > idx else 0
 
-    def set_topic_pubDate(self, idx):
-        assert self.topics_arr is not None
-        self.topics_arr[idx, 2] = int(time.time())
+    def set_topic_pubDate(self, idx) -> bool:
+        try:
+            self.load_topics()
+            assert self.topics_arr is not None
+            self.topics_arr[idx, Topic.PubDate] = int(time.time())
+            return True
+        except:
+            return False
 
     def iter_published_articles(self, topic: str) -> Iterator[dict]:
         done = self.load_done(topic)

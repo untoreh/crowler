@@ -19,7 +19,7 @@ import
 
 template translateVbtm(node: VNode, q: QueueDom) =
   assert node.kind == VNodeKind.verbatim
-  let tree = node.toXmlNode
+  let tree = ($node).parseHtml() # FIXME: this should be a conversion, but the conversion doesn't preserve whitespace??
   if tree.kind == xnElement and tree.tag == "document":
     tree.tag = "div"
   takeOverFields(tree.toVNode, node)

@@ -9,7 +9,7 @@ import std/[os, times, monotimes, cpuinfo, strformat, strutils, sequtils, json, 
        chronos/apps/http/[httpserver, httpcommon]
 
 {.experimental: "caseStmtMacros".}
-# {.experimental: "strictnotnil".}
+{.experimental: "notnil".}
 
 import
   pyutils,
@@ -61,7 +61,7 @@ type
     respHeaders: HttpTable
     respBody: ref string
     respCode: HttpCode
-    lock: AsyncLock # this is acquired while the rq is being processed
+    lock: AsyncLock not nil # this is acquired while the rq is being processed
     cached: bool    # done processing
   ReqId = Hash # using time as request id means that the request cache should be thread local
 
@@ -83,30 +83,49 @@ proc initThreadBase() {.gcsafe.} =
 
 proc initThreadImpl() {.gcsafe.} =
   if threadInitialized:
+    debug "thread: already initialized"
     return
+  debug "thread: base"
   initThreadBase()
+  debug "thread: sonic"
   initSonic() # Must be on top
+  debug "thread: http"
   initHttp()
+  debug "thread: html"
   initHtml()
+  debug "thread: ldj"
   initLDJ()
+  debug "thread: feed"
   initFeed()
+  debug "thread: img"
   startImgFlow()
+  debug "thread: lsh"
   startLsh()
+  debug "thread: mimes"
   initMimes()
 
+  debug "thread: amp"
   initAmp()
+  debug "thread: opg"
   initOpg()
+  debug "thread: trans"
   initTranslate()
 
+  debug "thread: cache"
   reqCtxCache = initLockLruCache[string, ref ReqContext](32)
   assetsCache = initLockLruCache[int64, string](256)
+  debug "thread: topics"
   waitFor syncTopics()
+  debug "thread: assets"
   loadAssets()
+  debug "thread: ads"
   readAdsConfig()
 
   threadInitialized = true
+  debug "thread: initialization complete."
 
 proc initThread*() =
+  debug "thread: starting"
   try:
     initLock(threadInitLock)
     withLock(threadInitLock):
@@ -237,9 +256,9 @@ template handleAsset() =
           assetsCache[reqCtx.key] = page
           await reqCtx.doReply(page, rqid, )
         else:
-          handle404()
+          handle301()
       except:
-        handle404()
+        handle301()
   else:
     debug "ASSETS CACHING DISABLED"
     try:
@@ -247,7 +266,7 @@ template handleAsset() =
       page = await readFileAsync(reqCtx.file)
       await reqCtx.doReply(page, rqid, )
     except:
-      handle404()
+      handle301()
 
 proc imgFile(reqCtx: ref ReqContext): string {.inline.} =
   result = reqCtx.url.path & "?" & reqCtx.url.query
@@ -324,7 +343,7 @@ template handleTopic(capts: auto, ctx: HttpRequestRef) =
       await reqCtx.doReply(page, rqid, )
     else:
       debug "topic: asset not found at {DATA_ASSETS_PATH / filename:.120}"
-      handle404()
+      handle301()
 
 template handleArticle(capts: auto, ctx: HttpRequestRef) =
   ##
@@ -342,10 +361,10 @@ template handleArticle(capts: auto, ctx: HttpRequestRef) =
       await reqCtx.doReply(page, rqid, )
     except ValueError:
       debug "article: redirecting to topic because page is empty"
-      handle404()
+      handle301()
       # handle301($(WEBSITE_URL / capts.amp / capts.lang / capts.topic))
   else:
-    handle404()
+    handle301()
     # handle301($(WEBSITE_URL / capts.amp / capts.lang))
 
 template handleSearch(ctx: HttpRequestRef) =
@@ -416,6 +435,8 @@ proc reset(reqCtx: ref ReqContext) =
   reqCtx.respBody[].setLen(0)
   reqCtx.respHeaders.reset
   reqCtx.respCode.reset
+  if reqCtx.lock.locked:
+    reqCtx.lock.release
 
 template handleCacheClear() =
   if not cacheParam.isnull:
@@ -479,7 +500,7 @@ template handleParams() =
   let pars = collect(for (k, v) in params.pairs(): ($k, v))
   url.query = encodeQuery(pars)
 
-template handleTranslation() =
+template handleTranslation(): bool =
   if not transParam.isnull:
     try:
       let tree = await processTranslatedPage(capts.lang, capts.amp, relpath = capts.path)
@@ -493,9 +514,12 @@ template handleTranslation() =
         await reqCtx.doReply(rqid)
       else:
         handle502()
-    return
+    true
+  else:
+    false
 
-template handleDeletion() =
+
+template handleDeletion(): bool =
   if not delParam.isnull:
     var capts = uriTuple(reqCtx.url.path)
     if capts.art.len > 0:
@@ -517,12 +541,22 @@ template handleDeletion() =
       deletePage("")
       doReset("/")
     abort("deleted")
+    true
+  else:
+    false
 
 {.pop dirty.}
 
 template isTranslationReq(): bool = transParam != '\0'
 
-proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
+proc handleGet(ctx: HttpRequestRef): Future[HttpResponseRef] {.gcsafe, async.} =
+  defer:
+    result =
+      if not ctx.response.issome:
+        new(HttpResponseRef)
+      else:
+        ctx.response.get
+
   initThread()
   # doassert ctx.parseRequestLine
   var
@@ -538,30 +572,34 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
   let reqCacheKey = $(url.path & url.query & acceptEncodingStr)
   let reqCtx = reqCtxCache.lcheckOrPut(reqCacheKey):
     let reqCtx {.gensym.} = new(ReqContext)
-    reqCtx.lock = newAsyncLock()
+    block:
+      let l = newAsyncLock()
+      checkNil(l):
+        reqCtx.lock = l
     reqCtx.url = move url
     reqCtx.params = params
     reqCtx.file = reqCtx.url.path.fp
     reqCtx.key = hash(reqCtx.file)
+    reqCtx.rq = initTable[ReqId, HttpRequestRef]()
     new(reqCtx.respBody)
     reqCtx
   # don't replicate works on unfinished requests
   if not reqCtx.cached:
     await reqCtx.lock.acquire
   defer:
-    checkNil(reqCtx):
+    if not reqCtx.isnil:
       if reqCtx.lock.locked:
         reqCtx.lock.release
     # after lock acquisition reqCtx could have been swiched to `cached`
   let rqid = getReqId(relpath)
   reqCtx.rq[rqid] = ctx
   defer:
-    checkNil(reqCtx):
+    if not reqCtx.isnil:
       if rqid in reqCtx.rq:
         reqCtx.rq.del(rqid)
 
-  handleDeletion()
-  if not delParam.isnull: # NOTE: this can't be put inside the template...
+  if handleDeletion():
+    # NOTE: this can't be put inside the template...
     return
   handleCacheClear()
 
@@ -576,7 +614,8 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
 
   try:
     let capts = uriTuple(reqCtx.url.path)
-    handleTranslation()
+    if handleTranslation():
+      return
     case capts:
       of (topic: ""):
         info "router: serving homepage rel: {reqCtx.url.path:.20}, fp: {reqCtx.file:.20}, {reqCtx.key}"
@@ -641,13 +680,14 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
     logexc()
     abort("capts")
   finally:
-    debug "router: caching req {cast[uint](reqCtx)}"
+    debug "router: caching req {reqCtx.key}"
 
 proc callback(ctx: RequestFence): Future[HttpResponseRef] {.async.} =
-  if likely(not ctx.iserr):
-    await handleGet(ctx.get)
-  else:
-    new(result)
+  result =
+    if likely(not ctx.iserr):
+      await handleGet(ctx.get)
+    else:
+      new(HttpResponseRef)
 
 template wrapInit(code: untyped): proc() =
   proc task(): void =
@@ -660,26 +700,12 @@ proc doServe*(address: string, callback: HttpProcessCallback) =
   let ta = resolveTAddress(address)[0]
   let srv =
     HttpServerRef.new(ta, callback).get
-  defer:
+  try:
+    srv.start()
+    waitFor srv.join()
+  finally:
     if not srv.isnil:
       waitfor srv.closeWait()
-  srv.start()
-  if not srv.isnil:
-    waitFor srv.join()
-
-proc runServer(address, callback: auto) =
-  try:
-    info "server: starting http server"
-    doServe(address, callback)
-  except:
-    logexc()
-    let exc = getCurrentException()
-    echo exc[]
-    warn "server: server crashed..."
-  # except:
-  #   logexc()
-  #   warn "server: quitting..."
-  #   quitl()
 
 proc startServer*(doclear = false, port = 0, loglevel = "info") =
 
@@ -703,7 +729,13 @@ proc startServer*(doclear = false, port = 0, loglevel = "info") =
 
   while true:
     # Wrap server into a proc, to make sure its memory is freed after crashes
-    runServer(address, callback)
+    try:
+      info "server: starting..."
+      doServe(address, callback)
+    except:
+      # logexc()
+      echo getCurrentException()[]
+      warn "server: crashed..."
     sleep 500
   # httpbeast
   # var settings = initSettings(port = Port(serverPort), bindAddr = "0.0.0.0")

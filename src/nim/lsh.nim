@@ -107,11 +107,12 @@ proc checkAndAddArticle(q: sink ptr LshQuery) {.async.} =
 
 proc asyncLshHandler() {.async.} =
   try:
+    var q: ptr LshQuery
     while true:
-      let q = await lshIn.pop
+      q = await lshIn.pop
       clearFuts(futs)
       checkNil(q):
-        futs.add checkAndAddArticle(q)
+        futs.add checkAndAddArticle(move q)
   except Exception as e: # If we quit we can catch defects too.
     logexc()
     warn "lsh: lsh handler crashed."

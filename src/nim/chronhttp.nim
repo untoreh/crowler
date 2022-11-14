@@ -83,12 +83,13 @@ proc requestHandler() {.async.} =
   # var q: Request
   while true:
     try:
+      var q: ptr Request
       while true:
         # q = await httpIn.popFirstWait()
-        let q = await pop(httpIn)
+        q = await pop(httpIn)
         clearFuts(futs)
         checkNil(q):
-          futs.add requestTask(q)
+          futs.add requestTask(move q)
     except:
       logexc()
       warn "Chronos http handler crashed, restarting."

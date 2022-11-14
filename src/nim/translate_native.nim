@@ -104,11 +104,12 @@ when not defined(translateProc):
 
   proc asyncTransHandler() {.async.} =
     try:
+      var q: ptr Query
       while true:
-        let q = await transIn.pop()
+        q = await transIn.pop()
         checkNil(q)
         clearFuts(futs)
-        futs.add translateTask(q)
+        futs.add translateTask(move q)
     except: # If we quit we can catch defects too.
       logexc()
       warn "trans: trans handler crashed."

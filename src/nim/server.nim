@@ -218,14 +218,14 @@ template handle301*(loc: string = $WEBSITE_URL) =
 template handle404*(loc = $WEBSITE_URL) =
   await reqCtx.doReply(ifHtml(Http404), rqid, scode = Http404)
 
-template handle502*(loc = $WEBSITE_URL) =
-  await reqCtx.doReply(ifHtml(Http502), rqid, scode = Http502)
+template handle503*(loc = $WEBSITE_URL) =
+  await reqCtx.doReply(ifHtml(Http503), rqid, scode = Http503)
 
 template abort(m: string) =
   debug m & ", aborting."
   logexc()
   sdebug "Router failed."
-  handle502()
+  handle503()
   if unlikely(reqCtx.cached):
     reqCtx.cached = false
     reqCtx.respBody[].setLen(0)
@@ -514,7 +514,7 @@ template handleTranslation(): bool =
       if reqCtx.respBody[].len > 0:
         await reqCtx.doReply(rqid)
       else:
-        handle502()
+        handle503()
     true
   else:
     false
@@ -563,6 +563,7 @@ proc handleGet(ctx: HttpRequestRef): Future[HttpResponseRef] {.gcsafe, async.} =
   var
     relpath = ctx.rawPath
     page: string
+    locked: bool
   relpath.removeSuffix('/')
   debug "handling: {relpath:.120}"
 
@@ -587,10 +588,10 @@ proc handleGet(ctx: HttpRequestRef): Future[HttpResponseRef] {.gcsafe, async.} =
   # don't replicate works on unfinished requests
   if not reqCtx.cached:
     await reqCtx.lock.acquire
+    locked = true
   defer:
-    if not reqCtx.isnil:
-      if reqCtx.lock.locked:
-        reqCtx.lock.release
+    if not reqCtx.isnil and locked:
+      reqCtx.lock.release
     # after lock acquisition reqCtx could have been swiched to `cached`
   let rqid = getReqId(relpath)
   reqCtx.rq[rqid] = ctx

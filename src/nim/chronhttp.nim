@@ -12,7 +12,7 @@ const chronHttpDebug {.booldefine.} = false
 template cdebug(code) =
   # Failed requests stacktraces are too noisy
   when chronHttpDebug:
-    debug code
+    code
 
 converter toUtilsMethod(m: httpcore.HttpMethod): httputils.HttpMethod =
   case m:
@@ -41,7 +41,7 @@ converter tobytes(s: string): seq[byte] = cast[seq[byte]](s.toSeq())
 
 const proxiedFlags = {NoVerifyHost, NoVerifyServerName, NewConnectionAlways}
 const sessionFlags = {NoVerifyHost, NoVerifyServerName, NoInet6Resolution}
-proc requestTask(q: ptr Request) {.async.} =
+proc requestTask(q: sink ptr Request) {.async.} =
   var trial = 0
   while trial < q[].retries:
     try:
@@ -74,9 +74,9 @@ proc requestTask(q: ptr Request) {.async.} =
               resp.headers.toList))
         break
     except:
-      logexc()
-      cdebug "cronhttp: request failed"
-      discard
+      cdebug():
+        logexc()
+        debug "cronhttp: request failed"
   httpOut[q] = true
 
 proc requestHandler() {.async.} =
@@ -94,22 +94,22 @@ proc requestHandler() {.async.} =
       warn "Chronos http handler crashed, restarting."
       await sleepAsync(1.seconds)
 
-proc httpGet*(url: string; headers: HttpHeaders = nil;
-              decode = Decode.yes; proxied = false): Future[Response] {.async,
-                  raises: [Defect].} =
-  var q: Request
-  q.id = getMonoTime()
-  q.meth = HttpGet
-  q.url = url.parseUri
-  q.headers =
-    if headers.isnil: newHttpHeaders()
-    else: headers
-  q.decode = decode
-  q.proxied = proxied
-  httpIn.add q.addr
-  discard await httpOut.pop(q.addr)
-  checkNil(q.response):
-    result = q.response[]
+# proc httpGet*(url: string; headers: HttpHeaders = nil;
+#               decode = Decode.yes; proxied = false): Future[Response] {.async,
+#                   raises: [Defect].} =
+#   var q: Request
+#   q.id = getMonoTime()
+#   q.meth = HttpGet
+#   q.url = url.parseUri
+#   q.headers =
+#     if headers.isnil: newHttpHeaders()
+#     else: headers
+#   q.decode = decode
+#   q.proxied = proxied
+#   httpIn.add q.addr
+#   discard await httpOut.pop(q.addr)
+#   checkNil(q.response):
+#     result = q.response[]
 
 proc initHttp*() {.gcsafe.} =
   httptypes.initHttp()

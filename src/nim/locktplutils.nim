@@ -74,16 +74,21 @@ proc add*[T](apc: AsyncPColl[T], v: T) =
       apc.pcoll.add v
 
 proc pop*[T](apc: AsyncPColl[T]): Future[T] {.async.} =
-  let fut = newFuture[T]("AsyncPColl.pop")
+  # var fut = newFuture[T]("AsyncPColl.pop")
+  var popped = false
   withLock(apc.lock):
-    var v: T
-    if apc.pcoll.pop(v):
-      fut.complete(v)
-    else:
-      apc.waiters.add fut.unsafeAddr
-  while not fut.finished():
-    sleep()
-  return fut.read()
+    popped = apc.pcoll.pop(result)
+  if not popped:
+    var fut = newFuture[T]("AsyncPColl.pop")
+    withLock(apc.lock):
+      apc.waiters.add fut.addr
+    result = await fut
+    # var v: T
+    # if apc.pcoll.pop(v):
+    #   fut.complete(move v)
+    # else:
+    #   apc.waiters.add fut.addr
+  # return fut
 
 proc delete*[T](apc: AsyncPColl[T]) =
   apc.waiters.delete()
@@ -134,22 +139,16 @@ proc newAsyncTable*[K, V](): AsyncTable[K, V] =
   result.waiters = initTable[K, seq[ptr Future[V]]]()
 
 proc pop*[K, V](t: AsyncTable[K, V], k: K): Future[V] {.async.} =
-  var fut = newFuture[V]("AsyncTable.getWait")
+  var popped = false
   withLock(t.lock):
     if k in t.table:
-      var v: V
-      doassert t.table.pop(k, v)
-      fut.complete(v)
-    else:
-      if k notin t.waiters:
-        t.waiters[k] = newSeq[ptr Future[V]]()
-      t.waiters[k].add fut.addr
-  while not fut.finished:
-    sleep()
-  if fut.completed:
-    return fut.read()
-  else:
-    raise fut.readError()
+      popped = t.table.pop(k, result)
+  if not popped:
+    if k notin t.waiters:
+      t.waiters[k] = newSeq[ptr Future[V]]()
+    var fut = newFuture[V]("AsyncTable.pop")
+    t.waiters[k].add fut.addr
+    result = await fut
 
 proc put*[K, V](t: AsyncTable[K, V], k: K, v: V) {.async.} =
   withLock(t.lock):

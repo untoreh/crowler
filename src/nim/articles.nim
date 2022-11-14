@@ -145,7 +145,7 @@ proc prevPageNum*(topic: string, pn: int): Future[int] {.async.} =
 
 proc getLastArticles*(topic: string, n = 1): Future[seq[Article]] {.async.} =
   ## Return the latest articles, from newest to oldest (index 0 is newest)
-  if await topic.isEmptyTopic:
+  if await topic.isEmptyTopicAsync:
     return
   var pagenum = await lastPageNum(topic)
   while pagenum >= 0:

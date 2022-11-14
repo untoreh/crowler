@@ -76,7 +76,7 @@ proc setupTranslate*() =
     newAsyncTable[when not defined(translateProc): ptr Query else: int, bool]()
 
 when not defined(translateProc):
-  proc translateTask(q: ptr Query) {.async.} =
+  proc translateTask(q: sink ptr Query) {.async.} =
     var
       tries: int
       translated: string
@@ -128,12 +128,12 @@ when not defined(translateProc):
     q.src = src
     q.trg = trg
     q.text = text
-    new(q.trans)
+    q.trans = result.addr
     transIn.add q.addr
     discard await transOut.pop(q.addr)
-    result =
-      if q.trans.isnil: ""
-      else: q.trans[]
+    # result =
+    #   if q.trans.isnil: ""
+    #   else: q.trans[]
 
 when isMainModule:
   proc test() {.async.} =

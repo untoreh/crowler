@@ -215,7 +215,7 @@ proc topicsList*(ucls: string; icls: string; small: static[
   for i in 0..<topics.len:
     withPyLock:
       (topic_slug, topic_name) = ($topics[i][0], $topics[i][1])
-    isEmpty = await isEmptyTopic(topic_slug)
+      isEmpty = isEmptyTopic(topic_slug)
     if isEmpty:
       continue
     let liNode = buildHtml(li(class = fmt"{icls}")):

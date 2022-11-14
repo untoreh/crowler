@@ -89,7 +89,7 @@ proc addArticle*(lsh: PublishedArticles, content: ptr string): Future[bool] {.as
   return await lshOut.pop(q.addr)
 
 # {.experimental: "strictnotnil".}
-proc checkAndAddArticle(q: ptr LshQuery) {.async.} =
+proc checkAndAddArticle(q: sink ptr LshQuery) {.async.} =
   try:
     checkNil(q.lsh)
     checkNil(q.content)

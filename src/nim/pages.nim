@@ -188,11 +188,9 @@ proc processTranslatedPage*(lang: string, amp: string, relpath: string): Future[
   if jobId notin translateFuts:
     raise newException(ValueError, fmt"Translation was not scheduled. (transId: {jobId})")
   let (node, fut) = translateFuts[jobId]
-  echo "pages.nim:193"
   discard await fut
   # signal that full translation is complete to js
   node.find(VNodeKind.html).setAttr("translation", "complete")
-  echo node
   translateFuts.del(jobId)
   result =
     if amp != "": await node.ampPage

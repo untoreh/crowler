@@ -57,9 +57,14 @@ proc loadTopicsIndex*(): PyObject =
 pygil.globalAcquire()
 pyObjPtrExp((isEmptyTopicPy, site[].getAttr("is_empty")))
 pygil.release()
-proc isEmptyTopic*(topic: string): Future[bool] {.async, gcsafe.} =
+
+proc isEmptyTopicAsync*(topic: string): Future[bool] {.async, gcsafe.} =
   withPyLock:
     result = isEmptyTopicPy[](topic).to(bool)
+
+proc isEmptyTopic*(topic: string): bool {.inline.} =
+  {.locks: [pyGil].}:
+    isEmptyTopicPy[](topic).to(bool)
 
 type TopicTuple* = (string, string, int)
 proc loadTopics*(force = false): Future[PySequence[TopicTuple]] {.async.} =
@@ -72,12 +77,10 @@ proc loadTopics*(n: int; ): Future[seq[PyObject]] {.async.} =
   withPyLock:
     nTopics = tp.len
   template addTopic() =
-    var topic: string
-    var t: PyObject
-    withPyLock:
+    let
       t = tp[c]
       topic = t[0].to(string)
-    if not (await topic.isEmptyTopic()):
+    if not isEmptyTopic(topic):
       clt += 1
       result.add t
     if clt >= max: # reached the requested number of topics
@@ -85,12 +88,14 @@ proc loadTopics*(n: int; ): Future[seq[PyObject]] {.async.} =
   if n >= 0:
     var c = 0
     max = n
-    for c in countUp(0, nTopics - 1):
-      addTopic()
+    withPyLock:
+      for c in countUp(0, nTopics - 1):
+        addTopic()
   else:
     max = abs(n)
-    for c in countDown(nTopics - 1, 0):
-      addTopic()
+    withPyLock:
+      for c in countDown(nTopics - 1, 0):
+        addTopic()
 
 proc topicDesc*(topic: string): Future[string] {.async.} =
   withPyLock:
@@ -122,13 +127,13 @@ proc nextTopic*(): Future[string] {.async.} =
 proc topicPubdate*(idx: int): Future[Time] {.async.} =
   withPyLock:
     return site[].get_topic_pubDate(idx).to(int).fromUnix
-proc topicPubdate*(): Future[Time] {.async.} = return await topicPubdate(max(0,
-    topicIdx - 1))
-proc updateTopicPubdate*(idx: int) {.async.} =
+proc topicPubdate*(): Future[Time] {.async.} =
+  return await topicPubdate(max(0, topicIdx - 1))
+proc updateTopicPubdate*(idx: int): Future[bool] {.async.} =
   withPyLock:
-    discard site[].set_topic_pubDate(idx)
-proc updateTopicPubdate*() {.async.} = await updateTopicPubdate(max(0,
-    topicIdx - 1))
+    result = site[].set_topic_pubDate(idx).to(bool)
+proc updateTopicPubdate*() {.async.} =
+  doassert await updateTopicPubdate(max(0, topicIdx - 1))
 
 import std/wrapnils
 proc getTopicGroupImpl(topic: string): PyObject =
@@ -266,7 +271,8 @@ proc syncTopics*(force = false) {.gcsafe, async.} =
         discard pyTopicsMod[].new_topic()
         pygil.release()
         try: pytopics = await loadTopics()
-        finally: await pygil.acquire()
+        finally:
+          await pygil.acquire()
         nTopics = pytopics.len
         assert nTopics > 0
 

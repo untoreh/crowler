@@ -201,18 +201,19 @@ proc doReply(reqCtx: ref ReqContext, body: string, rqid: ReqId, scode = Http200,
 proc doReply(reqCtx: ref ReqContext, rqid: ReqId) {.async.} = setResponse()
 
 {.push dirty.}
+
+const redirectJs = fmt"""<script>window.location.replace("{WEBSITE_URL}");</script>"""
+template ifHtml(els): string =
+  if reqCtx.mime == "text/html": redirectJs
+  else: $els
+
 template handle301*(loc: string = $WEBSITE_URL) =
   let headers = init(HttpTable, [($hloc, loc)])
   # headers[$hloc] = loc
   block:
     logexc()
     debug "server: redirecting."
-    await reqCtx.doReply($Http301, rqid, scode = Http301, headers = headers)
-
-const redirectJs = fmt"""<script>window.location.replace("{WEBSITE_URL}");</script>"""
-template ifHtml(els): string =
-  if reqCtx.mime == "text/html": redirectJs
-  else: $els
+    await reqCtx.doReply(ifHtml(Http301), rqid, scode = Http301, headers = headers)
 
 template handle404*(loc = $WEBSITE_URL) =
   await reqCtx.doReply(ifHtml(Http404), rqid, scode = Http404)

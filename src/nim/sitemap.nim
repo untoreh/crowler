@@ -201,7 +201,7 @@ proc fetchSiteMap*(topic: string, _: bool): Future[string] {.async.} =
 template fetchSiteMap*(topic: string, page: string): untyped = fetchSiteMap(topic, page.parseInt)
 proc fetchSiteMap*(topic: string, page: int): Future[string] {.async.} =
   checkTrue topic != "" and page >= 0, "topic and page must be valid"
-  return pageCache[].lgetOrPut(topic.sitemapKey):
+  return pageCache[].lgetOrPut(sitemapKey(topic, page)):
       let sm = (await buildPageSitemap(topic, page)).toXmlString
       checkSitemapSize sm
 

@@ -82,9 +82,12 @@ proc requestTask(q: sink ptr Request) {.async.} =
         debug "cronhttp: request failed"
     finally:
       var futs: seq[Future[void]]
-      futs.add req.closeWait()
-      futs.add resp.closeWait()
-      futs.add sess.closeWait()
+      if not req.isnil:
+        futs.add req.closeWait()
+      if not resp.isnil:
+        futs.add resp.closeWait()
+      if not sess.isnil:
+        futs.add sess.closeWait()
       cleanup.add allFutures(futs)
   httpOut[q] = true
   await allFutures(cleanup)

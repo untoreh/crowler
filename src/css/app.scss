@@ -594,6 +594,7 @@ form.search {
   font-style: italic;
   margin-top: 2rem;
   position: relative;
+  min-height: 3.5rem;
   &:before {
     content: "Related Articles";
     position: absolute;

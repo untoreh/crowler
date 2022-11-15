@@ -374,7 +374,7 @@ header .page {
   img {
     max-width: 20rem;
     min-width: 8rem;
-    object-fit: fill;
+    object-fit: cover;
     border-radius: 0.75rem;
     min-height: 8rem;
     background: url("https://api.iconify.design/bx/image.svg") no-repeat center
@@ -610,7 +610,7 @@ form.search {
     & img {
       border-style: inset;
       border-radius: 2px;
-      object-fit: fill;
+      object-fit: cover;
       width: calc(100% - 6px);
       height: 100%;
     }

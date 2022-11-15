@@ -43,25 +43,28 @@ const proxiedFlags = {NoVerifyHost, NoVerifyServerName, NewConnectionAlways}
 const sessionFlags = {NoVerifyHost, NoVerifyServerName, NoInet6Resolution}
 proc requestTask(q: sink ptr Request) {.async.} =
   var trial = 0
+  var
+    sess: HttpSessionRef
+    req: HttpClientRequestRef
+    resp: HttpClientResponseRef
+    cleanup: seq[Future[void]]
   while trial < q[].retries:
     try:
       trial.inc
-      var resp: HttpClientResponseRef
-      let
-        sess = new(HttpSessionRef,
-                  proxyTimeout = 10.seconds.div(3),
-                  headersTimeout = 10.seconds.div(2),
-                  connectTimeout = 10.seconds,
-                  proxy = if q[].proxied: selectProxy(trial) else: "",
-                  flags = if q[].proxied: proxiedFlags else: sessionFlags
+      sess = new(HttpSessionRef,
+                proxyTimeout = 10.seconds.div(3),
+                headersTimeout = 10.seconds.div(2),
+                connectTimeout = 10.seconds,
+                proxy = if q[].proxied: selectProxy(trial) else: "",
+                flags = if q[].proxied: proxiedFlags else: sessionFlags
+      )
+      req = new(HttpClientRequestRef,
+                sess,
+                sess.getAddress(q[].url).get,
+                q[].meth,
+                headers = q[].headers.toHeaderTuple,
+                body = q[].body.tobytes,
         )
-        req = new(HttpClientRequestRef,
-                  sess,
-                  sess.getAddress(q[].url).get,
-                  q[].meth,
-                  headers = q[].headers.toHeaderTuple,
-                  body = q[].body.tobytes,
-          )
       resp = await req.fetch(followRedirects = q[].redir, raw = true)
       checkNil(resp):
         defer:
@@ -77,7 +80,14 @@ proc requestTask(q: sink ptr Request) {.async.} =
       cdebug():
         logexc()
         debug "cronhttp: request failed"
+    finally:
+      var futs: seq[Future[void]]
+      futs.add req.closeWait()
+      futs.add resp.closeWait()
+      futs.add sess.closeWait()
+      cleanup.add allFutures(futs)
   httpOut[q] = true
+  await allFutures(cleanup)
 
 proc requestHandler() {.async.} =
   # var q: Request

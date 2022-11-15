@@ -557,6 +557,11 @@ proc handleGet(ctx: HttpRequestRef): Future[HttpResponseRef] {.gcsafe, async.} =
         new(HttpResponseRef)
       else:
         ctx.response.get
+    var futs: seq[Future[void]]
+    futs.add result.connection.closeWait()
+    futs.add ctx.connection.closeWait()
+    futs.add ctx.closeWait()
+    await allFutures(futs)
 
   initThread()
   # doassert ctx.parseRequestLine

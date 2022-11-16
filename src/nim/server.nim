@@ -521,7 +521,11 @@ template handleTranslation(): bool =
 
 
 template handleDeletion(): bool =
+  var ret = false
   if not delParam.isnull:
+    defer:
+      ret = true
+      abort("deleted")
     var capts = uriTuple(reqCtx.url.path)
     if capts.art.len > 0:
       await deleteArt(capts)
@@ -532,7 +536,10 @@ template handleDeletion(): bool =
         for enc in ["gzip", "deflate", "gzip, deflate"]:
           let rck = pref & enc
           if rck in reqCtxCache:
-            withAsyncLock(reqCtxCache[rck].lock):
+            if reqCtxCache[rck].isnil:
+              reqCtxCache.del(rck)
+            else:
+              await reqCtxCache[rck].lock.acquire()
               reqCtxCache[rck].reset()
       # Delete main topic page
       capts.art = ""
@@ -541,26 +548,25 @@ template handleDeletion(): bool =
       # delete homepage
       deletePage("")
       doReset("/")
-    abort("deleted")
-    true
-  else:
-    false
+  ret
 
 {.pop dirty.}
 
 template isTranslationReq(): bool = transParam != '\0'
 
-proc handleGet(ctx: HttpRequestRef): Future[HttpResponseRef] {.gcsafe, async.} =
+proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
   defer:
-    result =
-      if not ctx.response.issome:
-        new(HttpResponseRef)
-      else:
-        ctx.response.get
+    # FIXME: is this cleanup required?
     var futs: seq[Future[void]]
-    futs.add result.connection.closeWait()
-    futs.add ctx.connection.closeWait()
-    futs.add ctx.closeWait()
+    let resp =
+      if ctx.response.issome: ctx.response.get
+      else: nil
+    if not resp.isnil and not resp.connection.isnil:
+      futs.add resp.connection.closeWait()
+    if not ctx.isnil:
+      if not ctx.connection.isnil:
+        futs.add ctx.connection.closeWait()
+      futs.add ctx.closeWait()
     await allFutures(futs)
 
   initThread()
@@ -568,7 +574,7 @@ proc handleGet(ctx: HttpRequestRef): Future[HttpResponseRef] {.gcsafe, async.} =
   var
     relpath = ctx.rawPath
     page: string
-    locked: bool
+    rqlocked: bool
   relpath.removeSuffix('/')
   debug "handling: {relpath:.120}"
 
@@ -593,9 +599,9 @@ proc handleGet(ctx: HttpRequestRef): Future[HttpResponseRef] {.gcsafe, async.} =
   # don't replicate works on unfinished requests
   if not reqCtx.cached:
     await reqCtx.lock.acquire
-    locked = true
+    rqlocked = true
   defer:
-    if not reqCtx.isnil and locked:
+    if not reqCtx.isnil and rqlocked and reqCtx.lock.locked: # `handleDeletion` could have cleared the lock
       reqCtx.lock.release
     # after lock acquisition reqCtx could have been swiched to `cached`
   let rqid = getReqId(relpath)
@@ -693,8 +699,18 @@ proc callback(ctx: RequestFence): Future[HttpResponseRef] {.async.} =
   result =
     if likely(not ctx.iserr):
       await handleGet(ctx.get)
+      if ctx.get.response.issome:
+        let resp = ctx.get.response.get
+        if not resp.isnil:
+          resp
+        else:
+          new(HttpResponseRef)
+      else:
+        new(HttpResponseRef)
     else:
       new(HttpResponseRef)
+  if not result.isnil and result.state == Empty:
+    result.keepalive = false
 
 template wrapInit(code: untyped): proc() =
   proc task(): void =
@@ -710,6 +726,8 @@ proc doServe*(address: string, callback: HttpProcessCallback) =
   try:
     srv.start()
     waitFor srv.join()
+  except:
+    logexc()
   finally:
     if not srv.isnil:
       waitfor srv.closeWait()
@@ -736,13 +754,9 @@ proc startServer*(doclear = false, port = 0, loglevel = "info") =
 
   while true:
     # Wrap server into a proc, to make sure its memory is freed after crashes
-    try:
-      info "server: starting..."
-      doServe(address, callback)
-    except:
-      # logexc()
-      echo getCurrentException()[]
-      warn "server: crashed..."
+    info "server: starting..."
+    doServe(address, callback)
+    warn "server: closed..."
     sleep 500
   # httpbeast
   # var settings = initSettings(port = Port(serverPort), bindAddr = "0.0.0.0")

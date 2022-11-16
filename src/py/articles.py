@@ -74,10 +74,10 @@ def purge_bad_articles(s: Site):
         done = s.load_done(topic)
         for n in range(len(done)):
             page_arts = done[n]
-            for n, a in enumerate(page_arts):
+            for i, a in enumerate(page_arts):
                 if a and len(a.get("content", "")) > 0:
                     if isnoise(a["content"]):
-                        page_arts[n] = None
+                        page_arts[i] = None
 
     for topic in s.load_topics()[1].keys():
         clear_topic(topic)

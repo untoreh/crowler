@@ -97,7 +97,7 @@ const entities* = withAmpersand [
     ("rfloor", 0x230B), ("lang", 0x2329), ("rang", 0x232A),
     ("loz", 0x25CA), ("spades", 0x2660), ("clubs", 0x2663),
     ("hearts", 0x2665), ("diams", 0x2666), ("amp", 0x0026),
-    ("apos", 0x0027), ("quot", 0x0022)]
+    ("apos", 0x0027), ("quot", 0x0022), ("gt", 0x003E), ("lt", 0x003C)]
 
 proc entToUtf8*(str: string): string =
   return str.multireplace(entities)

@@ -110,7 +110,7 @@ proc feedKey*(topic: string): string = topic & "-feed.xml"
 proc update*(tfeed: Feed, topic: string, newArts: seq[Article], dowrite = false) =
     ## Load existing feed for given topic and update the feed (in-memory)
     ## with the new articles provided, it does not write to storage.
-    assert not tfeed.isnil
+    checkNil tfeed
     let
         chann = tfeed.findel("channel")
         itms = chann.drainChannel

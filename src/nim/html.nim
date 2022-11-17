@@ -144,7 +144,7 @@ proc buildHead*(path: string; description = ""; topic = "";
     link(rel="apple-touch-icon", sizes="180x180", href = APPLE_PNG180_URL)
     # https://stackoverflow.com/questions/21147149/flash-of-unstyled-content-fouc-in-firefox-only-is-ff-slow-renderer
     verbatim("<script>const _ = null</script>")
-    for ad in insertAd(ADS_HEAD): ad
+    for ad in adsFrom(ADS_HEAD): ad
 
 
 proc buildTrending(): VNode =
@@ -332,7 +332,7 @@ proc buildFooter*(topic = "", pagenum = ""): Future[VNode] {.async.} =
         adLink AdLinkType.footer
         a(href = "/terms-of-service"):
           text("Terms of Service")
-      for ad in insertAd(ADS_FOOTER): ad
+      for ad in adsFrom(ADS_FOOTER): ad
       tdiv(class = "footer-copyright"):
         text "Except where otherwise noted, this website is licensed under a "
         a(rel = "license", href = "http://creativecommons.org/licenses/by/3.0/deed.en_US"):
@@ -374,21 +374,21 @@ proc postFooter(pubdate: Time): VNode =
 
 proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): Future[
     VNode] {.async.} =
-  assert not a.isnil
+  checkNil(a)
   let crumbs = toUpper(&"/ {a.topic} / Page-{a.page} /")
   let topicUri = parseUri("/" & a.topic)
   let related = await buildRelated(a)
   return buildHtml(body(class = "", topic = (a.topic), style = preline_style)):
     await buildMenu(crumbs, topicUri, a)
     await buildMenuSmall(crumbs, topicUri, a)
-    for ad in insertAd(ADS_HEADER): ad
     main(class = "mdc-top-app-bar--fixed-adjust"):
+      for ad in adsFrom(ADS_HEADER): ad
       await postTitle(a)
       await postContent(a.content)
       postFooter(a.pubdate)
       hr()
       related
-      for ad in insertAd(ADS_SIDEBAR): ad
+      for ad in adsFrom(ADS_SIDEBAR): ad
     await buildFooter(a.topic, a.page.intToStr)
 
 proc pageTitle*(title: string; slug: string): VNode =
@@ -525,14 +525,14 @@ proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode =
     body(class = "", topic = topic, style = preline_style):
       await buildMenu(crumbs, topicUri, path)
       await buildMenuSmall(crumbs, topicUri, path)
-      for ad in insertAd(ADS_HEADER): ad
       main(class = "mdc-top-app-bar--fixed-adjust"):
+        for ad in adsFrom(ADS_HEADER): ad
         if title != "":
           pageTitle(title, slug)
         content
         if not pagefooter.isNil():
           pageFooter
-        for ad in insertAd(ADS_SIDEBAR): ad
+        for ad in adsFrom(ADS_SIDEBAR): ad
       await buildFooter(topic, slug)
 
 import macros

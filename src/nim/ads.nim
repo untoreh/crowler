@@ -1,5 +1,5 @@
 import karax/[vdom, karaxdsl], strformat, locks, sugar, strutils, uri, parsexml,
-    streams, std/algorithm
+    streams, std/algorithm, macros
 import macros, chronos, chronos/asyncsync, htmlparser, xmltree
 import os
 import sets
@@ -10,10 +10,6 @@ import html_entities
 import html_misc
 
 # NOTE: the space ' ' inside the `<script> </script>` tag is IMPORTANT to prevent `</>` tag collapsing, since it breaks html
-const
-  ADSENSE_SRC* = """<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7303639355435813" crossorigin="anonymous"> </script>"""
-  ADSENSE_AMP_HEAD* = """<script async custom-element="amp-auto-ads" src="https://cdn.ampproject.org/v0/amp-auto-ads-0.1.js"> </script>"""
-  ADSENSE_AMP_BODY* = """<amp-auto-ads type="adsense" data-ad-client="ca-pub-7303639355435813"> </amp-auto-ads>"""
 
 let
   ADS_HEAD* = create(XmlNode)
@@ -33,6 +29,17 @@ var adsHeadLock, adsHeaderLock, adsSidebarLock, adsFooterLock,
     adsSeparatorLock: Lock
 
 var adsLinksCount, adsLinksIdx, adsFooterLinksCount, adsFooterLinksIdx: int
+
+macro loadIfExists(basename: static[string], varname) =
+  let path = DATA_ADS_PATH / basename
+  quote do:
+    when fileExists(`path`):
+      const `varname`* = readFile(`path`)
+
+when defined(adsense):
+  loadIfExists("adsense.html", ADSENSE_SRC)
+  loadIfExists("amphead.html", ADSENSE_AMP_HEAD)
+  loadIfExists("ampbody.html", ADSENSE_AMP_BODY)
 
 template initLinks(name, data) =
   if fileExists(`name File`):
@@ -150,7 +157,11 @@ proc insertAd*(name: ptr XmlNode): seq[VNode] {.gcsafe.} =
       if el.kind == xnElement:
         result.add verbatim(el.withClosingHtmlTag)
   else:
-    debug "ads: xmlnode is nil."
+    logall "ads: xmlnode is nil."
+
+iterator adsFrom*(loc: ptr XmlNode): VNode =
+  for el in loc[]:
+    yield verbatim(($el).entToUtf8)
 
 proc replaceLinks*(str: string, chunksize = 250): Future[string] {.async.} =
   ## chunksize is the number of chars between links

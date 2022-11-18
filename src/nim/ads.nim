@@ -161,7 +161,7 @@ proc insertAd*(name: ptr XmlNode): seq[VNode] {.gcsafe.} =
 
 iterator adsFrom*(loc: ptr XmlNode): VNode =
   for el in loc[]:
-    yield verbatim(($el).entToUtf8)
+    yield el.withClosingHtmlTag.verbatim
 
 proc replaceLinks*(str: string, chunksize = 250): Future[string] {.async.} =
   ## chunksize is the number of chars between links

@@ -6,7 +6,8 @@ import std/[os, times, monotimes, cpuinfo, strformat, strutils, sequtils, json, 
        zip/zlib,
        chronos,
        chronos_patches,
-       chronos/apps/http/[httpserver, httpcommon]
+       chronos/apps/http/[httpserver, httpcommon],
+       httputils
 
 {.experimental: "caseStmtMacros".}
 {.experimental: "notnil".}
@@ -696,21 +697,10 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
     debug "router: caching req {reqCtx.key}"
 
 proc callback(ctx: RequestFence): Future[HttpResponseRef] {.async.} =
-  result =
-    if likely(not ctx.iserr):
-      await handleGet(ctx.get)
-      if ctx.get.response.issome:
-        let resp = ctx.get.response.get
-        if not resp.isnil:
-          resp
-        else:
-          new(HttpResponseRef)
-      else:
-        new(HttpResponseRef)
-    else:
-      new(HttpResponseRef)
-  if not result.isnil and result.state == Empty:
-    result.keepalive = false
+  if likely(not ctx.iserr) and ctx.get.meth == MethodGet:
+    await handleGet(ctx.get)
+  # NOTE: we don't return an actual `HttpResponseRef` since the response is sent by `doReply`
+  # Returning a response here will cause the server to eventually hang
 
 template wrapInit(code: untyped): proc() =
   proc task(): void =

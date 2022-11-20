@@ -88,6 +88,9 @@ body {
     background: var(--surface);
     border-color: var(--light-secondary);
   }
+  .entry .image-link img {
+    background-color: var(--light-background, white);
+  }
   // .search-suggest {
   //   background: var(--text-secondary-on-dark);
   //   color: var(--text-primary-on-dark);

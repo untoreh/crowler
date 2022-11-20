@@ -96,21 +96,15 @@ def fromsources(sources, topic, site: Site, n=cfg.POOL_SIZE):
     return (ARTICLES[site.name], FEEDS[site.name])
 
 
-def fromfeeds(sources, site: Site, n=cfg.POOL_SIZE) -> List:
+def fromfeeds(sources, topic, site: Site, n=cfg.POOL_SIZE) -> List:
     """Create list of feeds from a subset of links found in the source file, according to SRC_SAMPLE_SIZE."""
     global ARTICLES
     sched.initPool()
     ARTICLES[site.name] = []
     jobs = []
-    for entry in sources:
-        try:
-            url = entry.get("url")
-            topic = entry.get("topic")
-        except:
-            import traceback
-            traceback.print_exc()
-            print("feed source error: ", entry)
-        if not url:
+    url = ""
+    for url in sources:
+        if not url or not isinstance(url, str):
             continue
         logger.info("Fetching articles from %s", url)
         j = sched.apply(parsearticle, url, topic, site)

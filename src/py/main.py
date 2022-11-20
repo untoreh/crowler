@@ -183,7 +183,7 @@ def run_feed_job(site: Site, topic):
         logger.warning("Couldn't find feeds for topic %s@%s", topic, site.name)
         return None
     logger.info("Search %d feeds for articles...", len(feed_links))
-    articles = cnt.fromfeeds(feed_links, site)
+    articles = cnt.fromfeeds(feed_links, topic, site)
     if len(articles):
         logger.info("%s@%s: Saving %d articles.", topic, site.name, len(articles))
         ut.save_zarr(articles, k=ut.ZarrKey.articles, root=site.topic_dir(topic))

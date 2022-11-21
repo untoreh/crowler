@@ -112,10 +112,15 @@ function toFlagLang(iso2) {
   }
 }
 
+function getMeta(name) {
+  let m = $(`head meta[name=${name}]`)
+  if (m) { return m.getAttribute("content") } else { return "" }
+}
+
 export function ensureTranslation() {
   let capts = uriTuple()
-  let orig = $("html").getAttribute("srclang")
-  if (orig && $("html").getAttribute("translation") == "processing") {
+  let orig = getMeta("srclang")
+  if (orig && getMeta("translation") == "processing") {
     $("body").appendChild(trBox)
     srcLangIcon.classList.add("flag-" + toFlagLang(orig))
     if (toFlagLang(capts.lang) == null) {

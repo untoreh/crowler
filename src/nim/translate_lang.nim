@@ -1,6 +1,6 @@
 import
   os,
-  karax/vdom,
+  karax/[vdom, karaxdsl],
   strutils,
   xmltree,
   htmlparser,
@@ -56,9 +56,10 @@ proc translateDom(fc: FileContext, hostname = WEBSITE_DOMAIN): Future[(
     case node.kind:
       of vdom.VNodeKind.html:
         node.setAttr("lang", pair.trg)
-        node.setAttr("srclang", pair.src)
         if pair.trg in RTL_LANGS:
           node.setAttr("dir", "rtl")
+      of vdom.VNodeKind.head:
+        node.add buildHtml(meta(name = "srclang", content = pair.src))
         break
       else: continue
   translateIter(otree, vbtm = true)
@@ -76,7 +77,8 @@ template withTimeout(): VNode =
     if jobId in translateFuts:
       # Concurrent requests can wait the same timeout number (for consistency), could be removed
       # and instead just serve the incomplete results...
-      discard await race(translateFuts[jobId][1], sleepAsync(timeout.milliseconds))
+      discard await race(translateFuts[jobId][1], sleepAsync(
+          timeout.milliseconds))
       translateFuts[jobId][0]
     else:
       let td = await translateDom(fc)
@@ -85,7 +87,8 @@ template withTimeout(): VNode =
         debug "trans: eager translation timed out. (transId: {jobId})"
         translateFuts[jobId] = (td[1], td[2])
         # signal that full translation is underway to js
-        td[1].find(VNodeKind.html).setAttr("translation", "processing")
+        td[1].find(VNodeKind.head).add buildHtml(meta(name = "translation",
+            content = "processing"))
       td[1]
   else:
     let td = await translateDom(fc)

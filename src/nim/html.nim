@@ -117,7 +117,12 @@ proc buildHead*(path: string; description = ""; topic = "";
     for l in sitemapLinks(topic, ar): l
     ampLink(path)
     pwaLink()
-    for t in opgPage(ar): t
+    if not ar.isEmpty:
+      for t in opgPage(ar): t.toVNode
+    else:
+      for t in opgPage(something(topic, WEBSITE_TITLE),
+                       something(description, WEBSITE_DESCRIPTION),
+                       path): t.toVNode
     for n in langLinksNodes(canon, rel=true): n
 
     # LDJ

@@ -107,8 +107,6 @@ proc initThreadImpl() {.gcsafe.} =
 
   debug "thread: amp"
   initAmp()
-  debug "thread: opg"
-  initOpg()
   debug "thread: trans"
   initTranslate()
 

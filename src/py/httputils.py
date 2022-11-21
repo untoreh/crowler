@@ -85,7 +85,7 @@ def fetch_data(
     if fromcache:
         k = Path(url)
         if k in LRU_CACHE:
-            data = LRU_CACHE[k]
+            data = str(LRU_CACHE[k])
         else:
             data = fetch(url, *args, **kwargs, depth=depth, decode=decode)
             save_data(k, data)

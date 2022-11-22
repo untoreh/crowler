@@ -157,13 +157,13 @@ template setNone(id, val) =
   if id.isNone:
     id.ok(val)
 
-template setResponse() =
-  reqCtx.rq[rqid].response.setNone:
-    await reqCtx.rq[rqid].respond(
-        code = reqCtx.respCode,
-        content = reqCtx.respBody[],
-        headers = reqCtx.respHeaders,
-      )
+template respond() =
+
+  discard await reqCtx.rq[rqid].respond(
+      code = reqCtx.respCode,
+      content = reqCtx.respBody[],
+      headers = reqCtx.respHeaders,
+    )
 
 proc doReply(reqCtx: ref ReqContext, body: string, rqid: ReqId, scode = Http200,
              headers: HttpTable = default(HttpTable)) {.async.} =
@@ -191,13 +191,13 @@ proc doReply(reqCtx: ref ReqContext, body: string, rqid: ReqId, scode = Http200,
     reqCtx.respCode = scode
     # assert len(respbody) > 0, "reply: Can't send empty body!"
     debug "reply: sending response {reqCtx.key}"
-    setResponse()
+    respond()
     sdebug "reply: sent: {size}"
   except:
     logexc()
     sdebug "reply: failed."
 
-proc doReply(reqCtx: ref ReqContext, rqid: ReqId) {.async.} = setResponse()
+proc doReply(reqCtx: ref ReqContext, rqid: ReqId) {.async.} = respond()
 
 {.push dirty.}
 
@@ -695,12 +695,17 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
     debug "router: caching req {reqCtx.key}"
 
 proc callback(ctx: RequestFence): Future[HttpResponseRef] {.async.} =
-  if likely(not ctx.iserr) and ctx.get.meth == MethodGet:
-    await handleGet(ctx.get)
-    if ctx.get.response.issome:
-      await ctx.get.response.get.connection.closeWait()
-  # NOTE: we don't return an actual `HttpResponseRef` since the response is sent by `doReply`
-  # Returning a response here will cause the server to eventually hang
+  if likely(not ctx.iserr):
+    let rq = ctx.get
+    if rq.meth == MethodGet:
+      await handleGet(rq)
+      if rq.response.issome:
+          # Prevent connections from being kept alive to reduce load
+          let resp = rq.getResponse()
+          resp.state = HttpResponseState.Empty # HACK: can't set keepalive if state is not empty
+          resp.keepalive = false
+          resp.state = HttpResponseState.Finished
+          return resp
 
 template wrapInit(code: untyped): proc() =
   proc task(): void =

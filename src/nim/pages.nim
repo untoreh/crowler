@@ -190,10 +190,7 @@ proc processTranslatedPage*(lang: string, amp: string, relpath: string): Future[
   let (node, fut) = translateFuts[jobId]
   discard await fut
   # signal that full translation is complete to js
-  for m in node.find(VNodeKind.meta):
-    if m.getAttr("name") == "translation":
-      m.setAttr("content", "complete")
-      break
+  node.find(VNodeKind.meta, ("name", "translation")).setAttr("content", "complete")
   translateFuts.del(jobId)
   result =
     if amp != "": await node.ampPage

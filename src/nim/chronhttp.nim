@@ -68,7 +68,7 @@ proc requestTask(q: sink ptr Request) {.async.} =
       resp = await req.fetch(followRedirects = q[].redir, raw = true)
       checkNil(resp):
         defer:
-          futs.add resp.closeWait()
+          cleanup.add resp.closeWait()
           resp = nil
         q.response.code = httpcore.HttpCode(resp.status)
         checkNil(resp.connection):
@@ -81,14 +81,12 @@ proc requestTask(q: sink ptr Request) {.async.} =
         logexc()
         debug "cronhttp: request failed"
     finally:
-      var futs: seq[Future[void]]
       if not req.isnil:
-        futs.add req.closeWait()
+        cleanup.add req.closeWait()
       if not resp.isnil:
-        futs.add resp.closeWait()
+        cleanup.add resp.closeWait()
       if not sess.isnil:
-        futs.add sess.closeWait()
-      cleanup.add allFutures(futs)
+        cleanup.add sess.closeWait()
   httpOut[q] = true
   await allFutures(cleanup)
 

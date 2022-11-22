@@ -697,6 +697,8 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
 proc callback(ctx: RequestFence): Future[HttpResponseRef] {.async.} =
   if likely(not ctx.iserr) and ctx.get.meth == MethodGet:
     await handleGet(ctx.get)
+    if ctx.get.response.issome:
+      await ctx.get.response.get.connection.closeWait()
   # NOTE: we don't return an actual `HttpResponseRef` since the response is sent by `doReply`
   # Returning a response here will cause the server to eventually hang
 

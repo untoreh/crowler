@@ -28,6 +28,7 @@ import cfg,
   ads,
   server_types,
   html_entities,
+  search,
   sitemap
 
 static: echo "loading html..."
@@ -308,6 +309,48 @@ proc buildMenu*(crumbs: string; topicUri: Uri; path: string): Future[
 template buildMenu*(crumbs: string; topicUri: Uri; a: Article): untyped =
   buildMenu(crumbs, topicUri, a.getArticlePath)
 
+proc buildRelated*(a: Article): Future[VNode] {.async.} =
+  ## Get a list of related articles by querying search db with tags and title words
+  # try a full tag (or title) search first, then try word by word
+  var kws = a.tags
+  kws.add(a.title)
+  for tag in a.tags:
+    kws.add strutils.split(tag)
+  kws.add(strutils.split(a.title))
+
+  result = newVNode(VNodeKind.ul)
+  for ad in adsFrom(ADS_RELATED): result.add ad
+  result.setAttr("class", "related-posts")
+  var c = 0
+  var related: HashSet[string]
+  for kw in kws:
+    if kw.len < 3:
+      continue
+    let sgs = await query(a.topic, kw.toLower, limit = N_RELATED)
+    logall "html: suggestions {sgs}, from kw: {kw}"
+    # if sgs.len == 1 and sgs[0] == "//":
+    #     return
+    for sg in sgs:
+      let relart = await fromSearchResult(sg)
+      if (relart.isnil or (relart.slug in related or relart.slug == "")):
+        continue
+      else:
+        related.incl relart.slug
+      let
+        entry = newVNode(li)
+        link = newVNode(VNodeKind.a)
+        img = buildImgUrl(relart, "related-img")
+      link.setAttr("href", getArticleUrl(relart))
+      link.value = relart.title
+      link.add newVNode(VNodeKind.text)
+      link[0].value = relart.title
+      entry.add img
+      entry.add link
+      result.add entry
+      c += 1
+      if c >= cfg.N_RELATED:
+        return
+
 proc buildFooter*(topic = "", pagenum = ""): Future[VNode] {.async.} =
   return buildHtml(tdiv(class = "site-footer container max border medium no-padding")):
     footer(class = "padding absolute blue white-text primary left bottom"):
@@ -367,6 +410,7 @@ proc postContent(article: string; withlinks = true): Future[VNode] {.async.} =
   return buildHtml(article(class = "post-wrapper")):
     # NOTE: use `code` tag to avoid minification to collapse whitespace
     pre(class = HTML_POST_SELECTOR, style = break_style):
+      for ad in adsFrom(ADS_ARTICLES): ad
       verbatim(if likely(withlinks): (await article.replaceLinks) else: article)
 
 proc postFooter(pubdate: Time): VNode =
@@ -376,6 +420,7 @@ proc postFooter(pubdate: Time): VNode =
       text "Published date: "
       italic:
         text format(dt, "dd MMM yyyy")
+
 
 proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): Future[
     VNode] {.async.} =

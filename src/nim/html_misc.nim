@@ -65,46 +65,6 @@ proc fromSearchResult*(pslug: string): Future[Article] {.async.} =
   if topic != "" and topic in topicsCache:
     result = await getArticle(topic, page, slug)
 
-proc buildRelated*(a: Article): Future[VNode] {.async.} =
-  ## Get a list of related articles by querying search db with tags and title words
-  # try a full tag (or title) search first, then try word by word
-  var kws = a.tags
-  kws.add(a.title)
-  for tag in a.tags:
-    kws.add strutils.split(tag)
-  kws.add(strutils.split(a.title))
-
-  result = newVNode(VNodeKind.ul)
-  result.setAttr("class", "related-posts")
-  var c = 0
-  var related: HashSet[string]
-  for kw in kws:
-    if kw.len < 3:
-      continue
-    let sgs = await query(a.topic, kw.toLower, limit = N_RELATED)
-    logall "html: suggestions {sgs}, from kw: {kw}"
-    # if sgs.len == 1 and sgs[0] == "//":
-    #     return
-    for sg in sgs:
-      let relart = await fromSearchResult(sg)
-      if (relart.isnil or (relart.slug in related or relart.slug == "")):
-        continue
-      else:
-        related.incl relart.slug
-      let
-        entry = newVNode(li)
-        link = newVNode(VNodeKind.a)
-        img = buildImgUrl(relart, "related-img")
-      link.setAttr("href", getArticleUrl(relart))
-      link.value = relart.title
-      link.add newVNode(VNodeKind.text)
-      link[0].value = relart.title
-      entry.add img
-      entry.add link
-      result.add entry
-      c += 1
-      if c >= cfg.N_RELATED:
-        return
 
 import xmltree
 import html_entities

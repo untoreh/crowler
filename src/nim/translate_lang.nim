@@ -27,20 +27,17 @@ template translateVbtm(node: VNode, q: QueueDom) =
 
 template translateIter(otree; vbtm: static[bool] = true) =
   for el in otree.preorder():
-    case el.kind:
-      of vdom.VNodeKind.text:
-        if el.text.isEmptyOrWhitespace:
-          continue
-        if isTranslatable(el):
-          translate(q.addr, el, srv)
-      else:
-        let t = el.kind
-        if t in tformsTags:
-          getTForms(dom)[t](el, file_path, url_path, pair)
-        if t == VNodeKind.a:
+    if el.kind == vdom.VNodeKind.text:
+      if not el.text.isEmptyOrWhitespace and isTranslatable(el):
+        translate(q.addr, el, srv)
+    else:
+      if el.kind in tformsTags:
+        getTForms(dom)[el.kind](el, file_path, url_path, pair)
+      case el.kind:
+        of VNodeKind.a:
           if el.hasAttr("href"):
             rewriteUrl(el, rewrite_path, hostname)
-        if t == VNodeKind.verbatim:
+        of VNodeKind.verbatim:
           when vbtm:
             debug "dom: translating verbatim", false
             translateVbtm(el, q)

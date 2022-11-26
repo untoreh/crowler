@@ -182,7 +182,7 @@ class Translator:
                     try:
                         if depth == 1:
                             self._inflight += 1
-                        with pb.http_opts(proxy=1):
+                        with pb.http_opts(proxy=depth):
                             return tr.translate(q)
                     except:
                         return do_trans_single(depth + 1)

@@ -431,6 +431,7 @@ proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): Future[
   return buildHtml(body(class = "", topic = (a.topic), style = preline_style)):
     await buildMenu(crumbs, topicUri, a)
     await buildMenuSmall(crumbs, topicUri, a)
+    for ad in adsFrom(ADS_SIDEBAR): ad
     main(class = "mdc-top-app-bar--fixed-adjust"):
       for ad in adsFrom(ADS_HEADER): ad
       await postTitle(a)
@@ -438,7 +439,6 @@ proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): Future[
       postFooter(a.pubdate)
       hr()
       related
-      for ad in adsFrom(ADS_SIDEBAR): ad
     await buildFooter(a.topic, a.page.intToStr)
 
 proc pageTitle*(title: string; slug: string): VNode =
@@ -575,6 +575,7 @@ proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode =
     body(class = "", topic = topic, style = preline_style):
       await buildMenu(crumbs, topicUri, path)
       await buildMenuSmall(crumbs, topicUri, path)
+      for ad in adsFrom(ADS_SIDEBAR): ad
       main(class = "mdc-top-app-bar--fixed-adjust"):
         for ad in adsFrom(ADS_HEADER): ad
         if title != "":
@@ -582,7 +583,6 @@ proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode =
         content
         if not pagefooter.isNil():
           pageFooter
-        for ad in adsFrom(ADS_SIDEBAR): ad
       await buildFooter(topic, slug)
 
 import macros

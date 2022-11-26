@@ -291,8 +291,8 @@ when isMainModule:
   initPy()
   waitFor synctopics()
   let tp = waitFor topicPages("mini")
-  syncpylock:
-    echo tp[1]
+  # syncpylock:
+  #   echo tp[1]
   # let v = waitFor topicPage("mini")
   # syncPyLock:
     # echo v[0]

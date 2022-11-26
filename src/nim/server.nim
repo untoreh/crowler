@@ -124,7 +124,7 @@ proc initThreadImpl() {.gcsafe.} =
   debug "thread: initialization complete."
 
 proc initThread*() =
-  debug "thread: starting"
+  logall "thread: starting"
   try:
     initLock(threadInitLock)
     withLock(threadInitLock):

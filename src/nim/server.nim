@@ -6,10 +6,8 @@ import std/[os, times, monotimes, cpuinfo, strformat, strutils, sequtils, json, 
        zip/zlib,
        chronos,
        chronos_patches,
-       httputils,
-       scorper,
-       scorper/http/[httpcore, httptypes], urlly
-
+       chronos/apps/http/[httpserver, httpcommon],
+       httputils
 
 {.experimental: "caseStmtMacros".}
 {.experimental: "notnil".}
@@ -54,30 +52,21 @@ type
   Params = Table[ParamKey, string]
 
   ReqContext = object of RootObj
-    rq: Table[ReqId, Request]
+    rq: Table[ReqId, HttpRequestRef]
     url: uri.Uri
     params: Params
     mime: string
     file: string
     key: int64
     norm_capts: UriCaptures
-    respHeaders: HttpHeaders
+    respHeaders: HttpTable
     respBody: ref string
-    respCode: httptypes.HttpCode
+    respCode: HttpCode
     lock: AsyncLock not nil # this is acquired while the rq is being processed
     cached: bool    # done processing
   ReqId = Hash # using time as request id means that the request cache should be thread local
 
 converter reqPtr(rc: ref ReqContext): uint64 = cast[uint64](rc)
-converter toUri(url: typeof(urlly.Url()[])): Uri =
-  result.scheme = url.scheme
-  result.username = url.username
-  result.password = url.password
-  result.hostname = url.hostname
-  result.port = url.port
-  result.path = url.path
-  result.query = encodeQuery(url.query)
-  result.anchor = url.fragment
 
 proc getReqId(path: string): ReqId = hash((getMonoTime(), path))
 
@@ -95,7 +84,7 @@ proc initThreadBase() {.gcsafe.} =
 
 proc initThreadImpl() {.gcsafe.} =
   if threadInitialized:
-    logall "thread: already initialized"
+    debug "thread: already initialized"
     return
   debug "thread: base"
   initThreadBase()
@@ -135,7 +124,7 @@ proc initThreadImpl() {.gcsafe.} =
   debug "thread: initialization complete."
 
 proc initThread*() =
-  logall "thread: starting"
+  debug "thread: starting"
   try:
     initLock(threadInitLock)
     withLock(threadInitLock):
@@ -148,33 +137,36 @@ proc initThread*() =
 template setEncoding() {.dirty.} =
   let rqHeaders = reqCtx.rq[rqid].headers
   debug "reply: declaring accept"
-  let accept: string = rqHeaders.getOrDefault(haccenc)
+  let accept = $rqHeaders.getString(haccenc)
   if ("*" in accept) or ("gzip" in accept):
     debug "reply: encoding gzip"
-    reqCtx.respHeaders[hencoding] = gz
+    reqCtx.respHeaders.set(hencoding, gz)
     if reqCtx.respBody[] != "":
       debug "reply: compressing body (gzip)"
       let comp = reqCtx.respBody[].compress(stream = GZIP_STREAM)
       reqCtx.respBody[] = comp
   elif "deflate" in accept:
     debug "reply: encoding deflate"
-    reqCtx.respHeaders[hencoding] = defl
+    reqCtx.respHeaders.set(hencoding, defl)
     if reqCtx.respBody[] != "":
       let comp = reqCtx.respBody[].compress(stream = RAW_DEFLATE)
       reqCtx.respBody[] = comp
       debug "reply: compressing body (deflate)"
 
+template setNone(id, val) =
+  if id.isNone:
+    id.ok(val)
+
 template respond() =
-  await reqCtx.rq[rqid].resp(
+
+  discard await reqCtx.rq[rqid].respond(
       code = reqCtx.respCode,
       content = reqCtx.respBody[],
       headers = reqCtx.respHeaders,
     )
 
-proc doReply(reqCtx: ref ReqContext, body: string, rqid: ReqId, scode = httpcore.Http200,
-             headers: HttpHeaders = newHttpHeaders()) {.async.} =
-  if headers.isnil:
-    let headers = newHttpHeaders()
+proc doReply(reqCtx: ref ReqContext, body: string, rqid: ReqId, scode = Http200,
+             headers: HttpTable = default(HttpTable)) {.async.} =
   reqCtx.respHeaders = headers
   sdebug "reply: setting body"
   reqCtx.respBody[] =
@@ -185,13 +177,13 @@ proc doReply(reqCtx: ref ReqContext, body: string, rqid: ReqId, scode = httpcore
     sdebug "reply: mimepath"
     reqCtx.mime = mimePath(reqCtx.file)
   sdebug "reply: setting mime"
-  reqCtx.respHeaders[hcontent] = reqCtx.mime
+  reqCtx.respHeaders.set(hcontent, reqCtx.mime)
   try:
     sdebug "reply: encoding type header"
     if sre("^(?:text)|(?:image)|(?:application)/") in reqCtx.mime:
       setEncoding
     debug "reply: headers -- {reqCtx.respHeaders}"
-    reqCtx.respHeaders[hetag] = '"' & $reqCtx.key & '"'
+    reqCtx.respHeaders.set(hetag, '"' & $reqCtx.key & '"')
   except:
     swarn "reply: troubles serving page {reqCtx.file}"
     sdebug "reply: sending: {size} to {reqCtx.url}"
@@ -215,18 +207,18 @@ template ifHtml(els): string =
   else: $els
 
 template handle301*(loc: string = $WEBSITE_URL) =
-  let headers = newHttpHeaders([($hloc, loc)])
+  let headers = init(HttpTable, [($hloc, loc)])
   # headers[$hloc] = loc
   block:
     logexc()
     debug "server: redirecting."
-    await reqCtx.doReply(ifHtml(httpcore.Http301), rqid, scode = httpcore.Http301, headers = headers)
+    await reqCtx.doReply(ifHtml(Http301), rqid, scode = Http301, headers = headers)
 
 template handle404*(loc = $WEBSITE_URL) =
-  await reqCtx.doReply(ifHtml(httpcore.Http404), rqid, scode = httpcore.Http404)
+  await reqCtx.doReply(ifHtml(Http404), rqid, scode = Http404)
 
 template handle503*(loc = $WEBSITE_URL) =
-  await reqCtx.doReply(ifHtml(httpcore.Http503), rqid, scode = httpcore.Http503)
+  await reqCtx.doReply(ifHtml(Http503), rqid, scode = Http503)
 
 template abort(m: string) =
   debug m & ", aborting."
@@ -236,11 +228,12 @@ template abort(m: string) =
   if unlikely(reqCtx.cached):
     reqCtx.cached = false
     reqCtx.respBody[].setLen(0)
-    reqCtx.respHeaders.clear()
+    reset(reqCtx.respHeaders)
     reset(reqCtx.respCode)
 
 import htmlparser, xmltree
-template handleHomePage(relpath: string, capts: UriCaptures, ctx: Request) =
+template handleHomePage(relpath: string, capts: UriCaptures,
+    ctx: HttpRequestRef) =
   page = getOrCache(reqCtx.key):
     let tree = await buildHomePage(capts.lang, capts.amp)
     checkNil tree, "homepage: page tree is nil"
@@ -301,13 +294,13 @@ template dispatchImg() =
       debug "img: saved to cache {reqCtx.key} : {reqCtx.url}"
   if page != "":
     reqCtx.mime = mime
-    let headers = newHttpHeaders([($hcctrl, "2678400s")])
+    let headers = init(HttpTable, [($hcctrl, "2678400s")])
   else:
     reqCtx.mime = DEFAULT_IMAGE_MIME
     page = defaultImageData
   await reqCtx.doReply(page, rqid, )
 
-template handleTopic(capts: auto, ctx: Request) =
+template handleTopic(capts: auto, ctx: HttpRequestRef) =
   debug "topic: looking for {capts.topic}"
   if capts.topic in topicsCache:
     page = getOrCache(reqCtx.key):
@@ -352,7 +345,7 @@ template handleTopic(capts: auto, ctx: Request) =
       debug "topic: asset not found at {DATA_ASSETS_PATH / filename:.120}"
       handle301()
 
-template handleArticle(capts: auto, ctx: Request) =
+template handleArticle(capts: auto, ctx: HttpRequestRef) =
   ##
   debug "article: fetching article"
   let tg = topicsCache.get(capts.topic, emptyTopic)
@@ -374,10 +367,10 @@ template handleArticle(capts: auto, ctx: Request) =
     handle301()
     # handle301($(WEBSITE_URL / capts.amp / capts.lang))
 
-template handleSearch(ctx: Request) =
+template handleSearch(ctx: HttpRequestRef) =
   # extract the referer to get the correct language
   let
-    refuri = parseUri(ctx.headers.getOrDefault(href))
+    refuri = parseUri(ctx.headers.getString(href))
     refcapts = refuri.path.uriTuple
   if capts.lang == "" and refcapts.lang != "":
     handle301($(WEBSITE_URL / refcapts.lang / join(capts, n = 1)))
@@ -398,7 +391,7 @@ template handleSearch(ctx: Request) =
     reqCtx.mime = mimePath("index.html")
     await reqCtx.doReply(page, rqid, )
 
-template handleSuggest(ctx: Request) =
+template handleSuggest(ctx: HttpRequestRef) =
   # there is no specialized capture for the query
   let
     prefix = reqCtx.params.getOrDefault(ParamKey.p, "")
@@ -440,7 +433,7 @@ template handleRobots() =
 proc reset(reqCtx: ref ReqContext) =
   reqCtx.cached = false
   reqCtx.respBody[].setLen(0)
-  reqCtx.respHeaders.clear
+  reqCtx.respHeaders.reset
   reqCtx.respCode.reset
   if reqCtx.lock.locked:
     reqCtx.lock.release
@@ -478,9 +471,9 @@ template handleCacheClear() =
       else:
         discard
 
-proc parseParams(req: Request): Params =
+proc parseParams(url: var Uri): Params =
   result = initTable[ParamKey, string]()
-  for (k, v) in req.url.query:
+  for (k, v) in url.query.decodeQuery:
     let par: ParamKey = parseEnum(k, none)
     result[par] = v
   if none in result:
@@ -489,12 +482,12 @@ proc parseParams(req: Request): Params =
 template handleParams() =
   # parse url and check cache key
   var
-    url = ctx.url.toUri
+    url = ctx.uri
     cacheParam: char
     transParam: char
     delParam: char
 
-  var params = parseParams(ctx)
+  var params = parseParams(url)
   if c in params:
     cacheParam = params[c][0]
     params.del(c)
@@ -560,11 +553,25 @@ template handleDeletion(): bool =
 
 template isTranslationReq(): bool = transParam != '\0'
 
-proc handleGet(ctx: Request): Future[void] {.gcsafe, async.} =
+proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
+  defer:
+    # FIXME: is this cleanup required?
+    var futs: seq[Future[void]]
+    let resp =
+      if ctx.response.issome: ctx.response.get
+      else: nil
+    if not resp.isnil and not resp.connection.isnil:
+      futs.add resp.connection.closeWait()
+    if not ctx.isnil:
+      if not ctx.connection.isnil:
+        futs.add ctx.connection.closeWait()
+      futs.add ctx.closeWait()
+    await allFutures(futs)
+
   initThread()
   # doassert ctx.parseRequestLine
   var
-    relpath = ctx.path
+    relpath = ctx.rawPath
     page: string
     rqlocked: bool
   relpath.removeSuffix('/')
@@ -573,7 +580,7 @@ proc handleGet(ctx: Request): Future[void] {.gcsafe, async.} =
   handleParams()
 
   # generate request super context
-  let acceptEncodingStr = ctx.headers.getOrDefault(haccenc)
+  let acceptEncodingStr = ctx.headers.getString(haccenc)
   let reqCacheKey = $(url.path & url.query & acceptEncodingStr)
   let reqCtx = reqCtxCache.lcheckOrPut(reqCacheKey):
     let reqCtx {.gensym.} = new(ReqContext)
@@ -585,9 +592,8 @@ proc handleGet(ctx: Request): Future[void] {.gcsafe, async.} =
     reqCtx.params = params
     reqCtx.file = reqCtx.url.path.fp
     reqCtx.key = hash(reqCtx.file)
-    reqCtx.rq = initTable[ReqId, Request]()
+    reqCtx.rq = initTable[ReqId, HttpRequestRef]()
     new(reqCtx.respBody)
-    reqCtx.respHeaders = newHttpHeaders()
     reqCtx
   # don't replicate works on unfinished requests
   if not reqCtx.cached:
@@ -688,8 +694,18 @@ proc handleGet(ctx: Request): Future[void] {.gcsafe, async.} =
   finally:
     debug "router: caching req {reqCtx.key}"
 
-proc callback(ctx: Request): Future[void] {.async.} =
-  await handleGet(ctx)
+proc callback(ctx: RequestFence): Future[HttpResponseRef] {.async.} =
+  if likely(not ctx.iserr):
+    let rq = ctx.get
+    if rq.meth == MethodGet:
+      await handleGet(rq)
+      if rq.response.issome:
+          # Prevent connections from being kept alive to reduce load
+          let resp = rq.getResponse()
+          resp.state = HttpResponseState.Empty # HACK: can't set keepalive if state is not empty
+          resp.keepalive = false
+          resp.state = HttpResponseState.Finished
+          return resp
 
 template wrapInit(code: untyped): proc() =
   proc task(): void =
@@ -698,12 +714,18 @@ template wrapInit(code: untyped): proc() =
   task
 
 
-proc doServe*(address: string, callback: ScorperCallback) =
+proc doServe*(address: string, callback: HttpProcessCallback) =
   let ta = resolveTAddress(address)[0]
+  let srv =
+    HttpServerRef.new(ta, callback).get
   try:
-    waitFor serve(address, callback)
+    srv.start()
+    waitFor srv.join()
   except:
     logexc()
+  finally:
+    if not srv.isnil:
+      waitfor srv.closeWait()
 
 proc startServer*(doclear = false, port = 0, loglevel = "info") =
 

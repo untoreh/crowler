@@ -850,6 +850,7 @@ proc toVNode*(el: XmlNode): VNode =
           of VNodeKind.script, VNodeKind.style:
             let node = tree(kind, vnAttrs)
             node.value = el.innerText
+            node.add text(el.innerText)
             node
           else:
             var kids: seq[VNode]

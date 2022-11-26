@@ -5,7 +5,7 @@ import std/[httpcore, tables, monotimes, hashes, uri, macros, sequtils]
 
 import types, pyutils, utils, httptypes
 
-var handler: ptr Future[void]
+var handler: Thread[void]
 var futs {.threadvar.}: seq[Future[void]]
 const chronHttpDebug {.booldefine.} = false
 
@@ -90,7 +90,7 @@ proc requestTask(q: sink ptr Request) {.async.} =
   httpOut[q] = true
   await allFutures(cleanup)
 
-proc requestHandler() {.async.} =
+proc requestHandlerAsync() {.async.} =
   # var q: Request
   while true:
     try:
@@ -105,6 +105,8 @@ proc requestHandler() {.async.} =
       logexc()
       warn "Chronos http handler crashed, restarting."
       await sleepAsync(1.seconds)
+
+proc requestHandler() = waitFor requestHandlerAsync()
 
 # proc httpGet*(url: string; headers: HttpHeaders = nil;
 #               decode = Decode.yes; proxied = false): Future[Response] {.async,
@@ -125,7 +127,5 @@ proc requestHandler() {.async.} =
 
 proc initHttp*() {.gcsafe.} =
   httptypes.initHttp()
-  setNil(handler):
-    create(Future[void])
-  reset(handler[])
-  handler[] = requestHandler()
+  if not handler.running:
+    createThread(handler, requestHandler)

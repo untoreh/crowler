@@ -245,10 +245,9 @@ def remove_urls(title: str | None) -> str | None:
         return clean_title.strip()
 
 
-def add_img(final, urls: List[Callable], site: Site) -> bool:
+def add_img(final, urls: List[str], site: Site) -> bool:
     try:
-        for f in urls:
-            url = f()
+        for url in urls:
             if (
                 url
                 and (url != final["icon"])
@@ -389,15 +388,15 @@ def fillarticle(url, data, topic, site: Site):
         if not final.get("icon", "") and goo.get("meta", ""):
             final["icon"] = abs_url(goo["meta"]["favicon"], url)
         imgUrl = final.get("imageUrl", "")
-        if (not imgUrl) or (imgUrl in site.img_bloom) or (not ut.is_img_url(imgUrl)):
-            img_f = [
-                lambda: abs_url(goo["image"], url),
-                lambda: goo["opengraph"].get("image", ""),
+        img_dup = imgUrl in site.img_bloom
+        if (not imgUrl) or img_dup or (not ut.is_img_url(imgUrl)):
+            img_urls = [
+                abs_url(goo["image"], url),
+                goo["opengraph"].get("image", "")
             ]
-            if not add_img(final, img_f, site):
+            if not add_img(final, img_urls, site):
                 search_img(final, site)
-        else:
-            site.img_bloom.add(final["imageUrl"])
+        site.img_bloom.add(final["imageUrl"])
         if not final.get("imageTitle", ""):
             final["imageTitle"] = la.get("description", "") or final["desc"]
         if not final.get("imageOrigin", ""):

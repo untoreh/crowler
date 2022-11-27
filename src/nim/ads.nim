@@ -149,19 +149,34 @@ template adLink*(kind; stl: static): auto =
 template adLink*(kind): auto =
   await adLinkFut(kind, static(AdLinkStyle.wrap))
 
+proc adsVNode(el: XmlNode): VNode {.gcsafe.} =
+  return el.withClosingHtmlTag.verbatim
 
 proc insertAd*(name: ptr XmlNode): seq[VNode] {.gcsafe.} =
   result = newSeq[VNode]()
-  if not name.isnil and not name[].isnil:
+  if name.isnil or name[].isnil:
+    logall "ads: xmlnode is nil."
+  else:
     for el in name[]:
       if el.kind == xnElement:
-        result.add verbatim(el.withClosingHtmlTag)
-  else:
-    logall "ads: xmlnode is nil."
+        result.add el.adsVNode
 
 iterator adsFrom*(loc: ptr XmlNode): VNode =
-  for el in loc[]:
-    yield el.withClosingHtmlTag.verbatim
+  if loc.isnil or loc[].isnil:
+    discard
+  else:
+    for el in loc[]:
+      yield el.adsVNode
+
+import generator
+export generator
+import std/importutils
+proc adsGen*(loc: ptr XmlNode): Generator[XmlNode, VNode] =
+  if loc.isnil or loc[].isnil:
+    discard
+  else:
+    privateAccess(XmlNode)
+    result = newGen[XmlNode, VNode](loc[].s, adsVNode)
 
 proc replaceLinks*(str: string, chunksize = 250): Future[string] {.async.} =
   ## chunksize is the number of chars between links

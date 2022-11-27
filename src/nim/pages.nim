@@ -141,12 +141,17 @@ proc articleEntry(ar: Article, topic = ""): Future[VNode] {.async.} =
 
 proc buildShortPosts*(arts: seq[Article], topic = ""): Future[
     string] {.async.} =
-  let sepAds =
-    buildHtml(tdiv(class="sep-ads")):
-      for ad in adsFrom(ADS_SEPARATOR): ad
+  # let sepAds =
+  #   buildHtml(tdiv(class="sep-ads")):
+  #     for ad in adsFrom(ADS_SEPARATOR): ad
+
+  var sepAds = adsGen(ADS_SEPARATOR)
+
   for a in arts:
     result.add $(await articleEntry(a, topic))
-    result.add sepAds
+    let sep = filterNext(sepAds, notEmpty)
+    if not sep.isnil:
+      result.add buildHtml(tdiv(class="sep-ads"), sep)
 
 template topicPage*(name: string, pn: string, istop = false) {.dirty.} =
   ## Writes a single page (fetching its related articles, if its not a template) to storage

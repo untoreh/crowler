@@ -833,7 +833,16 @@ proc toXmlNode*(el: VNode): XmlNode =
           kids.add k.toXmlNode
       newXmlTree($el.kind, kids, attributes = xAttrs)
 
-proc emptyVNode*(y: static[bool] = true): VNode = newVNode(VNodeKind.text)
+func emptyVNode*(y: static[bool] = true): VNode = newVNode(VNodeKind.text)
+func isEmpty*(n: VNode): bool =
+  if n.isnil:
+    true
+  elif n.kind == VNodeKind.verbatim:
+    n.value.isEmptyOrWhitespace
+  else:
+    false
+
+func notEmpty*(n: VNode): bool {.gcsafe.} = not isEmpty(n)
 
 import std/unidecode
 proc toVNode*(el: XmlNode): VNode =

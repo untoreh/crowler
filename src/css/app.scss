@@ -613,6 +613,7 @@ form.search {
       object-fit: cover;
       width: calc(100% - 6px);
       height: 100%;
+      min-height: 4rem;
     }
     // text ellipsis on 3rd line
     & a:nth-child(2) {

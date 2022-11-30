@@ -16,7 +16,6 @@ let
   ADS_HEADER* = create(XmlNode)
   ADS_SIDEBAR* = create(XmlNode)
   ADS_FOOTER* = create(XmlNode)
-  ADS_FOOTERLINKS* = create(seq[string])
   ADS_LINKS* = create(seq[string])
   ADS_ARTICLES* = create(XmlNode)
   ADS_RELATED* = create(XmlNode)
@@ -72,10 +71,6 @@ proc readAdsConfig*() =
     let adsFooterFile = DATA_ADS_PATH / "footer.html"
     if fileExists(adsFooterFile):
       ADS_FOOTER[] = loadHtml(adsFooterFile)
-  # Footer links
-  withLock(adsFooterLinksLock):
-    let adsFooterLinksFile = DATA_ADS_PATH / "footerlinks.txt"
-    initLinks adsFooterLinks, ADS_FOOTERLINKS
   # Links
   withLock(adsLinksLock):
     let adsLinksFile = DATA_ADS_PATH / "links.txt"
@@ -107,9 +102,6 @@ template nextLink(name, data) =
 proc nextAdsLink*(): Future[string] {.async.} =
   nextLink adsLinks, ADS_LINKS
 
-proc nextFooterLink*(): Future[string] {.async.} =
-  nextLink adsFooterLinks, ADS_FOOTERLINKS
-
 type AdLinkType* = enum tags, footer
 type AdLinkStyle* = enum wrap, ico
 macro adLinkIco(first: static[bool], stl: static[AdLinkStyle]): untyped =
@@ -133,7 +125,7 @@ proc adLinkFut(kind: AdLinkType, stl: static[AdLinkStyle]): Future[
     VNode] {.async.} =
   let link = case kind:
     of tags: await nextAdsLink()
-    of footer: await nextFooterLink()
+    else: await nextAdsLink()
   result =
     if link.len > 0:
       buildHtml(a(href = link, class = "ad-link")):

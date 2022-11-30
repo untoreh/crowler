@@ -2,14 +2,30 @@
 
 import random, colors
 
-# get seeds https://color.adobe.com/create/color-wheel (choose "shades" radio, take "ABCD" colors)
-# PRIMARY/A, SECONDARY/B, BACKGROUND/C, SURFACE/D
-SEED = ["#616161", "#333333", "#FFFFFF", "#050505"]
-mid = colors.rgb(125, 125, 125)
 
 def from_hex(hex):
     hex = hex[1:]
     return colors.HexColor(hex)
+
+class Color:
+    dark: str
+    light: str
+    def __init__(self, dark, light):
+        if dark.startswith("#"):
+            self.dark = from_hex(dark)
+            self.light = from_hex(light)
+        else:
+            self.dark = dark
+            self.light = light
+
+# get seeds https://color.adobe.com/create/color-wheel (choose "shades" radio, take "ABCD" colors)
+# PRIMARY/A, SECONDARY/B, BACKGROUND/C, SURFACE/D
+SEED = ["#616161", "#333333", "#FFFFFF", "#050505"]
+# MISC
+BG1 = Color("#0d0d0d", "#e5e5e5")
+BORDER = Color( "rgba(255, 255, 255, 0.5)","rgba(0, 0, 0, 0.2)")
+
+mid = colors.rgb(125, 125, 125)
 
 def gen_palette():
     # if seed is not None:
@@ -48,6 +64,12 @@ def gen_palette():
     palette["LIGHT_ON_SURFACE"] = palette["LIGHT_SURFACE"] - mid
     palette["DARK_ON_SURFACE"] = palette["DARK_SURFACE"] + mid
 
+    palette["DARK_BG1"] = BG1.dark
+    palette["LIGHT_BG1"] = BG1.light
+
+    palette["DARK_BORDER"] = BORDER.dark
+    palette["LIGHT_BORDER"] = BORDER.light
+
     # print({k: "#" + str(v.hex) for (k, v) in palette.items()})
     return palette
 
@@ -62,6 +84,6 @@ if __name__ == "__main__":
     template = colors_path / "template.scss"
     pal = gen_palette()
     for k, v in pal.items():
-        os.environ[k] = "#" + str(v.hex)
+        os.environ[k] = v if isinstance(v, str) else "#" + str(v.hex)
     print(f"Writing to path: {target}")
     sp.run(f"envsubst < {template} > {target}", shell=True)

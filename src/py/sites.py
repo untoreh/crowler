@@ -574,7 +574,7 @@ class Site:
             return 0
 
     def get_topic_desc(self, topic: str):
-        return self.topics_dict[topic]
+        return self.topics_dict.get(topic, "")
 
     def get_topic_idx(self, topic):
         arr = self.load_topics()[0]

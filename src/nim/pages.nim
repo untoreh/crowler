@@ -106,6 +106,7 @@ proc articleEntry(ar: Article, topic = ""): Future[VNode] {.async.} =
   let relpath = getArticlePath(ar)
   try:
     return buildHtml(article(class = "entry")):
+      buildImgUrl(ar, defsrc=defaultImageB64)
       h2(class = "entry-title", id = ar.slug):
         a(href = relpath):
           text ar.title
@@ -128,12 +129,10 @@ proc articleEntry(ar: Article, topic = ""): Future[VNode] {.async.} =
                 a(href = (await nextAdsLink()), target = "_blank"):
                   icon("i-mdi-tag")
                   text t
-      buildImgUrl(ar)
-      tdiv(class = "entry-content"):
-        verbatim(articleExcerpt(ar))
-        a(class = "entry-more", href = relpath):
-          text "[continue]"
-      hr()
+      # tdiv(class = "entry-content"):
+      #   verbatim(articleExcerpt(ar))
+      #   a(class = "entry-more", href = relpath):
+      #     text "[continue]"
   except Exception as e:
     logexc()
     warn "articles: entry creation failed."
@@ -146,9 +145,11 @@ proc buildShortPosts*(arts: seq[Article], topic = ""): Future[
   #     for ad in adsFrom(ADS_SEPARATOR): ad
 
   var sepAds = adsGen(ADS_SEPARATOR)
+  let hr = buildHtml(hr())
 
   for a in arts:
     result.add $(await articleEntry(a, topic))
+    result.add hr
     let sep = filterNext(sepAds, notEmpty)
     if not sep.isnil:
       result.add buildHtml(tdiv(class="sep-ads"), sep)

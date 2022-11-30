@@ -36,6 +36,12 @@
 
   --dark-surface: ${DARK_SURFACE};
   --dark-on-surface: ${DARK_ON_SURFACE};
+
+  --dark-bg1: ${DARK_BG1};
+  --light-bg1: ${LIGHT_BG1};
+
+  --dark-border1: ${DARK_BORDER};
+  --light-border1: ${LIGHT_BORDER};
 }
 
 @mixin mdc-light {
@@ -48,6 +54,8 @@
   --mdc-theme-on-background: var(--light-on-background);
   --mdc-theme-text-on-primary: var(--text-primary-on-light);
   --mdc-theme-text-on-secondary: var(--text-secondary-on-light);
+  --bg1: var(--light-bg1);
+  --border1: var(--light-border1);
   background: var(--light-background, white);
 }
 
@@ -61,6 +69,8 @@
   --mdc-theme-on-background: var(--dark-on-background);
   --mdc-theme-text-on-primary: var(--text-primary-on-dark);
   --mdc-theme-text-on-secondary: var(--text-secondary-on-dark);
+  --bg1: var(--dark-bg1);
+  --border1: var(--dark-border1);
   background: var(--dark-background, #02020d);
 }
 
@@ -107,6 +117,9 @@ body {
   }
   main {
     background: var(--light-background, white);
+    hr {
+      opacity: 0.5;
+    }
   }
   .search-input {
     background: var(--light-background);

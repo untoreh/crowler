@@ -1,6 +1,6 @@
 import
   karax / [karaxdsl, vdom, vstyles],
-  std / [os, strformat, strutils, xmltree, uri, unicode, json, hashes, sugar],
+  std / [os, strformat, strutils, xmltree, uri, unicode, json, hashes, sugar, base64],
   normalize,
   chronos,
   nimpy
@@ -37,8 +37,8 @@ const ROOT = initUri() / "/"
 const wsPreline = [(white_space, "pre-line")]
 const wsBreak = [(white_space, "break-spaces")]
 
-threadVars((preline_style, break_style, VStyle), (defaultImageData, string))
-export defaultImageData
+threadVars((preline_style, break_style, VStyle), (defaultImageData, defaultImageB64, string))
+export defaultImageData, defaultImageB64
 
 proc initHtml*() =
   try:
@@ -48,6 +48,7 @@ proc initHtml*() =
     initSocial()
     if DEFAULT_IMAGE.fileExists:
       defaultImageData = readFile(DEFAULT_IMAGE)
+      defaultImageB64 = fmt"data:{DEFAULT_IMAGE_MIME};base64,{base64.encode(defaultImageData)}"
   except:
     logexc()
     qdebug "Could not initialize html vars."
@@ -339,7 +340,7 @@ proc buildRelated*(a: Article): Future[VNode] {.async.} =
       let
         entry = newVNode(li)
         link = newVNode(VNodeKind.a)
-        img = buildImgUrl(relart, "related-img")
+        img = buildImgUrl(relart, "related-img", defaultImageB64)
       link.setAttr("href", getArticleUrl(relart))
       link.value = relart.title
       link.add newVNode(VNodeKind.text)
@@ -354,6 +355,7 @@ proc buildRelated*(a: Article): Future[VNode] {.async.} =
 proc buildFooter*(topic = "", pagenum = ""): Future[VNode] {.async.} =
   return buildHtml(tdiv(class = "site-footer container max border medium no-padding")):
     footer(class = "padding absolute blue white-text primary left bottom"):
+      buildLogo("footer")
       tdiv(class = "footer-links"):
         a(href = sitemapUrl(topic, pagenum),
                 class = "sitemap"):
@@ -371,13 +373,10 @@ proc buildFooter*(topic = "", pagenum = ""): Future[VNode] {.async.} =
           a(href = twitterUrl[]):
             tdiv(class = "icon i-mdi-twitter")
             text("Twitter")
-        adLink AdLinkType.footer
         a(href = "/dmca"):
           text("DMCA")
-        adLink AdLinkType.footer
         a(href = "/privacy-policy"):
           text("Privacy Policy")
-        adLink AdLinkType.footer
         a(href = "/terms-of-service"):
           text("Terms of Service")
       for ad in adsFrom(ADS_FOOTER): ad
@@ -404,7 +403,7 @@ proc postTitle(a: Article): Future[VNode] {.async.} =
             text a.getAuthor
         adLink tags, AdLinkStyle.ico
 
-    buildImgUrl(a)
+    buildImgUrl(a, defsrc=defaultImageB64)
 
 proc postContent(article: string; withlinks = true): Future[VNode] {.async.} =
   return buildHtml(article(class = "post-wrapper")):
@@ -425,9 +424,11 @@ proc postFooter(pubdate: Time): VNode =
 proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): Future[
     VNode] {.async.} =
   checkNil(a)
-  let crumbs = toUpper(&"/ {a.topic} / Page-{a.page} /")
-  let topicUri = parseUri("/" & a.topic)
-  let related = await buildRelated(a)
+  let
+    topicName = (await a.topic.topicDesc).toUpper
+    crumbs = &"{topicName} / N{a.page}"
+    topicUri = parseUri("/" & a.topic)
+    related = await buildRelated(a)
   return buildHtml(body(class = "", topic = (a.topic), style = preline_style)):
     await buildMenu(crumbs, topicUri, a)
     await buildMenuSmall(crumbs, topicUri, a)
@@ -458,19 +459,19 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): Future[
       span(class = "prev-page"):
         if pn > 0:
           a(href = (topic_path / (pn - 1).intToStr)):
-            text "<< Previous page"
+            text "previous"
       # we don't paginate searches because we only serve the first page per query
       if pn != -1 and not home:
         span(class = "next-page"):
           let lpn = await lastPageNum(topic)
           if pn == lpn:
             a:
-              text "Next page >>"
+              text "next"
           else:
             let npn = await nextPageNum(topic, pn, lpn)
             a(href = (topic_path / (if npn ==
                     lpn: "" else: $npn))):
-              text "Next page >>"
+              text "next"
 
 const pageContent* = postContent
 
@@ -563,7 +564,8 @@ proc buildPost*(a: Article): Future[VNode] {.async.} =
 proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode = nil;
                 topic = ""; desc: string = "", ar = emptyArt[]): Future[VNode] {.gcsafe, async.} =
   let
-    crumbs = if topic != "": fmt"/ {topic.toUpper} /"
+    topicName = (await topic.topicDesc).toUpper
+    crumbs = if topic != "": fmt"/ {topicName} /"
              else: "/ "
     topicUri = parseUri("/" & topic)
     path = topic / slug

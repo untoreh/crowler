@@ -37,7 +37,6 @@
 
 .langs-dropdown-content a {
   display: block;
-  font-variant: petite-caps;
   white-space: break-spaces;
   margin: 0.1rem 0 0.1rem 0;
   height: 100%;
@@ -110,6 +109,17 @@ body.dark .translationNotification .loader {
   /* margin-top: 0.5rem; */
   left: 1rem;
   margin-top: 0.5rem;
+}
+
+a.lang-link {
+  font-variant: unset;
+  text-decoration: none;
+  font-family: monospace;
+  font-size: 1rem;
+  padding-left: 0.25rem;
+  line-height: 1.75rem;
+  font-weight: bold;
+  text-shadow: 0 0 1px var(--border1);
 }
 
 #site-nav .langs-dropdown-menu {

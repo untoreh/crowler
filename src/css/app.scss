@@ -75,6 +75,13 @@ footer {
   padding: 1rem;
   font-size: 0.9rem;
   display: block;
+  font-size: 1rem;
+  font-style: normal;
+  font-family: monospace;
+  font-weight: bold;
+  i {
+    font-weight: normal;
+  }
 }
 
 .page-crumbs {
@@ -82,14 +89,24 @@ footer {
   flex-direction: row;
   width: 100%;
   font-size: 1.5rem;
+  display: grid;
   span {
-    width: calc(50% - 1rem);
-  }
-  .prev-page {
-    text-align: left;
-  }
-  .next-page {
-    text-align: right;
+    text-align: center;
+    text-transform: uppercase;
+    font-size: 1.25rem;
+    grid-row: 1;
+    a {
+      text-decoration: none;
+      margin: 0.25rem;
+      box-shadow: 0 0 2px var(--mdc-theme-text-on-primary);
+      border: solid 1px var(--border1);
+      padding: 0.5rem;
+      background-color: var(--mdc-theme-surface);
+      border-radius: 2rem;
+      width: 7rem;
+      display: inline-block;
+      text-shadow: 0.1px 0.1px 1px var(--mdc-theme-primary);
+    }
   }
 }
 
@@ -164,26 +181,35 @@ footer {
   }
 }
 footer {
-  padding: 0.25rem 1rem 0.25rem 1rem;
+  padding: 0.25rem 1rem 1rem 1rem;
   white-space: normal;
+  a {
+    text-decoration: none;
+  }
+  .footer.app-bar-logo {
+    display: block;
+    padding: 1rem;
+    float: left;
+  }
 }
 
 .site-footer {
   font-family: Times;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .footer-links {
-  font-size: 1.5rem;
-  font-variant: all-petite-caps;
   & > a {
-    padding: 1rem 0.5rem 1rem 2rem;
+    transition: ease-in 0.2s;
+    padding: 1rem 0;
     position: relative;
     text-align: left;
     display: inline-block;
-    margin-right: -1rem;
-    transition: ease-in 0.2s;
-    margin-bottom: -0.25rem;
+    font-variant: unset;
+    text-transform: capitalize;
+    font-family: monospace;
+    font-weight: bold;
+    text-shadow: 0 0 1px var(--mdc-theme-primary);
     &:after {
       content: "|";
       text-decoration: none;
@@ -191,9 +217,8 @@ footer {
     }
     & .icon {
       display: inline-block;
-      position: absolute;
-      left: 0;
-      top: 1.25rem;
+      vertical-align: middle;
+      margin: 0 0.5rem;
     }
     &.ad-link {
       margin-right: -2.5rem;
@@ -227,7 +252,7 @@ footer {
   }
   font-weight: lighter;
   font-family: verdana;
-  font-size: 0.75rem;
+  font-size: 75%;
 }
 
 .mdc-ripple-button {
@@ -330,13 +355,38 @@ section.menu-list > button {
 }
 
 .entry {
-  float: left;
   width: 100%;
   white-space: normal;
-  hr {
-    margin: 3rem 0 3rem 0;
-    float: right;
-    width: 100%;
+  font-size: 1rem;
+  line-height: 1.5rem;
+  padding-top: 1rem;
+  display: grid;
+  > * {
+    grid-column: 2;
+  }
+  .entry-content {
+    display: none;
+  }
+}
+
+main hr {
+  border: dotted;
+  border-top-width: medium;
+  border-right-width: medium;
+  border-bottom-color: currentcolor;
+  border-bottom-style: dotted;
+  border-bottom-width: medium;
+  border-left-width: medium;
+  border-bottom-color: currentcolor;
+  border-bottom-style: dotted;
+  border-bottom-width: medium;
+  border-bottom: 0;
+  border-bottom-width: 0px;
+  width: 1rem;
+  opacity: 0.2;
+  border-color: var(--mdc-theme-text-on-primary);
+  :last-of-type {
+    display: none;
   }
 }
 
@@ -360,43 +410,75 @@ header .page {
   --webkit-font-display: block;
 }
 .entry-title {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+  height: 3.5rem;
+  grid-row: 1;
+  width: 36rem;
+  a {
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    width: 100%;
+  }
   margin-bottom: 0.5rem;
 }
 .entry-info {
-  font-size: 0.9rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
   text-shadow: black 0 0 0.1px;
-  margin-bottom: 1rem;
-  float: left;
+  margin: 5rem 0;
+  text-transform: uppercase;
+  padding-right: 0.25rem;
+  grid-row: 1;
+  max-height: 2rem;
 }
 .entry .image-link {
-  float: left;
+  grid-column: 1;
+  grid-row: 1;
   padding: 0.5rem 1rem;
+  margin: auto;
   img {
-    max-width: 20rem;
-    min-width: 8rem;
+    width: 190px;
+    height: 190px;
+    -o-object-fit: cover;
     object-fit: cover;
     border-radius: 0.75rem;
-    min-height: 8rem;
-    background: url("https://api.iconify.design/bx/image.svg") no-repeat center
-      center/cover;
-    // this should make the placeholder img icon visible on dark mode, but inverts every image
+    background: url("https://api.iconify.design/bx/image.svg") center
+      center/cover no-repeat; // this should make the placeholder img icon visible on dark mode, but inverts every image
     // body.dark & {
     //   filter: invert(1.0);
     // }
   }
 }
+.entry-more {
+  text-decoration: none;
+}
 .entry-tags {
-  font-size: 0.9rem;
-  text-align: right;
+  font-size: 0.75rem;
   margin-bottom: 1rem;
-  margin-top: 1rem;
+  margin-top: 7rem;
+  grid-row: 1;
+  width: 30vw;
+  a {
+    text-decoration: none;
+  }
   & .entry-tag-name {
-    border: dotted;
-    border-width: 2px;
-    padding: 5px 10px 5px 10px;
+    border: none;
     border-radius: 5px;
-    display: inline-flex;
-    margin-top: 4px;
+    display: flex;
+    margin: 0.1rem;
+    overflow: hidden;
+    height: 1.5rem;
+    width: 100%;
+    text-overflow: ellipsis;
+    a {
+      text-decoration: none;
+    }
     div {
       display: inline-block;
       padding: 0.1rem 0.5rem;
@@ -435,11 +517,13 @@ header .page {
       overflow: hidden;
       text-decoration: none;
       font-size: 1rem;
-      font-weight: normal;
+      font-weight: bold;
       background-color: var(--mdc-theme-secondary);
       filter: invert(0.1);
       border-radius: 4px;
-      box-shadow: 0 0 0.8px var(--mdc-theme-surface);
+      text-transform: uppercase;
+      box-shadow: 0 0 1px var(--mdc-theme-surface) inset;
+      text-shadow: 1px 1px 0 var(--mdc-theme-primary);
       transition: ease-in 0.2s;
       &:hover {
         filter: invert(1);
@@ -592,28 +676,44 @@ form.search {
   display: flex;
   padding: 0;
   font-style: italic;
+  padding: 2rem 0;
   margin-top: 2rem;
   position: relative;
   min-height: 3.5rem;
-  &:before {
-    content: "Related Articles";
-    position: absolute;
-    left: 0;
-    top: -2rem;
+  background-color: var(--bg1);
+  box-shadow: var(--mdc-theme-secondary) 0 0px 2px,
+    0 0 1px var(--mdc-theme-on-background);
+  a {
+    text-decoration: none;
   }
-  & li {
+  &:before {
+    content: "RELATED ARTICLES";
+    position: absolute;
+    left: 1rem;
+    top: 0.5rem;
+    font-size: 1rem;
+    font-style: normal;
+    font-family: monospace;
+    font-weight: bold;
+  }
+  li {
     font-style: normal;
     display: inline-block;
     width: calc(33% - 1rem);
     position: relative;
     margin: 0 0.25rem;
+    overflow: hidden;
+    &:first-child {
+      margin-left: 1.25rem;
+    }
     & img {
-      border-style: inset;
-      border-radius: 2px;
       object-fit: cover;
-      width: calc(100% - 6px);
+      width: calc(100% - 2rem);
       height: 100%;
       min-height: 4rem;
+      overflow: hidden;
+      margin: auto;
+      display: block;
     }
     // text ellipsis on 3rd line
     & a:nth-child(2) {
@@ -621,6 +721,7 @@ form.search {
       background-color: var(--mdc-theme-secondary);
       opacity: 0.9;
       padding: 0.5rem;
+      padding-bottom: 0.75rem;
       color: var(--mdc-theme-on-surface);
       bottom: -0.5rem;
       position: absolute;
@@ -630,7 +731,7 @@ form.search {
       -webkit-line-clamp: 2;
       display: -webkit-box;
       -webkit-box-orient: vertical;
-      line-height: 1.6rem;
+      line-height: 1.8rem;
     }
   }
 }
@@ -638,14 +739,14 @@ form.search {
 .post-links .ad-link {
   border-radius: 0 0 4px 4px;
   padding: 0.5rem;
+  padding-inline: calc(100% / 3);
   background: var(--mdc-theme-surface);
   display: inline-flex;
   flex-flow: row;
   @include width-available;
   transition: ease-in 0.2s;
   & .icon {
-    margin-left: 33%;
-    float: right;
+    margin-top: 0.25rem;
   }
   &:hover {
     filter: invert(1);
@@ -656,3 +757,4 @@ form.search {
 @import "responsive.scss";
 @import "flags-sprite.css";
 @import "lang.scss";
+@import "ads.scss";

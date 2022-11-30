@@ -6,6 +6,52 @@
   html {
     font-size: 0.9rem;
   }
+  main {
+    hr {
+      border-width: 0.5rem;
+    }
+  }
+  .related-posts {
+    width: calc(100vw - 2rem);
+    li:first-child {
+      margin-left: unset;
+    }
+    li {
+      a:nth-child(2) {
+        bottom: 0;
+        position: absolute;
+        max-height: 50%;
+        text-decoration: none;
+        width: calc(100% - 1.5rem);
+      }
+      img {
+        width: 10rem;
+        height: 100%;
+        min-height: 10rem;
+      }
+    }
+  }
+  .entry {
+    .image-link img {
+      width: 96px;
+      height: 96px;
+    }
+    .entry-title {
+      width: 60vw;
+    }
+    .entry-info {
+      grid-column: 1;
+      position: relative;
+      top: 9rem;
+      left: 0.5rem;
+      text-align: center;
+      margin: unset;
+      width: 8rem;
+    }
+    .entry-tags {
+      margin-top: 5rem;
+    }
+  }
   .menu-list {
     top: 3.5rem;
     display: flex;
@@ -27,10 +73,11 @@
     & li {
       display: inline-block;
       width: 100%;
+      margin-left: 0;
+      margin-top: 2rem;
       & a:nth-child(2) {
         width: calc(100% - 1rem);
         height: 3rem;
-        bottom: 0.5rem;
       }
     }
   }
@@ -40,8 +87,6 @@
     text-align: center;
   }
   .footer-links {
-    font-size: 1.5rem;
-    font-variant: all-petite-caps;
     display: flex;
     flex-flow: column;
     width: fit-content;
@@ -107,12 +152,6 @@
   //   display: flex;
   //   flex-direction: row-reverse;
   // }
-  .image-link {
-    float: none;
-    width: 100%;
-    display: block;
-    text-align: center;
-  }
   .app-bar-logo.right {
     display: initial;
   }
@@ -153,6 +192,48 @@
     .translate {
       display: none;
     }
+  }
+}
+
+@media (max-width: 1280px) and (min-width: 599px) {
+  .entry {
+    .image-link img {
+      width: 128px;
+      height: 128px;
+    }
+    .entry-title {
+      width: 40rem;
+    }
+  }
+  .footer {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 860px) {
+  .site-footer {
+    font-size: 0.75rem;
+  }
+  .footer-links a::after {
+    padding: 0 0.5rem;
+  }
+}
+
+@media (max-width: 599px) {
+  .site-footer {
+    font-size: 1rem;
+  }
+  footer .footer.app-bar-logo {
+    float: none;
+  }
+}
+
+@media (max-width: 1280px) {
+  main {
+    margin-left: 0;
+  }
+  .entry-tags {
+    width: unset;
   }
 }
 

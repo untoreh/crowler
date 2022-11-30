@@ -48,7 +48,8 @@ def phrasemac(text, n=3, max_len=cfg.TAGS_MAX_LEN):
     phr_set = set(phrases[-n:])
     for (p, _) in phrases[-n:]:
         if len(p.split()) > max_len:
-            phr_set.remove(p)
+            if p in phr_set:
+                phr_set.remove(p)
             continue
         for (pp, _) in phrases:
             if p != pp and p in pp and p in phr_set:
@@ -56,12 +57,15 @@ def phrasemac(text, n=3, max_len=cfg.TAGS_MAX_LEN):
     return [x[0] for x in phr_set]
 
 
-def rake(text, n=3, n_filter=100, clean=True):
+def rake(text, n=3, n_filter=100, clean=True, sim=True):
     rk.extract_keywords_from_text(text)
     kws = rk.get_ranked_phrases()
     tags = set(ut.dedup(kws[:n_filter])[:n])
-    tags = sim_filter(tags)
-    return clean_tags(tags) if clean else tags
+    if sim:
+        tags = sim_filter(tags)
+    if clean:
+        tags = clean_tags(tags)
+    return tags
 
 
 def sim_filter(tags, sim_threshold=0.9):
@@ -89,13 +93,17 @@ def clean_tags(tags):
     return cleaned_tags
 
 
-def all(text):
+def all(text, sep=False):
     res = dict()
-    res["ate"] = ate(text)
+    # res["ate"] = ate(text) // see gh
     res["tr"] = textrank(text)
     res["phr"] = phrasemac(text)
     res["rk"] = rake(text)
-    tags = []
-    for v in res.values():
-        tags.extend(v)
-    return ut.dedup(tags)
+    if sep:
+        print(text)
+        print(res)
+    else:
+        tags = []
+        for v in res.values():
+            tags.extend(v)
+        return ut.dedup(tags)

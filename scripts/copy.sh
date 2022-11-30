@@ -25,6 +25,9 @@ cp -aL src/assets/logo/* $trg/site/assets/logo/
 mkdir -p $trg/src
 cp -a src/{assets,css,js} $trg/src/ &>/dev/null
 
+# misc
+cp -a src/assets/empty.png $trg/site/assets/
+
 mkdir -p $trg/src/nim
 cp -a src/nim/*.nim $trg/src/nim/
 cp -a src/nim/{config,vendor} $trg/src/nim/
@@ -43,6 +46,7 @@ for site in $sites; do
         cp -a $fn $trg/site/assets/${site}/$(basename ${fn})
     done
 done
+
 
 libminify=src/rust/target/release/libminify_html_c.a
 mkdir -p "$trg/$(dirname $libminify)"

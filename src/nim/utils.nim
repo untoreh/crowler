@@ -357,7 +357,7 @@ iterator preorder*(tree: XmlNode): XmlNode =
 
 proc findel*(tree: XmlNode, t: string): XmlNode =
   for el in preorder(tree):
-    if el.tag == t:
+    if el.kind == xnElement and el.tag == t:
       return el
 
 

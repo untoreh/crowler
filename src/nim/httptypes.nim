@@ -31,9 +31,8 @@ var
   httpOut*: AsyncTable[ptr Request, bool]
 
 proc initHttp*() =
-  if not httpIn.isnil:
-    delete(httpIn)
-  httpIn = newAsyncPColl[ptr Request]()
+  if httpIn.isnil:
+    httpIn = newAsyncPcoll[ptr Request]()
   if httpOut.isnil:
     httpOut = newAsyncTable[ptr Request, bool]()
 

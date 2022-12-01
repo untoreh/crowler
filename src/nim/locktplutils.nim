@@ -90,6 +90,9 @@ proc pop*[T](apc: AsyncPColl[T]): Future[T] {.async.} =
     #   apc.waiters.add fut.addr
   # return fut
 
+template pop*[T](apc: AsyncPColl[T], v: var T) =
+  v = await apc.pop()
+
 proc delete*[T](apc: AsyncPColl[T]) =
   apc.waiters.delete()
   apc.pcoll.delete()

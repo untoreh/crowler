@@ -109,7 +109,7 @@ proc asyncLshHandler() {.async.} =
   try:
     var q: ptr LshQuery
     while true:
-      q = await lshIn.pop
+      lshIn.pop(q)
       clearFuts(futs)
       checkNil(q):
         futs.add checkAndAddArticle(move q)

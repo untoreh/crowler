@@ -740,12 +740,12 @@ form.search {
 .post-links .ad-link {
   border-radius: 0 0 4px 4px;
   padding: 0.5rem;
-  padding-inline: calc(100% / 3);
   background: var(--mdc-theme-surface);
   display: inline-flex;
   flex-flow: row;
   @include width-available;
   transition: ease-in 0.2s;
+  overflow: hidden;
   & .icon {
     margin-top: 0.25rem;
   }

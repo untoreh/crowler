@@ -77,6 +77,10 @@ proc cliReindexSearch() =
   initAll()
   waitFor pushAllSonic()
 
+proc cliShowStats(topic: string, count: int) =
+  initAll()
+  waitFor showStats(topic, count)
+
 # import system/nimscript
 # import os
 proc versionInfo() =
@@ -121,7 +125,7 @@ proc genPage(relpath: string) =
 
 when isMainModule:
   dispatchMulti([startServer], [clearPage], [cliPubTopic], [cliReindexSearch], [
-      clearSource], [clearPageCache], [versionInfo], [showStats], [removeArt])
+      clearSource], [clearPageCache], [versionInfo], [cliShowStats], [removeArt])
 
   # initThread()
   # genPage("/")

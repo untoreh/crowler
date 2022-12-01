@@ -86,10 +86,15 @@ proc getHits*(topic: string, slug: string): int32 =
   checkNil(statsDB):
     result = statsDB[join([topic, slug])]
 
-proc showStats*(topic: string, count = 10) {.async.} =
+import std/algorithm
+proc cmp(x, y: (string, int32)): bool {.inline.} = x[1] > y[1]
+proc showStats*(topic: string, count = 10, dosort = true) {.async.} =
+  var counts: seq[(string, int32)]
   for n, (art, artslug) in enumerate await publishedArticles[string](topic, "slug"):
-    echo artslug
-    echo topic.getHits(artslug)
+    counts.add (artslug, topic.getHits(artslug))
+  if dosort:
+    counts.sort(cmp)
+  echo counts
 
 
 when isMainModule:

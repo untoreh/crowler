@@ -40,7 +40,7 @@ converter tobytes(s: string): seq[byte] = cast[seq[byte]](s.toSeq())
 # converter toHeaders(t: HttpTable) =
 
 const proxiedFlags = {NoVerifyHost, NoVerifyServerName, NewConnectionAlways}
-const sessionFlags = {NoVerifyHost, NoVerifyServerName, NoInet6Resolution}
+const sessionFlags = {NoInet6Resolution}
 proc requestTask(q: sink ptr Request) {.async.} =
   var trial = 0
   var
@@ -97,7 +97,7 @@ proc requestHandlerAsync() {.async.} =
       var q: ptr Request
       while true:
         # q = await httpIn.popFirstWait()
-        q = await pop(httpIn)
+        pop(httpIn, q)
         clearFuts(futs)
         checkNil(q):
           futs.add requestTask(move q)

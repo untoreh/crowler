@@ -37,8 +37,8 @@ const ROOT = initUri() / "/"
 const wsPreline = [(white_space, "pre-line")]
 const wsBreak = [(white_space, "break-spaces")]
 
-threadVars((preline_style, break_style, VStyle), (defaultImageData, defaultImageB64, string))
-export defaultImageData, defaultImageB64
+threadVars((preline_style, break_style, VStyle), (defaultImageData, defaultImageB64, defaultImageU8, string))
+export defaultImageData, defaultImageB64, defaultImageU8
 
 proc initHtml*() =
   try:
@@ -49,6 +49,7 @@ proc initHtml*() =
     if DEFAULT_IMAGE.fileExists:
       defaultImageData = readFile(DEFAULT_IMAGE)
       defaultImageB64 = fmt"data:{DEFAULT_IMAGE_MIME};base64,{base64.encode(defaultImageData)}"
+      defaultImageU8 = fmt"data:{DEFAULT_IMAGE_MIME};utf8,{defaultImageData}"
   except:
     logexc()
     qdebug "Could not initialize html vars."
@@ -340,7 +341,7 @@ proc buildRelated*(a: Article): Future[VNode] {.async.} =
       let
         entry = newVNode(li)
         link = newVNode(VNodeKind.a)
-        img = buildImgUrl(relart, "related-img", defaultImageB64)
+        img = buildImgUrl(relart, "related-img", defaultImageU8)
       link.setAttr("href", getArticleUrl(relart))
       link.value = relart.title
       link.add newVNode(VNodeKind.text)
@@ -403,7 +404,7 @@ proc postTitle(a: Article): Future[VNode] {.async.} =
             text a.getAuthor
         adLink tags, AdLinkStyle.ico
 
-    buildImgUrl(a, defsrc=defaultImageB64)
+    buildImgUrl(a, defsrc=defaultImageU8)
 
 proc postContent(article: string; withlinks = true): Future[VNode] {.async.} =
   return buildHtml(article(class = "post-wrapper")):

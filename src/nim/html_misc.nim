@@ -1,6 +1,7 @@
 import os,
        uri,
        strutils,
+       strformat,
        nimpy,
        karax/[vdom, karaxdsl],
        sets,
@@ -39,8 +40,10 @@ proc pathLink*(path: string, code = "", rel = true,
       name_cleaned
       )
 
+
 proc buildImgUrl*(ar: Article; cls = "image-link", defsrc = ""): VNode =
   var srcsetstr, bsrc: string
+  let defaultImgOnError = fmt"this.onerror=null; this.src='{defsrc}'"
   if ar.imageUrl != "":
     # add `?` because chromium doesn't treat it as a string otherwise
     let burl = "?u=" & ar.imageUrl.toBString(true)
@@ -48,10 +51,12 @@ proc buildImgUrl*(ar: Article; cls = "image-link", defsrc = ""): VNode =
     for (view, size) in zip(IMG_VIEWPORT, IMG_SIZES):
       srcsetstr.add "//" & $(WEBSITE_URL_IMG / size / burl)
       srcsetstr.add " " & view & ","
-  buildHtml(a(class = cls, href = ar.imageOrigin, target = "_blank",
-            alt = "Post image source.")):
-    img(class = "", src = something(bsrc, defsrc), srcset = srcsetstr,
-        loading = "lazy")
+  let i = buildHtml(img(class = "", src = something(bsrc, defsrc), srcset = srcsetstr, loading = "lazy"))
+  i.setAttr("onerror", defaultImgOnError)
+  let link =
+    buildHtml(a(class = cls, href = ar.imageOrigin, target = "_blank", alt = "Post image source."))
+  link.add i
+  link
 
 proc fromSearchResult*(pslug: string): Future[Article] {.async.} =
   ## Construct an article from a stored search result

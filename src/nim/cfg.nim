@@ -26,8 +26,8 @@ const
   DATA_ASSETS_PATH* = DATA_PATH / "assets" / WEBSITE_NAME
   DATA_ADS_PATH* = DATA_PATH / "ads" / WEBSITE_NAME
   ASSETS_PATH* = PROJECT_PATH / "src" / "assets"
-  DEFAULT_IMAGE* = ASSETS_PATH / "empty.png"
-  DEFAULT_IMAGE_MIME* = "image/png"
+  DEFAULT_IMAGE* = ASSETS_PATH / "image.svg"
+  DEFAULT_IMAGE_MIME* = "image/svg+xml"
   CSS_BUN_URL* = $(SITE_ASSETS_PATH / "bundle.css")
   CSS_CRIT_PATH* = SITE_ASSETS_DIR / "bundle-crit.css"
   JS_REL_URL* = $(SITE_ASSETS_PATH / "bundle.js")

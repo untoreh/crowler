@@ -106,7 +106,7 @@ proc articleEntry(ar: Article, topic = ""): Future[VNode] {.async.} =
   let relpath = getArticlePath(ar)
   try:
     return buildHtml(article(class = "entry")):
-      buildImgUrl(ar, defsrc=defaultImageB64)
+      buildImgUrl(ar, defsrc=defaultImageU8)
       h2(class = "entry-title", id = ar.slug):
         a(href = relpath):
           text ar.title
@@ -198,10 +198,10 @@ proc processTranslatedPage*(lang: string, amp: string, relpath: string): Future[
   if jobId notin translateFuts:
     raise newException(ValueError, fmt"Translation was not scheduled. (transId: {jobId})")
   let (node, fut) = translateFuts[jobId]
+  translateFuts.del(jobId)
   discard await fut
   # signal that full translation is complete to js
   node.find(VNodeKind.meta, ("name", "translation")).setAttr("content", "complete")
-  translateFuts.del(jobId)
   result =
     if amp != "": await node.ampPage
     else: node

@@ -12,7 +12,7 @@ import
   sharedqueue
 
 
-const enabledTranslators = [google, yandex]
+const enabledTranslators = [google]
 type
   TranslateRotatorObj = object
     services: tuple[google: GoogleTranslate, bing: BingTranslate,
@@ -38,8 +38,8 @@ proc initRotator(timeout = 3.seconds): TranslateRotatorObj =
   result.services.google = new(GoogleTranslateObj)
   result.services.google[] = init(GoogleTranslateObj)
   # result.services.add init(BingTranslateObj)
-  result.services.yandex = new(YandexTranslateObj)
-  result.services.yandex[] = init(YandexTranslateObj)
+  # result.services.yandex = new(YandexTranslateObj)
+  # result.services.yandex[] = init(YandexTranslateObj)
 
 proc callService*(text, src, trg: string): Future[string] {.async.} =
   if unlikely(rotator.isnil):
@@ -69,9 +69,8 @@ proc callService*(text, src, trg: string): Future[string] {.async.} =
     rotator.idx.inc
 
 proc setupTranslate*() =
-  transIn.notNil:
-    delete(transIn)
-  transIn = newAsyncPColl[ptr Query]()
+  setNil(transIn):
+    newAsyncPcoll[ptr Query]()
   transOut.setNil:
     newAsyncTable[when not defined(translateProc): ptr Query else: int, bool]()
 
@@ -106,7 +105,7 @@ when not defined(translateProc):
     try:
       var q: ptr Query
       while true:
-        q = await transIn.pop()
+        transIn.pop(q)
         checkNil(q)
         clearFuts(futs)
         futs.add translateTask(move q)

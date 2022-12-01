@@ -121,7 +121,11 @@ proc nextTopic*(): Future[string] {.async.} =
       if len(pyTopics[]) <= topicIdx:
         debug "pubtask: resetting topics idx ({len(pyTopics[])})"
         topicIdx = 0
-      result = pyTopics[][topicIdx][0].to(string)
+      let
+        tpPair = pyTopics[][topicIdx]
+        tpPyName = if not pyErrOccurred(): tpPair[0] else: (pyErrClear(); nil)
+      if not tpPyName.isnil:
+        result = tpPyName.to(string)
       topicIdx += 1
 
 proc topicPubdate*(idx: int): Future[Time] {.async.} =
@@ -182,9 +186,9 @@ proc publishedArticles*[V](topic: string, attr: string = ""): Future[seq[(
   withPyLock:
     pydone = site[].topic_group(topic)[$topicData.done]
     nPages = len(pydone)
-  let getArticleAttr = if attr != "": (art: PyObject) => pyget[V](art, attr,
-      default(V))
-                        else: (art: PyObject) => ""
+  let getArticleAttr =
+    if attr != "": (art: PyObject) => pyget[V](art, attr, default(V))
+    else: (art: PyObject) => ""
 
   for d in 0..<nPages:
     withPyLock:

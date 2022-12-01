@@ -765,5 +765,6 @@ when isMainModule:
   # initSonic()
   # let argt = getLastArticles(topic)
   # echo buildRelated(argt[0])
+  imgCache[].clear()
   pageCache[].clear()
   startServer()

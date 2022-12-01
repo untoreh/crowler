@@ -72,7 +72,7 @@ DEFAULT_LANG = "en"
 SPACY_MODEL = "en_core_web_sm"
 TAGS_MAX_LEN = 4
 
-ART_MIN_LEN = 2500  # minimum article len
+ART_MIN_LEN = 500  # minimum article len
 PROFANITY_THRESHOLD = 0.5
 # The maximum number of articles/feeds to store `unprocessed` for each topic
 # When cap is reached queue gets discarded as FIFO.

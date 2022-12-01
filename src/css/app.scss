@@ -448,8 +448,8 @@ header .page {
     -o-object-fit: cover;
     object-fit: cover;
     border-radius: 0.75rem;
-    background: url("https://api.iconify.design/bx/image.svg") center
-      center/cover no-repeat; // this should make the placeholder img icon visible on dark mode, but inverts every image
+    // background: url("https://api.iconify.design/bx/image.svg") center
+      // center/cover no-repeat; // this should make the placeholder img icon visible on dark mode, but inverts every image
     // body.dark & {
     //   filter: invert(1.0);
     // }
@@ -702,6 +702,7 @@ form.search {
     width: calc(33% - 1rem);
     position: relative;
     margin: 0 0.25rem;
+    margin-top: 1rem;
     overflow: hidden;
     &:first-child {
       margin-left: 1.25rem;

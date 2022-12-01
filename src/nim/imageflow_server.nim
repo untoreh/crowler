@@ -67,7 +67,6 @@ proc handleImg*(relpath: string): Future[(string, string)] {.async.} =
 
 proc processImgData(q: ptr ImgQuery) {.async.} =
   # push img to imageflow context
-  initImageFlow() # NOTE: this initializes thread vars
   var acquired, submitted: bool
   let data = (await q.url.rawImg)
   defer:
@@ -86,13 +85,15 @@ proc processImgData(q: ptr ImgQuery) {.async.} =
         imgOut[q] = true
         submitted = true
     except Exception:
+      logexc()
       discard
 
 proc asyncImgHandler() {.async.} =
   try:
+    initImageFlow() # NOTE: this initializes thread vars
     var img: ptr ImgQuery
     while true:
-      img = await imgIn.pop
+      imgIn.pop(img)
       clearFuts(futs)
       checkNil(img):
         futs.add processImgData(move img)
@@ -111,7 +112,7 @@ proc startImgFlow*() =
   try:
     # start img handler thread
     setNil(imgIn):
-      newAsyncPColl[ptr ImgQuery]()
+      newAsyncPcoll[ptr ImgQuery]()
     setNil(imgOut):
       newAsyncTable[ptr ImgQuery, bool]()
     setNil(imgLock):

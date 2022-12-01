@@ -42,13 +42,12 @@ const
   outputIoId = 0
   inputIoId = 1
 var
-  iflInitialized* {.threadvar.}: bool
-  ctx {.threadvar.}: IFLContext
-  outputBuffer {.threadvar.}: ptr ptr uint8
-  outputBufferLen {.threadvar.}: ptr csize_t
+  ctx: IFLContext
+  outputBuffer: ptr ptr uint8
+  outputBufferLen: ptr csize_t
 var
-  resPtr {.threadvar.}: ptr ptr uint8
-  resLen {.threadvar.}: ptr csize_t
+  resPtr: ptr ptr uint8
+  resLen: ptr csize_t
 
 proc check(c: IFLContext): bool =
   let msg = case imageflow_context_error_as_exit_code(c.p):
@@ -86,6 +85,8 @@ when false:
 const execMethod = "v1/execute"
 
 proc initCmd() =
+  if not cmd.isnil:
+    return
   cmd = newJObject()
   cmdStr = newJObject()
   cmdSteps = %[]
@@ -123,7 +124,7 @@ proc setCmd(v: string) {.inline.} =
   cmdStr["value"] = %v
 
 proc initImageFlow*() =
-  if likely(iflInitialized):
+  if not outputBuffer.isnil:
     return
   outputBuffer = create(ptr uint8)
   outputBufferLen = create(csize_t)
@@ -145,7 +146,6 @@ proc initImageFlow*() =
   let b = imageflow_context_add_output_buffer(ctx.p, outputIoId)
   if not b: doassert ctx.check
   # discard imageflow_context_memory_allocate(ctx.p, BUFFER_SIZE.csize_t, "", 0)
-  iflInitialized = ctx.check
 
 proc reset(c: IFLContext) =
   imageflow_context_destroy(ctx.p)
@@ -216,6 +216,7 @@ proc doProcessImg(input: string, mtd = execMethod): (string, string) =
   result = (outputBuffer[].toString(outputBufferLen[].int), mime)
 
 proc processImg*(input: string, mtd = execMethod): (string, string) =
+  initCmd()
   return doProcessImg(input, mtd)
 
 when isMainModule:
@@ -224,9 +225,14 @@ when isMainModule:
   initImageFlow()
   let img = "https://picjumbo.com/wp-content/uploads/maltese-dog-puppy-1570x1047.jpg"
   # let img = PROJECT_PATH / "vendor" / "imageflow.dist" / "data" / "cat.jpg"
-  let data = waitFor getImg(img, kind = urlsrc)
+  # let data = waitFor getImg(img, kind = urlsrc)
+  let data = readFile("/tmp/wat")
   # echo data.len
+  echo "imageflow.nim:230"
   doassert data.addImg
+  echo "imageflow.nim:232"
   let query = "width=100&height=100&mode=max"
+  echo "imageflow.nim:234"
   let (i, mime) = processImg(query)
+  echo "imageflow.nim:236"
   echo mime

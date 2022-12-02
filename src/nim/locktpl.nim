@@ -82,8 +82,7 @@ template lockedStore*(name: untyped): untyped {.dirty.} =
 
   proc del*[K](tbl: `Lock name`, k: K) =
     withLock(tbl.lock):
-      {.cast(gcsafe).}:
-        tbl.storage.del(k)
+      tbl.storage.del(k)
 
   proc pop*[K, V](tbl: `Lock name`, k: K, v: var V): bool =
     withLock(tbl.lock):
@@ -154,8 +153,7 @@ template lockedList*(name: untyped): untyped {.dirty.} =
 
   proc del*(tbl: `Lock name`, idx: Natural) =
     withLock(tbl.lock):
-      {.cast(gcsafe).}:
-        tbl.storage.del(k)
+      tbl.storage.del(k)
 
   proc pop*[T](tbl: `Lock name`, idx: Natural, v: var T): bool =
     withLock(tbl.lock):

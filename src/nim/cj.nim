@@ -73,23 +73,27 @@ proc doQuery(url: Uri, headers: HttpHeaders = nil) {.async.} =
       await storeCachedPath($sortedLinks, k)
       links = sortedLinks
 
+proc buildQuery(kws="", linkTypeVal="banner", id = "", token = ""): (u: Uri, h: HttpHeaders) =
+  var params: seq[(string, string)]
+  params.add ($websiteId, id)
+  params.add ($linkType, linkTypeVal)
+  params.add ($keywords, kws)
+  params.add ($advertiserIds, "joined")
+  var url: Uri
+  let headers = newHttpHeaders()
+  headers["Authorization"] = "Bearer " & token
+  url.scheme = CJ_LINKS_ENDPOINT.scheme
+  url.hostname = CJ_LINKS_ENDPOINT.hostname
+  url.path = CJ_LINKS_ENDPOINT.path
+  url.query = params.encodeQuery()
+  return (url, headers)
+
 when isMainModule:
   initHttp()
   # let id = waitFor get_site_config("cjid")
   # let id = waitFor get_site_config(cjtoken)
   let id = "."
   let token = "1gra97nerye25a7dfdy07erj6q"
-  var params: seq[(string, string)]
-  params.add ($websiteId, id)
-  params.add ($linkType, "banner")
-  params.add ($keywords, "vps")
-  params.add ($advertiserIds, "joined")
+  let (url, headers) = buildQuery()
 
-  var url: Uri
-  let headers = newHttpHeaders()
-  url.scheme = CJ_LINKS_ENDPOINT.scheme
-  url.hostname = CJ_LINKS_ENDPOINT.hostname
-  url.path = CJ_LINKS_ENDPOINT.path
-  url.query = params.encodeQuery()
-  headers["Authorization"] = "Bearer " & token
   waitFor doQuery(url, headers)

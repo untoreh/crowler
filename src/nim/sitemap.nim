@@ -182,41 +182,41 @@ proc sitemapKey(topic: string, _: bool): string = topic & "-index.xml"
 template checkSitemapSize(sm): untyped = doassert sizeof(sm) * sm.len < maxSize; sm
 
 proc fetchSiteMap*(): Future[string] {.async.} =
-    return pageCache[].lgetOrPut(sitemapKey("")):
+    return pageCache.lgetOrPut(sitemapKey("")):
         let sm = (await buildSiteSitemap()).toXmlString
         checkSitemapSize sm
 
 proc fetchSiteMap*(topic: string): Future[string] {.async.} =
   checkTrue topic.len > 0, "topic must be valid"
-  return pageCache[].lgetOrPut(topic.sitemapKey):
+  return pageCache.lgetOrPut(topic.sitemapKey):
       let sm = (await buildTopicSitemap(topic)).toXmlString
       checkSitemapSize sm
 
 proc fetchSiteMap*(topic: string, _: bool): Future[string] {.async.} =
   checkTrue topic.len > 0, "topic must be valid"
-  return pageCache[].lgetOrPut(sitemapKey(topic, on)):
+  return pageCache.lgetOrPut(sitemapKey(topic, on)):
       let sm = (await buildTopicPagesSitemap(topic)).toXmlString
       checkSitemapSize sm
 
 template fetchSiteMap*(topic: string, page: string): untyped = fetchSiteMap(topic, page.parseInt)
 proc fetchSiteMap*(topic: string, page: int): Future[string] {.async.} =
   checkTrue topic != "" and page >= 0, "topic and page must be valid"
-  return pageCache[].lgetOrPut(sitemapKey(topic, $page)):
+  return pageCache.lgetOrPut(sitemapKey(topic, $page)):
       let sm = (await buildPageSitemap(topic, page)).toXmlString
       checkSitemapSize sm
 
 proc clearSiteMap*() =
-    pageCache[].del(sitemapKey(""))
+    pageCache.delete(sitemapKey(""))
 
 proc clearSiteMap*(topic: string, all=false) =
-    pageCache[].del(topic.sitemapKey)
-    pageCache[].del(sitemapKey(topic, on))
+    pageCache.delete(topic.sitemapKey)
+    pageCache.delete(sitemapKey(topic, on))
     if all:
       for p in 0..<(waitfor lastPageNum(topic)):
-        pageCache[].del(sitemapKey(topic, $p))
+        pageCache.delete(sitemapKey(topic, $p))
 
 proc clearSiteMap*(topic: string, pagenum: int) =
-    pageCache[].del(sitemapKey(topic, $pagenum))
+    pageCache.delete(sitemapKey(topic, $pagenum))
 
 import karax/[vdom, karaxdsl]
 proc sitemapLinks*(topic="", ar = emptyArt[]): seq[VNode] =

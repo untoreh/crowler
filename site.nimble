@@ -23,7 +23,7 @@ requires "normalize"
 requires "harpoon"
 requires "scorper#devel"
 requires "nimterop#master"
-requires "https://github.com/untoreh/nimdbx" # Use version! not #branch
+# requires "https://github.com/untoreh/nimdbx" # Use version! not #branch
 requires "zstd"
 requires "fusion"
 requires "minhash"
@@ -37,3 +37,4 @@ requires "uuids"
 requires "https://github.com/untoreh/nim-chronos#update" # required for proxy support
 requires "https://github.com/untoreh/nimSocks#master" # required for proxy support
 requires "asynctools"
+requires "leveldb"

@@ -57,7 +57,7 @@ type
     params: Params
     mime: string
     file: string
-    key: int64
+    key: string
     norm_capts: UriCaptures
     respHeaders: HttpTable
     respBody: ref string
@@ -74,7 +74,7 @@ var
   threadInitialized {.threadvar.}: bool
   threadInitLock: Lock
   reqCtxCache {.threadvar.}: LockLruCache[string, ref ReqContext]
-  assetsCache {.threadvar.}: LockLruCache[int64, string]
+  assetsCache {.threadvar.}: LockLruCache[string, string]
 
 proc initThreadBase() {.gcsafe.} =
   initPy()
@@ -112,7 +112,7 @@ proc initThreadImpl() {.gcsafe.} =
 
   debug "thread: cache"
   reqCtxCache = initLockLruCache[string, ref ReqContext](32)
-  assetsCache = initLockLruCache[int64, string](256)
+  assetsCache = initLockLruCache[string, string](256)
   debug "thread: topics"
   waitFor syncTopics()
   debug "thread: assets"
@@ -273,14 +273,14 @@ proc imgFile(reqCtx: ref ReqContext): string {.inline.} =
   # fix for image handling, since images use queries, therefore paths are not unique
   result.removePrefix("/i")
 
-proc imgKey(reqCtx: ref ReqContext): int64 {.inline.} = hash(reqCtx.imgFile)
+proc imgKey(reqCtx: ref ReqContext): string {.inline.} = reqCtx.imgFile
 
 template dispatchImg() =
   var mime: string
   reqCtx.file = reqCtx.imgFile
   reqCtx.key = reqCtx.imgKey
   try:
-    (mime, page) = imgCache[].get(reqCtx.key).split(";", maxsplit = 1)
+    (mime, page) = imgCache.get(reqCtx.key).split(";", maxsplit = 1)
     debug "img: fetched from cache {reqCtx.key} {reqCtx.file}"
   except KeyError, AssertionDefect:
     debug "img: not found handling image, {reqCtx.file}"
@@ -290,7 +290,7 @@ template dispatchImg() =
       debug "img: could not handle image {reqCtx.file}."
     if page != "":
       # append the mimetype before the img data
-      imgCache[][reqCtx.key] = mime & ";" & page
+      imgCache[reqCtx.key] = mime & ";" & page
       debug "img: saved to cache {reqCtx.key} : {reqCtx.url}"
   if page != "":
     reqCtx.mime = mime
@@ -312,10 +312,10 @@ template handleTopic(capts: auto, ctx: HttpRequestRef) =
       checkNil pagetree, "topic: pagetree couldn't be generated."
       let
         pagepath = capts.topic / capts.page
-        pageReqKey = pagepath.fp.hash.int64
+        pageReqKey = pagepath.fp
       var ppage = pagetree.asHtml
       checkTrue ppage.len > 0, "topic: page gen 1 failed."
-      setCache(pageReqKey, ppage)
+      pageCache[pageReqKey] = ppage
       ppage = ""
       checkNil(pagetree):
         let path = join([capts.topic, capts.page], "/")
@@ -453,10 +453,10 @@ template handleCacheClear() =
             debug "cache: deleting article cache {reqCtx.norm_capts.art:.40}"
             await deleteArt(reqCtx.norm_capts, cacheOnly = true)
           elif reqCtx.norm_capts.topic == "i":
-            imgCache[].del(reqCtx.imgKey)
+            imgCache.del(reqCtx.imgKey)
           elif reqCtx.norm_capts.topic in notTopics:
             debug "cache: deleting key {reqCtx.key}"
-            pageCache[].del(reqCtx.key)
+            pageCache.del(reqCtx.key)
           elif reqCtx.norm_capts.topic == "assets":
             assetsCache.del(reqCtx.key)
           else:
@@ -465,7 +465,7 @@ template handleCacheClear() =
         except:
           warn "cache: deletion failed for {reqCtx.norm_capts:.120}"
       of '1':
-        pageCache[].clear()
+        pageCache.clear()
         reqCtxCache.clear() # FIXME: should account for running requests...
         warn "cache: cleared all pages"
       else:
@@ -505,7 +505,7 @@ template handleTranslation(): bool =
     try:
       let tree = await processTranslatedPage(capts.lang, capts.amp, relpath = capts.path)
       page = tree.asHtml(minify_css = (capts.amp == ""))
-      setCache(reqCtx.key, page)
+      pageCache[reqCtx.key] = page
       await reqCtx.doReply(page, rqid)
       reqCtx.cached = true
     except:
@@ -591,7 +591,7 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
     reqCtx.url = move url
     reqCtx.params = params
     reqCtx.file = reqCtx.url.path.fp
-    reqCtx.key = hash(reqCtx.file)
+    reqCtx.key = reqCtx.file
     reqCtx.rq = initTable[ReqId, HttpRequestRef]()
     new(reqCtx.respBody)
     reqCtx
@@ -765,6 +765,6 @@ when isMainModule:
   # initSonic()
   # let argt = getLastArticles(topic)
   # echo buildRelated(argt[0])
-  imgCache[].clear()
-  pageCache[].clear()
+  imgCache.clear()
+  pageCache.clear()
   startServer()

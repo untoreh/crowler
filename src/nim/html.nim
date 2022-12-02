@@ -519,7 +519,7 @@ proc processHtml*(relpath: string; slug: string; data: VNode;
     pagepath = relpath / slug & ".html"
     fpath = path / pagepath
   when cfg.SERVER_MODE:
-    pageCache[relpath.fp.hash] = data.asHtml
+    pageCache[relpath.fp] = data.asHtml
     return
   when cfg.TRANSLATION_ENABLED and defined(weaveRuntime):
     withWeave(false):

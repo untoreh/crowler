@@ -132,14 +132,14 @@ proc update*(tfeed: Feed, topic: string, newArts: seq[Article], dowrite = false)
         chann.add itm
     if dowrite:
         debug "rss: writing feed for topic: {topic}"
-        pageCache[][topic.feedKey] = tfeed.toXmlString
+        pageCache[topic.feedKey] = tfeed.toXmlString
 
 template updateFeed*(a: Article) =
     if a.title != "":
         feed.update(a.topic, @[a])
 
 proc fetchFeedString*(topic: string): Future[string] {.async.} =
-  return pageCache[].lgetOrPut(topic.feedKey):
+  return pageCache.lgetOrPut(topic.feedKey):
     await feedLock[].acquire
     defer: feedLock[].release
     let
@@ -166,7 +166,7 @@ proc fetchFeed*(topic: string): Future[Feed] {.async.} =
             result = topicFeeds.put(topic, parseXml(feedStr))
 
 proc fetchFeedString*(): Future[string] {.async.} =
-  return pageCache[].lgetOrPut(static(WEBSITE_TITLE.feedKey)):
+  return pageCache.lgetOrPut(static(WEBSITE_TITLE.feedKey)):
     var arts: seq[Article]
     let pytopics = await loadTopics(cfg.MENU_TOPICS)
     var topicName: string

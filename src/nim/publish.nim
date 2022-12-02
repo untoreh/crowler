@@ -290,7 +290,7 @@ proc maybePublish*(topic: string) {.gcsafe, async.} =
 proc resetTopic(topic: string) =
   syncPyLock():
     discard site[].reset_topic_data(topic)
-  pageCache[].del(topic.feedKey)
+  pageCache.delete(topic.feedKey)
   clearSiteMap(topic, all = true)
   waitFor saveLS(topic, init(PublishedArticles))
 

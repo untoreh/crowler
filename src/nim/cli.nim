@@ -1,12 +1,5 @@
-import os,
-       uri,
-       std/enumerate,
-       nimpy {.all.},
-       cligen,
-       strformat,
-       chronos,
-       karax/vdom,
-       strutils
+import std/[os, times, uri, enumerate, strformat, strutils]
+import nimpy {.all.}, cligen, chronos, karax/vdom
 when compileOption("profiler"):
   import nimprof
 import
@@ -46,8 +39,8 @@ proc clearPage*(url: string) =
 proc clearPageCache(force = false) =
   # Clear page cache database
   if force or os.getenv("DO_SERVER_CLEAR", "") == "1":
-    echo fmt"Clearing pageCache at {pageCache[].path}"
-    pageCache[].clear()
+    echo fmt"Clearing pageCache at {pageCache.path}"
+    pageCache.clear()
   else:
     echo "Ignoring doclear flag because 'DO_SERVER_CLEAR' env var is not set to '1'."
 
@@ -123,9 +116,16 @@ proc genPage(relpath: string) =
   writeFile(SITE_PATH / "index.html", page)
 
 
+proc cliCompactData(name = "translate.db") =
+  let path = WEBSITE_PATH / name
+  if not fileExists(path):
+    raise newException(OSError, "Database does not appear to exist")
+  let db = init(LockDB, path, ttl = initDuration())
+  db.compact()
+
 when isMainModule:
   dispatchMulti([startServer], [clearPage], [cliPubTopic], [cliReindexSearch], [
-      clearSource], [clearPageCache], [versionInfo], [cliShowStats], [removeArt])
+      clearSource], [clearPageCache], [versionInfo], [cliShowStats], [removeArt], [cliCompactData])
 
   # initThread()
   # genPage("/")

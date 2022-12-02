@@ -1,78 +1,41 @@
-import nimpy, std/[os, strutils, hashes, times, parseutils], nimdbx
+import nimpy, std/[os, strutils, hashes, times, parseutils]
 import
   utils,
   quirks,
   cfg,
   types,
   translate_types,
-  translate_db,
-  server_types
+  server_types,
+  data
 
-export translate_db
-type DataCache {.borrow: `.`.} = LRUTrans
+export data
 
 const pageCacheTtl = initDuration(days = 1)
-let searchCache* = initLockLruCache[int64, string](32)
-var pageCache*: ptr DataCache
-var imgCache*: ptr DataCache
-
-proc init*(cache: var DataCache, name: string) =
-  let dbpath = DATA_PATH / "sites" / WEBSITE_NAME / name
-  translate_db.MAX_DB_SIZE = 40 * 1024 * 1024 * 1024
-  debug "cache: storing cache at {dbpath}"
-  translate_db.DB_PATH[] = dbpath
-  cache = initLRUTrans()
-  openDB(cache)
+let searchCache* = initLockLruCache[string, string](32)
+var pageCache*: LockDB
+var imgCache*: LockDB
 
 proc initCache*() =
   try:
-    if pageCache.isnil:
-      pageCache = create(DataCache)
-      init(pageCache[], "page")
-    if imgCache.isnil:
-      imgCache = create(DataCache)
-      init(imgCache[], "image")
+    setNil(pageCache):
+      init(LockDB, WEBSITE_PATH / "page", initDuration(days = 1))
+    setNil(imgCache):
+      init(LockDB, WEBSITE_PATH / "image", initDuration(days = 50))
   except:
     logexc()
     qdebug "cache: failed init"
 
-proc setCache*[V](k: int64 | string, v: V) {.inline.} =
-  pageCache[k] = $getTime().toUnix & ";" & $v
-
-
-template getCacheImpl(k, code): untyped =
-  bind parseInt, pageCacheTtl
-  var n: int
-  let spl = pageCache[k].split(";", maxsplit = 1)
-  if spl.len == 2: # cache data is correct, check for staleness
-    let ttlTime = parseInt(spl[0], n).fromUnix
-    if getTime() - ttlTime > pageCacheTtl: # cache data is stale
-      code
-    else: # cache data is still valid
-      spl[1]
-  else:
-    code
-
-proc getCache*(k: int64 | string): string {.inline.} =
-  return getCacheImpl(k):
-    raise newException(ValueError, "page cache expired.")
-
 template getOrCache*(k: int64 | string, code: untyped): string =
   template process(): string =
     page = code
-    setCache(k, page)
+    pageCache[k] = page
     move page
   block:
-    if k in pageCache[]:
-      getCacheImpl(k):
-        process()
+    let v = pageCache.getUnchecked(k)
+    if len(v) > 0:
+      v
     else: # cache miss
       process()
-
-proc `[]=`*[K, V](c: ptr DataCache, k: K, v: V) {.inline.} =
-  c[][k] = v
-
-proc `[]`*[K](c: ptr DataCache, k: K): string = c[][k]
 
 proc suffixPath*(relpath: string): string =
   var relpath = relpath
@@ -88,13 +51,13 @@ proc fp*(relpath: string): string =
   # NOTE: Only Unix paths make sense! because `/` operator would output `\` on windows
   SITE_PATH / relpath.suffixPath()
 
-proc cacheKey*(capts: UriCaptures): Hash {.inline.} =
+proc cacheKey*(capts: UriCaptures): string {.inline.} =
   var path = capts.join
   if not path.startsWith("/"):
     path = "/" & path
-  return path.fp.hash
+  return path.fp
 
-proc cacheKey*(relPath: string): Hash =
+proc cacheKey*(relPath: string): string =
   let capts = uriTuple(relPath)
   return cacheKey(capts)
 
@@ -104,9 +67,9 @@ proc deletePage*(capts: UriCaptures) {.gcsafe.} =
   let k = capts.cacheKey
   template doDel() =
     capts.amp = ""
-    pageCache[].del(capts.cacheKey)
+    pageCache.delete(capts.cacheKey)
     capts.amp = "/amp"
-    pageCache[].del(capts.cacheKey)
+    pageCache.delete(capts.cacheKey)
 
   doDel()
 

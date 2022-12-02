@@ -271,8 +271,7 @@ proc updateAssets(event: seq[PathEvent]) {.gcsafe.} =
   withLock(assetsFileLock):
     let prevnum = assetsFiles[].len
     for filename in assetsFiles[]:
-      {.cast(gcsafe).}:
-        pageCache[].del(filename)
+      pageCache.delete(filename)
     for e in event:
       if e.action in [Create, Modify, Rename, Remove].toHashSet:
         loadAssets()

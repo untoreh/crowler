@@ -106,13 +106,15 @@ proc push*(relpath: string) {.async.} =
     fpath = vrelpath.fp()
     capts = uriTuple(vrelpath)
   let content =
-    if pageCache[][fpath.hash] != "":
-      let page = pageCache[].get(fpath.hash).parseHtml
-      assert capts.lang == "" or page.findel("html").getAttr("lang") == (capts.lang)
-      page.findclass(HTML_POST_SELECTOR).innerText()
-    else:
-      if capts.art != "": await getArticleContent(capts.topic, capts.page, capts.art)
-      else: ""
+    block:
+      let cached = pageCache.getUnchecked(fpath)
+      if cached != "":
+        let page = cached.parseHtml
+        assert capts.lang == "" or page.findel("html").getAttr("lang") == (capts.lang)
+        page.findclass(HTML_POST_SELECTOR).innerText()
+      else:
+        if capts.art != "": await getArticleContent(capts.topic, capts.page, capts.art)
+        else: ""
   if content == "":
     warn "search: content matching path {vrelpath} not found."
   else:

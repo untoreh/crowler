@@ -1,4 +1,4 @@
-import nimpy, uri, strformat, times, sugar, os, chronos
+import nimpy, uri, strformat, times, sugar, os, random, chronos
 import
   cfg,
   types,
@@ -9,14 +9,14 @@ import
 
 lockedStore(OrderedTable)
 type
-  TopicState* = tuple[topdir: int, group: ptr PyObject]
+  TopicState* = tuple[topdir: int, group: ptr PyObject, name: ptr string]
   Topics* = LockOrderedTable[string, TopicState]
 
 pygil.globalAcquire()
 let
   topicsCache*: Topics = initLockOrderedTable[string, TopicState]()
   pyTopicsMod = create(PyObject)
-let emptyTopic*: TopicState = (topdir: -1, group: nil)
+let emptyTopic*: TopicState = (topdir: -1, group: nil, name: nil)
 pyTopicsMod[] = if os.getEnv("NEW_TOPICS_ENABLED", "") != "":
                       # discard relPyImport("proxies_pb") # required by topics
                       # discard relPyImport("translator") # required by topics
@@ -34,9 +34,6 @@ template lastPageNumImpl(topic: string): untyped =
 proc lastPageNum*(topic: string): Future[int] {.async.} =
   withPyLock:
     result = lastPageNumImpl(topic)
-
-
-
 
 # quirks imported toplevel
 import strutils
@@ -97,9 +94,10 @@ proc loadTopics*(n: int; ): Future[seq[PyObject]] {.async.} =
       for c in countDown(nTopics - 1, 0):
         addTopic()
 
-proc topicDesc*(topic: string): Future[string] {.async.} =
+proc topicDescPy*(topic: string): string {.inline.} = site[].get_topic_desc(topic).to(string)
+proc topicDescPyAsync*(topic: string): Future[string] {.async.} =
   withPyLock:
-    return site[].get_topic_desc(topic).to(string)
+    return topic.topicDescPy
 proc topicUrl*(topic: string, lang: string): string = $(WEBSITE_URL / lang / topic)
 
 
@@ -127,6 +125,18 @@ proc nextTopic*(): Future[string] {.async.} =
       if not tpPyName.isnil:
         result = tpPyName.to(string)
       topicIdx += 1
+
+proc curTopic*(): Future[string] {.async.} =
+  checkNil(pyTopics[], "topics: index can't be nil."):
+    block:
+      withPyLock():
+        let
+          idx = min(pyTopics[].len - 1, topicIdx)
+          tp = pyTopics[][idx]
+        checkNil(tp):
+          let name = tp[0]
+          checkNil(name):
+            return name.to(string)
 
 proc topicPubdate*(idx: int): Future[Time] {.async.} =
   withPyLock:
@@ -213,6 +223,8 @@ proc fetchAsync*(_: typedesc[Topics], k: string): Future[TopicState] {.async.} =
     ts.topdir = await lastPageNum(k)
     ts.group = create(PyObject)
     ts.group[] = await getTopicGroup(k)
+    ts.name = create(string)
+    ts.name[] = await k.topicDescPyAsync
     topicsCache[k] = ts
   return move ts
 
@@ -224,6 +236,8 @@ proc fetch*(_: typedesc[Topics], k: string): TopicState  =
     ts.topdir = lastPageNumImpl(k)
     ts.group = create(PyObject)
     ts.group[] = getTopicGroupImpl(k)
+    ts.name = create(string)
+    ts.name[] = k.topicDescPy
     topicsCache[k] = ts
   return move ts
 
@@ -239,8 +253,8 @@ proc getState*(topic: string): Future[(int, int)] {.async.} =
   const pgK = $topicData.pages
   const doneK = $topicData.done
   withPyLock:
-    doassert not grp[pgK].isnil, "gs: {topic} group doesn't have pages entry.".fmt
-    doassert not pyErrOccurred(), "gs: py error occurred during getstate for topic {topic}".fmt
+    checkNil grp[pgK], "gs: {topic} group doesn't have pages entry.".fmt
+    checkTrue not pyErrOccurred(), "gs: py error occurred during getstate for topic {topic}".fmt
     if not pyisnone(grp[pgK].shape):
       topdir = max(grp[pgK].shape[0].to(int)-1, 0)
       numdone = max(len(grp[doneK]) - 1, 0)
@@ -248,6 +262,9 @@ proc getState*(topic: string): Future[(int, int)] {.async.} =
       topdir = -1
   assert topdir != -1 and topdir == (await lastPageNum(topic))
   return (topdir, numdone)
+
+proc topicDesc*(topic: string): Future[string] {.async.} =
+  return (await Topics.fetchAsync(topic)).name[]
 
 proc hasArticles*(topic: string): Future[bool] {.async.} =
   withPyLock:
@@ -294,7 +311,9 @@ proc syncTopics*(force = false) {.gcsafe, async.} =
 when isMainModule:
   initPy()
   waitFor synctopics()
-  let tp = waitFor topicPages("mini")
+  echo waitFor curTopic()
+  # echo topicsCache.storage.[0]
+  # quit()
   # syncpylock:
   #   echo tp[1]
   # let v = waitFor topicPage("mini")

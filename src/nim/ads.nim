@@ -57,7 +57,7 @@ template initLinks(name, data) =
 
 proc adsVNode(el: XmlNode): VNode {.gcsafe.} =
   result = newVNode(VNodeKind.verbatim)
-  if not el.isnil:
+  if not el.isnil and el.kind == xnElement:
     for e in el:
       result.add e.withClosingHtmlTag.verbatim
 

@@ -165,7 +165,8 @@ proc getArticlePy*(topic: string, page: string | int, slug: string): Future[
   when not (page is string):
     pg = page
 
-  if (await topic.getState)[0] != -1:
+  let st = await topic.getState
+  if st[0] != -1:
     let donearts = await topicDonePages(topic)
     doassert not donearts.isnil
     withPyLock:

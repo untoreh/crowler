@@ -37,7 +37,8 @@ const ROOT = initUri() / "/"
 const wsPreline = [(white_space, "pre-line")]
 const wsBreak = [(white_space, "break-spaces")]
 
-threadVars((preline_style, break_style, VStyle), (defaultImageData, defaultImageB64, defaultImageU8, string))
+threadVars((preline_style, break_style, VStyle), (defaultImageData,
+    defaultImageB64, defaultImageU8, string))
 export defaultImageData, defaultImageB64, defaultImageU8
 
 proc initHtml*() =
@@ -101,10 +102,11 @@ template ldjWebpage(): VNode {.dirty.} =
 
 proc styleLink(url: string): VNode =
   buildHtml(tdiv):
-    link(rel="preload", `as`="style", href=url)
-    link(rel="stylesheet", media="print", onload="this.onload=null;this.removeAttribute('media');", href = url)
+    link(rel = "preload", `as` = "style", href = url)
+    link(rel = "stylesheet", media = "print",
+        onload = "this.onload=null;this.removeAttribute('media');", href = url)
     noscript():
-      link(rel="stylesheet", href=url)
+      link(rel = "stylesheet", href = url)
 
   # echo nodes
   # for n in nodes: result.add n
@@ -126,7 +128,7 @@ proc buildHead*(path: string; description = ""; topic = "";
       for t in opgPage(something(topic, WEBSITE_TITLE),
                        something(description, WEBSITE_DESCRIPTION),
                        path): t.toVNode
-    for n in langLinksNodes(canon, rel=true): n
+    for n in langLinksNodes(canon, rel = true): n
 
     # LDJ
     ldjWebsite()
@@ -136,7 +138,8 @@ proc buildHead*(path: string; description = ""; topic = "";
     # styles
     initStyle(CSS_CRIT_PATH)
     link(rel = "preconnect", href = "https://fonts.googleapis.com")
-    link(rel = "preconnect", href = "https://fonts.gstatic.com", crossorigin = "")
+    link(rel = "preconnect", href = "https://fonts.gstatic.com",
+        crossorigin = "")
     for s in styleLink(NOTO_FONT_URL): s
     for s in styleLink(CSS_BUN_URL): s
     let titleText = something(ar.title, WEBSITE_TITLE)
@@ -149,10 +152,10 @@ proc buildHead*(path: string; description = ""; topic = "";
     meta(name = "date", content = something($ar.pubDate, $now()))
     link(rel = "icon", href = FAVICON_PNG_URL, type = "image/x-icon")
     link(rel = "icon", href = FAVICON_SVG_URL, type = "image/svg+xml")
-    link(rel="apple-touch-icon", sizes="180x180", href = APPLE_PNG180_URL)
+    link(rel = "apple-touch-icon", sizes = "180x180", href = APPLE_PNG180_URL)
     # https://stackoverflow.com/questions/21147149/flash-of-unstyled-content-fouc-in-firefox-only-is-ff-slow-renderer
     verbatim("<script>const _ = null</script>")
-    for ad in adsFrom(ADS_HEAD): ad
+    for ad in adsFrom(adsHead): ad
 
 
 proc buildTrending(): VNode =
@@ -269,9 +272,9 @@ proc buildLogo(pos: string): VNode =
             aria-label = "Website Logo"):
       tdiv(class = "mdc-icon-button__ripple")
       span(class = "logo-dark-wrap"):
-        img(src = LOGO_DARK_URL, loading = "lazy", alt="logo-dark")
+        img(src = LOGO_DARK_URL, loading = "lazy", alt = "logo-dark")
       span(class = "logo-light-wrap"):
-        img(src = LOGO_URL, loading = "lazy", alt="logo-light")
+        img(src = LOGO_URL, loading = "lazy", alt = "logo-light")
 
 
 proc buildMenu*(crumbs: string; topicUri: Uri; path: string): Future[
@@ -321,7 +324,7 @@ proc buildRelated*(a: Article): Future[VNode] {.async.} =
   kws.add(strutils.split(a.title))
 
   result = newVNode(VNodeKind.ul)
-  for ad in adsFrom(ADS_RELATED): result.add ad
+  for ad in adsFrom(adsRelated): result.add ad
   result.setAttr("class", "related-posts")
   var c = 0
   var related: HashSet[string]
@@ -353,7 +356,8 @@ proc buildRelated*(a: Article): Future[VNode] {.async.} =
       if c >= cfg.N_RELATED:
         return
 
-proc buildFooter*(topic = "", pagenum = ""): Future[VNode] {.async.} =
+proc buildFooter*(topic = ""; adsTopicName = ""; pagenum = ""; lang = "";
+    ar = emptyArt): Future[VNode] {.async.} =
   return buildHtml(tdiv(class = "site-footer container max border medium no-padding")):
     footer(class = "padding absolute blue white-text primary left bottom"):
       buildLogo("footer")
@@ -380,7 +384,10 @@ proc buildFooter*(topic = "", pagenum = ""): Future[VNode] {.async.} =
           text("Privacy Policy")
         a(href = "/terms-of-service"):
           text("Terms of Service")
-      for ad in adsFrom(ADS_FOOTER): ad
+      for ad in adsFrom(adsFooter): ad
+      await allSizeBanners(adsTopicName, ar.tags,
+                           lang = lang, vertical = false,
+                                  class = "footer")
       tdiv(class = "footer-copyright"):
         text "Except where otherwise noted, this website is licensed under a "
         a(rel = "license", href = "http://creativecommons.org/licenses/by/3.0/deed.en_US"):
@@ -404,14 +411,18 @@ proc postTitle(a: Article): Future[VNode] {.async.} =
             text a.getAuthor
         adLink tags, AdLinkStyle.ico
 
-    buildImgUrl(a, defsrc=defaultImageU8)
+    buildImgUrl(a, defsrc = defaultImageU8)
 
-proc postContent(article: string; withlinks = true): Future[VNode] {.async.} =
+proc postContent(txt: string; ar: ptr Article = emptyArt; topic = ""; lang = "";
+    withlinks = true): Future[VNode] {.async.} =
   return buildHtml(article(class = "post-wrapper")):
     # NOTE: use `code` tag to avoid minification to collapse whitespace
     pre(class = HTML_POST_SELECTOR, style = break_style):
-      for ad in adsFrom(ADS_ARTICLES): ad
-      verbatim(if likely(withlinks): (await article.replaceLinks) else: article)
+      for ad in adsFrom(adsArticles): ad
+      verbatim(
+        if likely(withlinks):
+          (await insertAds(txt, lang = lang, topic = topic, kws = ar.tags))
+        else: txt)
 
 proc postFooter(pubdate: Time): VNode =
   let dt = inZone(pubdate, utc())
@@ -422,26 +433,30 @@ proc postFooter(pubdate: Time): VNode =
         text format(dt, "dd MMM yyyy")
 
 
-proc buildBody(a: Article; website_title: string = WEBSITE_TITLE): Future[
-    VNode] {.async.} =
-  checkNil(a)
+proc buildBody(ar: Article; website_title: string = WEBSITE_TITLE;
+    lang = ""): Future[VNode] {.async.} =
+  checkNil(ar)
   let
-    topicName = (await a.topic.topicDesc).toUpper
-    crumbs = &"{topicName} / N{a.page}"
-    topicUri = parseUri("/" & a.topic)
-    related = await buildRelated(a)
-  return buildHtml(body(class = "", topic = (a.topic), style = preline_style)):
-    await buildMenu(crumbs, topicUri, a)
-    await buildMenuSmall(crumbs, topicUri, a)
-    for ad in adsFrom(ADS_SIDEBAR): ad
+    topicName = (await ar.topic.topicDesc).toUpper
+    crumbs = &"{topicName} / N{ar.page}"
+    topicUri = parseUri("/" & ar.topic)
+    related = await buildRelated(ar)
+  return buildHtml(body(class = "", topic = (ar.topic), style = preline_style)):
+    await buildMenu(crumbs, topicUri, ar)
+    await buildMenuSmall(crumbs, topicUri, ar)
+    for ad in adsFrom(adsSidebar): ad
+    await allSizeBanners(topicName, ar.tags, lang, vertical = true,
+                         class = "sidebar",
+                         doClear = true) # This is the first call, clear session
     main(class = "mdc-top-app-bar--fixed-adjust"):
-      for ad in adsFrom(ADS_HEADER): ad
-      await postTitle(a)
-      await postContent(a.content)
-      postFooter(a.pubdate)
+      for ad in adsFrom(adsHeader): ad
+      await allSizeBanners(topicName, ar.tags, lang, class = "header")
+      await postTitle(ar)
+      await postContent(ar.content, ar.unsafeAddr, topic = topicName, lang = lang)
+      postFooter(ar.pubdate)
       hr()
       related
-    await buildFooter(a.topic, a.page.intToStr)
+    await buildFooter(ar.topic, topicName, ar.page.intToStr)
 
 proc pageTitle*(title: string; slug: string): VNode =
   buildHtml(tdiv(class = "title-wrap")):
@@ -476,7 +491,8 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): Future[
 
 const pageContent* = postContent
 
-template asHtml*(data: VNode, minify: static[bool] = true; minify_css: bool = true): string =
+template asHtml*(data: VNode; minify: static[bool] = true;
+    minify_css: bool = true): string =
   if data.isnil:
     warn "ashtml: data cannot be nil"
     ""
@@ -485,7 +501,8 @@ template asHtml*(data: VNode, minify: static[bool] = true; minify_css: bool = tr
 
 # NOTE: disable css minification since it breaks inline css
 # https://github.com/wilsonzlin/minify-html/issues/89
-proc asHtml*(data: string ; minify: static[bool] = true; minify_css: bool = true): string =
+proc asHtml*(data: string; minify: static[bool] = true;
+    minify_css: bool = true): string =
   let html = "<!DOCTYPE html>" & "\n" & data
   sdebug "html: raw size {len(html)}"
   result = when minify:
@@ -554,8 +571,8 @@ proc processHtml*(relpath: string; slug: string; data: VNode;
     else:
       page.writeHtml(SITE_PATH / pagepath)
 
-proc buildPost*(a: Article): Future[VNode] {.async.} =
-  let bbody = await buildBody(a)
+proc buildPost*(a: Article; lang = ""): Future[VNode] {.async.} =
+  let bbody = await buildBody(a, lang)
   return buildHtml(html(lang = DEFAULT_LANG_CODE,
                  prefix = opgPrefix(@[Opg.article, Opg.website]))
   ):
@@ -563,11 +580,16 @@ proc buildPost*(a: Article): Future[VNode] {.async.} =
     bbody
 
 proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode = nil;
-                topic = ""; desc: string = "", ar = emptyArt[]): Future[VNode] {.gcsafe, async.} =
-  let
+                topic = ""; lang, desc: string = ""; adsTopic = "";
+                    ar = emptyArt[]): Future[VNode] {.gcsafe, async.} =
+  var topicName, crumbs: string
+  if topic.isEmptyOrWhitespace:
+    topicName = (await adsTopic.topicDesc).toUpper
+    crumbs = "/ "
+  else:
     topicName = (await topic.topicDesc).toUpper
-    crumbs = if topic != "": fmt"/ {topicName} /"
-             else: "/ "
+    crumbs = fmt"/ {topicName} /"
+  let
     topicUri = parseUri("/" & topic)
     path = topic / slug
   result = buildHtml(html(lang = DEFAULT_LANG_CODE,
@@ -578,18 +600,23 @@ proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode =
     body(class = "", topic = topic, style = preline_style):
       await buildMenu(crumbs, topicUri, path)
       await buildMenuSmall(crumbs, topicUri, path)
-      for ad in adsFrom(ADS_SIDEBAR): ad
+      for ad in adsFrom(adsSidebar): ad
+      await allSizeBanners(topicName, ar.tags, lang, vertical = true,
+                           class = "sidebar",
+                           doClear = true) # This is the first call, clear session
       main(class = "mdc-top-app-bar--fixed-adjust"):
-        for ad in adsFrom(ADS_HEADER): ad
+        for ad in adsFrom(adsHeader): ad
+        await allSizeBanners(topicName, ar.tags, lang, vertical = false,
+            class = "header")
         if title != "":
           pageTitle(title, slug)
         content
         if not pagefooter.isNil():
           pageFooter
-      await buildFooter(topic, slug)
+      await buildFooter(topic, topicName, slug)
 
 import macros
-macro wrapContent(content: string, wrap: static[bool]): untyped =
+macro wrapContent(content: string; wrap: static[bool]): untyped =
   if wrap:
     quote do:
       await pageContent(`content`)
@@ -598,13 +625,13 @@ macro wrapContent(content: string, wrap: static[bool]): untyped =
       verbatim(`content`)
 
 
-proc buildPage*(title, content: string; wrap: static[bool] = false;
+proc buildPage*(title, content, lang: string; wrap: static[bool] = false;
        pagefooter = emptyVNode()): Future[VNode] {.async.} =
   let slug = slugify(title)
   return await buildPage(title = title, content.wrapContent(wrap), slug, pagefooter)
 
-proc buildPage*(content: string; wrap: static[bool] = false; pagefooter = emptyVNode()): Future[
-    VNode] {.async.} =
+proc buildPage*(content, lang: string; wrap: static[bool] = false;
+    pagefooter = emptyVNode()): Future[VNode] {.async.} =
   return await buildPage(title = "", content.wrapContent(wrap), slug = "", pagefooter)
 
 proc ldjData*(el: VNode; filepath, relpath: string; lang: langPair; a: Article) =

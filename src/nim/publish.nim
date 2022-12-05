@@ -131,7 +131,11 @@ proc filterDuplicates(topic: string, lsh: PublishedArticles, pagenum: int,
         a.topic = topic
         withPyLock:
           a.py["topic"] = topic
-      posts[].add(((await buildPost(a)), a))
+      block:
+        let post =
+          when cfg.SERVER_MODE: await buildPost(a)
+          else: nil
+        posts[].add((post, a))
       withPyLock:
         a.py["slug"] = uslug
         a.py["title"] = utitle
@@ -212,11 +216,10 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   infopub "save lsh"
   await saveLS(topic, lsh)
   infopub "Writing {nNewPosts} articles for topic: {topic}"
-  # FIXME: should this be here?
-  for (tree, a) in posts:
-    await processHtml(pagedir, a.slug, tree, a)
   # after writing the new page, ensure home points to the new page
   when not cfg.SERVER_MODE:
+    for (tree, a) in posts:
+      await processHtml(pagedir, a.slug, tree, a)
     if newpage:
       ensureHome(topic, pagenum)
   # if its a new page, the page posts count is equivalent to the just published count

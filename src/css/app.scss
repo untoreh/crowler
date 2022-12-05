@@ -196,6 +196,7 @@ footer {
 .site-footer {
   font-family: Times;
   font-size: 1rem;
+  z-index: 100;
 }
 
 .footer-links {
@@ -728,7 +729,7 @@ form.search {
       position: absolute;
       overflow: hidden;
       text-overflow: ellipsis;
-      height: 3rem;
+      height: 3.75rem;
       -webkit-line-clamp: 2;
       display: -webkit-box;
       -webkit-box-orient: vertical;

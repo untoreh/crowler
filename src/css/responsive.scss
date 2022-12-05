@@ -42,11 +42,12 @@
     .entry-info {
       grid-column: 1;
       position: relative;
-      top: 9rem;
+      top: 9.5rem;
       left: 0.5rem;
       text-align: center;
       margin: unset;
       width: 8rem;
+      overflow: hidden;
     }
     .entry-tags {
       margin-top: 5rem;
@@ -201,7 +202,7 @@
       height: 128px;
     }
     .entry-title {
-      width: 40rem;
+      width: 30rem;
     }
   }
   .footer {
@@ -225,6 +226,9 @@
   footer .footer.app-bar-logo {
     float: none;
   }
+  main {
+    padding-bottom: 3rem;
+}
 }
 
 @media (max-width: 1280px) {

@@ -42,9 +42,12 @@ proc suffixPath*(relpath: string): string =
   relpath.removeSuffix("/")
   if relpath == "":
     "index.html"
-  elif relpath.splitFile.ext == "":
-    relpath & ".html"
-  else: relpath
+  else:
+    let split = relpath.splitFile
+    if split.ext == "":
+      if split.name == "": relpath & "index.html"
+      else: relpath & ".html"
+    else: relpath
 
 proc fp*(relpath: string): string =
   ## Full file path
@@ -52,7 +55,7 @@ proc fp*(relpath: string): string =
   SITE_PATH / relpath.suffixPath()
 
 proc cacheKey*(capts: UriCaptures): string {.inline.} =
-  var path = capts.join
+  var path = capts.joinNotEmpty
   if not path.startsWith("/"):
     path = "/" & path
   return path.fp

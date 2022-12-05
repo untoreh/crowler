@@ -244,6 +244,8 @@ macro apply*(fun, args: typed): untyped =
       error("unsupported kind: " & $args.kind & ", " & args.repr)
       discard
 
+proc identity*[T](x: T): T {.gcsafe.} = x
+
 let regexTable = initLockTable[string, Regex]()
 proc get*(t: LockTable[string, Regex], k: string): Regex = t[k]
 proc put*(t: LockTable[string, Regex], k: string, v: Regex): Regex = (t[k] = v; v)
@@ -251,6 +253,12 @@ proc sre*(pattern: static[string]): Regex {.gcsafe, inline.} =
   ## Cached regex expression (should be replaced by compile time nim-regex)
   lgetOrPut(regexTable, pattern):
     re(pattern)
+proc alnum*(s: string): string =
+  ## Reduce string to its alpha numeric parts
+  for m in s.findIter(sre"([[:alnum:]]*)"):
+    if m.matchbounds.b > m.matchbounds.a:
+      result.add $m
+      result.add " " # should we trim the last space at the end?
 
 type StringSet = HashSet[string]
 
@@ -843,6 +851,7 @@ func isEmpty*(n: VNode): bool =
     false
 
 func notEmpty*(n: VNode): bool {.gcsafe.} = not isEmpty(n)
+func notEmpty*(n: string): bool {.gcsafe.} = not isEmptyOrWhitespace(n)
 
 import std/unidecode
 proc toVNode*(el: XmlNode): VNode =

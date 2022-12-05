@@ -4,3 +4,4 @@
 # --panics:on
 --verbosity:0
 --putenv:LIBPYTHON_PATH="/usr/local/lib/libpython3.10.so"
+# --putenv:LIBPYTHON_PATH="/usr/lib/libpython3.10.so"

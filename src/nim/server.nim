@@ -111,13 +111,14 @@ proc initThreadImpl() {.gcsafe.} =
   initTranslate()
 
   debug "thread: cache"
-  reqCtxCache = initLockLruCache[string, ref ReqContext](32)
+  reqCtxCache = initLockLruCache[string, ref ReqContext](4096)
   assetsCache = initLockLruCache[string, string](256)
   debug "thread: topics"
   waitFor syncTopics()
   debug "thread: assets"
   loadAssets()
   debug "thread: ads"
+  initCJ()
   readAdsConfig()
 
   threadInitialized = true
@@ -308,7 +309,7 @@ template handleTopic(capts: auto, ctx: HttpRequestRef) =
       let pagenum = if capts.page == "": $(
           await topic.lastPageNum) else: capts.page
       debug "topic: page: ", capts.page
-      topicPage(topic, pagenum, false)
+      topicPage(topic, pagenum, false, lang = capts.lang)
       checkNil pagetree, "topic: pagetree couldn't be generated."
       let
         pagepath = capts.topic / capts.page
@@ -461,6 +462,7 @@ template handleCacheClear() =
             assetsCache.del(reqCtx.key)
           else:
             debug "cache: deleting page {reqCtx.url.path}"
+            pageCache.del(reqCtx.key)
             deletePage(reqCtx.norm_capts)
         except:
           warn "cache: deletion failed for {reqCtx.norm_capts:.120}"

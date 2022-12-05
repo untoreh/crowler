@@ -165,7 +165,8 @@ proc initLang*(code: string): Lang =
   result.code = code
   result.name = TLangsTable[code]
 
-proc srcLangName*(lang: langPair): string = TLangsTable[lang.src]
+proc langName*(code: string): string {.inline.} = TLangsTable.getOrDefault(code, "English")
+proc srcLangName*(lang: langPair): string {.inline.} = lang.src.langName
 
 var glues*: ptr seq[(string, Regex)]
 var gluePadding*: int

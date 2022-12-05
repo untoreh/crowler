@@ -39,6 +39,13 @@ proc join*(tup: UriCaptures, sep = "/", n = 0): string =
       c += 1
   s.join(sep)
 
+proc joinNotEmpty*(tup: UriCaptures): string =
+  for v in tup.fields():
+    if v.len > 0:
+      result.add v
+      result.add "/"
+  result.removeSuffix("/")
+
 proc path*(capts: UriCaptures, slash: static[bool] = false): string =
   let p =
     if capts.topic == "": "index"

@@ -138,28 +138,32 @@ proc articleEntry(ar: Article, topic = ""): Future[VNode] {.async.} =
     warn "articles: entry creation failed."
     raise e
 
-proc buildShortPosts*(arts: seq[Article], topic = ""): Future[
+proc buildShortPosts*(arts: seq[Article], topic = "", lang = ""): Future[
     string] {.async.} =
   # let sepAds =
   #   buildHtml(tdiv(class="sep-ads")):
-  #     for ad in adsFrom(ADS_SEPARATOR): ad
+  #     for ad in adsFrom(adsSeparator): ad
 
-  var sepAds = adsGen(ADS_SEPARATOR)
+  var sepAds = adsGen(adsSeparator)
+  var sepLinks = await adsLinksGen((await topic.topicDesc), lang = lang)
   let hr = buildHtml(hr())
 
   for a in arts:
     result.add $(await articleEntry(a, topic))
     result.add hr
+    let ads = buildHtml(tdiv(class="sep-ads"))
     let sep = filterNext(sepAds, notEmpty)
     if not sep.isnil:
-      result.add buildHtml(tdiv(class="sep-ads"), sep)
+      ads.add sep
+    ads.add sepLinks.filterNext(notEmpty).verbatim
+    result.add ads
 
-template topicPage*(name: string, pn: string, istop = false) {.dirty.} =
+template topicPage*(name: string, pn: string, istop = false, lang = "") {.dirty.} =
   ## Writes a single page (fetching its related articles, if its not a template) to storage
   let pnInt = pn.parseInt
   let arts = await getDoneArticles(name, pagenum = pnInt)
   debug "topics: name page for page {pnInt} ({len(arts)})"
-  let content = await buildShortPosts(arts, name)
+  let content = await buildShortPosts(arts, name, lang)
   # if the page is not finalized, it is the homepage
   let footer = await pageFooter(name, pn, home = istop)
   let pagetree =
@@ -198,7 +202,11 @@ proc processTranslatedPage*(lang: string, amp: string, relpath: string): Future[
   if jobId notin translateFuts:
     raise newException(ValueError, fmt"Translation was not scheduled. (transId: {jobId})")
   let (node, fut) = translateFuts[jobId]
-  translateFuts.del(jobId)
+  defer:
+    # NOTE: this must be done after completion since other request might
+    # happen at the same time on this page
+    if jobId in translateFuts:
+      translateFuts.del(jobId)
   discard await fut
   # signal that full translation is complete to js
   node.find(VNodeKind.meta, ("name", "translation")).setAttr("content", "complete")
@@ -219,7 +227,7 @@ proc pageFromTemplate*(tpl, lang, amp: string): Future[string] {.async.} =
   txt = multiReplace(txt, vars)
   let
     slug = slugify(title)
-    page = await buildPage(title = title, content = txt, wrap = true)
+    page = await buildPage(title = title, content = txt, lang, wrap = true)
   checkNil(page):
     let processed = await processPage(lang, amp, page, relpath = tpl)
     checkNil(processed, fmt"failed to process template {tpl}, {lang}, {amp}"):
@@ -234,7 +242,7 @@ proc articleTree*(capts: auto): Future[VNode] {.async.} =
       debug "article: building post"
       a = initArticle(py, parseInt(capts.page))
   if not a.isnil:
-    let post = await buildPost(a)
+    let post = await buildPost(a, capts.lang)
     if not post.isnil:
       debug "article: processing"
       let path = join([capts.topic, capts.page, capts.art], "/")
@@ -246,6 +254,13 @@ proc articleHtml*(capts: auto): Future[string] {.gcsafe, async.} =
   return if not t.isnil:
                t.asHtml(minify_css = (capts.amp == ""))
            else: ""
+
+template divWrap(class = "", cnt: string): string =
+  var res: string
+  res.add "<div class=\"" & class & "\">"
+  res.add cnt
+  res.add "</div>"
+  res
 
 proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
   await syncTopics()
@@ -259,7 +274,12 @@ proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
     processed: HashSet[string]
     trial = 0
     maxTries = cfg.HOME_ARTS * 3
+    sepAds = adsGen(adsSeparator)
+    topic = await curTopic()
+    topicName = await topic.topicDesc
+    sepLinks = await adsLinksGen(topicName, lang = lang)
 
+  var topics: seq[string] # used to give *some* topics to the page builder
   while nArts < cfg.HOME_ARTS and trial < maxTries:
     trial.inc
     var topic: string
@@ -267,16 +287,20 @@ proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
       topic = site[].get_random_topic().to(string)
     if topic == "": # this can happen if we ran out of topics
       continue
+    topics.add topic
     let arts = await getLastArticles(topic, 1)
     if len(arts) > 0:
       let ar = arts[0]
-      if not (ar.slug in processed):
+      if ar.slug notin processed:
         content.add $(await articleEntry(ar))
+        content.add divWrap("ads-sep", sepLinks.filterNext(notEmpty))
         processed.incl ar.slug
         nArts.inc
   let pagetree = await buildPage(title = "",
                        content = verbatim(content),
                        slug = "",
+                       topic = "",
+                       adsTopic = topics[0],
                        desc = WEBSITE_DESCRIPTION)
   checkNil(pagetree):
     return await processPage(lang, amp, pagetree)
@@ -315,6 +339,7 @@ proc buildSearchPage*(topic: string, kws: string, lang: string,
                       content = verbatim(content),
                       slug = "/s/" & kws,
                       pagefooter = footer,
+                      adsTopic = topic,
                       topic = "") # NOTE: Search box is sitewide
   checkNil(tree):
     return (await processPage(lang, "", tree, relpath = capts.path)).asHtml(

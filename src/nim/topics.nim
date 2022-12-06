@@ -303,6 +303,7 @@ export `<=`
 template syncTopics*(force = false) =
   let pastTime = getTime() - lastTopicSync
   if force or pastTime >= topicSyncInterval:
+    lastTopicSync = getTime()
     await syncTopicsImpl(force)
 template initTopics*(force = false) =
     waitFor syncTopicsImpl(true)
@@ -318,6 +319,8 @@ proc curTopic*(): string =
 
 when isMainModule:
   initPy()
+  initTopics()
+  initTopics()
   initTopics()
   # let topics = waitFor loadTopics()
   # syncPyLock:

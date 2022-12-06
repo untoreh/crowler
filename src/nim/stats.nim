@@ -41,7 +41,7 @@ proc updateHits*(capts: UriCaptures) =
 
 proc getHits*(topic: string, slug: string): uint32 =
   checkNil(statsDB):
-    result = statsDB[join([topic, slug])].toUint32
+    result = statsDB.getUnchecked(join([topic, slug])).toUint32
 
 import std/algorithm
 proc cmp(x, y: (string, uint32)): bool {.inline.} = x[1] > y[1]

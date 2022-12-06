@@ -198,7 +198,7 @@ proc writePushLog(log: JsonNode) {.async.} =
   await writeFileAsync(pushLogFile, $log)
 
 proc pushAllSonic*() {.async.} =
-  await syncTopics()
+  syncTopics()
   var total, c, pagenum: int
   let pushLog = await readPushLog()
   if pushLog.len == 0:
@@ -212,7 +212,7 @@ proc pushAllSonic*() {.async.} =
       pushLog[topic] = %0
     await pygil.acquire
     defer: pygil.release
-    let done = state.group[]["done"]
+    let done = state.group["done"]
     for page in done:
       pagenum = ($page).parseint
       c = len(done[page])

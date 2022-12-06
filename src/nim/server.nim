@@ -114,7 +114,7 @@ proc initThreadImpl() {.gcsafe.} =
   reqCtxCache = initLockLruCache[string, ref ReqContext](4096)
   assetsCache = initLockLruCache[string, string](256)
   debug "thread: topics"
-  waitFor syncTopics()
+  initTopics()
   debug "thread: assets"
   loadAssets()
   debug "thread: ads"
@@ -349,7 +349,7 @@ template handleTopic(capts: auto, ctx: HttpRequestRef) =
 template handleArticle(capts: auto, ctx: HttpRequestRef) =
   ##
   debug "article: fetching article"
-  let tg = topicsCache.get(capts.topic, emptyTopic)
+  let tg = topicsCache.get(capts.topic, emptyTopic[])
   checkNil(tg.group)
   if tg.topdir != -1:
     try:

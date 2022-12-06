@@ -40,7 +40,7 @@ proc ensureDir(dir: string) =
 
 proc curPageNumber(topic: string): Future[int] {.async.} =
   withPyLock:
-    return site[].get_top_page(topic).to(int)
+    return site.get_top_page(topic).to(int)
   # return getSubdirNumber(topic, curdir)
 
 proc pubPage(topic: string, pagenum: string, nPagePosts: int, finalize = false, istop = false,
@@ -55,7 +55,7 @@ proc pubPage(topic: string, pagenum: string, nPagePosts: int, finalize = false, 
   # if we pass a nPagePosts we mean to finalize
   if finalize:
     withPylock:
-      discard site[].update_page_size(topic, pagenum.parseInt, nPagePosts, final = true)
+      discard site.update_page_size(topic, pagenum.parseInt, nPagePosts, final = true)
   if with_arts:
     for a in arts:
       await processHtml(topic / pagenum, a.slug, (await buildPost(a)), a)
@@ -95,7 +95,7 @@ proc finalizePages(topic: string, pn: int, newpage: bool,
 #     ## and resets their page numbers
 #     let done = topicDonePages(topic)
 #     withPyLock:
-#         assert isa(done, site[].za.Group)
+#         assert isa(done, site.za.Group)
 #         let topdir = len(done)
 #         if topdir == 0:
 #             return
@@ -148,7 +148,7 @@ proc filterDuplicates(topic: string, lsh: PublishedArticles, pagenum: int,
       doneArts[].add a
   await updateTopicPubdate()
   withPyLock:
-    discard site[].save_done(topic, nProcessed, donePy[], pagenum)
+    discard site.save_done(topic, nProcessed, donePy[], pagenum)
   return true
 
 proc ensureLS(topic: string): Future[PublishedArticles] {.async, raises: [].} =
@@ -175,7 +175,7 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   ##  Generates html for a list of `Article` objects and writes to file.
   infopub "start"
   withPyLock:
-    doassert topic in site[].load_topics()[1]
+    doassert topic in site.load_topics()[1]
   if not (await hasUnpublishedArticles(topic)):
     infopub "no unpublished articles"
     return false
@@ -229,11 +229,11 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   withPyLock:
     if not newpage:
       # add previous published articles
-      let pagesize = site[].get_page_size(topic, pagenum)
+      let pagesize = site.get_page_size(topic, pagenum)
       # In case we didn't save the count, re-read from disk
       if not pyisnone(pagesize):
         nPagePosts += pagesize[0].to(int)
-    discard site[].update_page_size(topic, pagenum, nPagePosts)
+    discard site.update_page_size(topic, pagenum, nPagePosts)
 
   infopub "finalizing pages"
   await finalizePages(topic, pagenum, newpage, nPagePosts.addr)
@@ -258,9 +258,8 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   return true
 
 
-let lastPubTime = create(Time)
+var lastPubTime = getTime()
 let pubLock = newThreadLock()
-lastPubTime[] = getTime()
 
 proc pubTimeInterval(topic: string): Future[int] {.async.} =
   ## Publication interval is dependent on how many articles we can publish
@@ -268,7 +267,7 @@ proc pubTimeInterval(topic: string): Future[int] {.async.} =
   ## If we have 100 arts: every 1.2 hours
   ## If we have 10 arts: every 12 hours
   withPyLock:
-    let artsLen = site[].load_articles(topic).len
+    let artsLen = site.load_articles(topic).len
     # in minutes
     result = 120.div(max(1, artsLen)) * 60
 
@@ -279,11 +278,11 @@ proc maybePublish*(topic: string) {.gcsafe, async.} =
     let
       tpd = (await topicPubdate())
       pastTime = inMinutes(t - tpd)
-    # Don't publish each topic more than `CRON_TOPIC_FREQ`
+      pubInterval = await pubTimeInterval(topic)
     var published: bool
-    if pastTime > (await pubTimeInterval(topic)):
+    if pastTime > pubInterval:
       debug "pubtask: {topic} was published {pastTime} hours ago, publishing."
-      lastPubTime[] = t
+      lastPubTime = t
       published = await pubTopic(topic)
       if published:
         # clear homepage and topic page cache
@@ -292,7 +291,7 @@ proc maybePublish*(topic: string) {.gcsafe, async.} =
 
 proc resetTopic(topic: string) =
   syncPyLock():
-    discard site[].reset_topic_data(topic)
+    discard site.reset_topic_data(topic)
   pageCache.delete(topic.feedKey)
   clearSiteMap(topic, all = true)
   waitFor saveLS(topic, init(PublishedArticles))
@@ -322,14 +321,14 @@ proc pubAllPages(topic: string, clear = true) {.async.} =
 
 # proc refreshPageSizes(topic: string) =
 #     withPyLock:
-#         let grp = site[].topic_group(topic)
+#         let grp = site.topic_group(topic)
 #         let donearts = grp[$topicData.done]
-#         assert isa(donearts, site[].za.Group)
+#         assert isa(donearts, site.za.Group)
 #         assert len(donearts) == len(grp[$topicData.pages])
 #         let topdir = len(donearts) - 1
 #         for pagenum in 0..<topdir:
-#             discard site[].update_page_size(topic, pagenum, len(donearts[$pagenum]), final = true)
-#         discard site[].update_page_size(topic, topdir, len(donearts[$topdir]), final = false)
+#             discard site.update_page_size(topic, pagenum, len(donearts[$pagenum]), final = true)
+#         discard site.update_page_size(topic, topdir, len(donearts[$topdir]), final = false)
 
 # import translate
 # when isMainModule:

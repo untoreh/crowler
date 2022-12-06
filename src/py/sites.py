@@ -6,7 +6,17 @@ from collections import deque
 from datetime import datetime
 from pathlib import Path
 from random import choice, randint
-from typing import Any, Callable, Dict, Iterator, List, MutableSequence, Optional, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    MutableSequence,
+    Optional,
+    Tuple,
+    Union,
+)
 import json
 import os
 import re
@@ -70,6 +80,7 @@ class TopicState:
         unpub_count: {self.unpub_count}
         """
 
+
 def read_sites_config(sitename: str, ensure=False, force=False):
     global SITES_CONFIG
     if force or cfg.SITES_CONFIG is None:
@@ -104,6 +115,7 @@ class Site:
 
     topics_arr: Optional[za.Array] = None
     topics_dict: Dict[str, str] = {}
+    topics_index: Dict[str, int] = {}
     new_topics_enabled: bool = False
     topics_sync_freq = 3600
     has_reddit = False
@@ -350,7 +362,7 @@ class Site:
     def name(self):
         return self._name
 
-    def load_articles(self, topic: str, k=ZarrKey.articles, subk: int | str =""):
+    def load_articles(self, topic: str, k=ZarrKey.articles, subk: int | str = ""):
         return load_zarr(k=k, subk=subk, root=self.topic_dir(topic))
 
     def load_feeds(self, topic: str):
@@ -439,8 +451,6 @@ class Site:
     def get(self, topic: str):
         return self.topic_group(topic)
 
-
-
     def reset_topic_data(self, topic: str):
         assert topic != "", "the topic exist to be reset"
         print("utils: resetting topic data for topic: ", topic)
@@ -479,6 +489,9 @@ class Site:
             if len(self.topics_arr) > 0:
                 self.topics_dict = dict(
                     zip(self.topics_arr[:, 0], self.topics_arr[:, 1])
+                )
+                self.topics_index = dict(
+                    zip(self.topics_arr[:, 0], range(0, len(self.topics_arr)))
                 )
             else:
                 self.topics_dict = {}
@@ -576,18 +589,27 @@ class Site:
     def get_topic_desc(self, topic: str):
         return self.topics_dict.get(topic, "")
 
-    def get_topic_idx(self, topic):
-        arr = self.load_topics()[0]
-        return np.argmax(arr[:, 0] == topic)
+    def get_topic_idx(self, topic) -> int:
+        return self.topics_index[topic]
 
-    def get_topic_pubDate(self, idx: int):
-        assert self.topics_arr is not None
-        return int(self.topics_arr[idx, 2]) if len(self.topics_arr) > idx else 0
+    def get_topic_pubDate(self, topic: str):
+        self.load_topics()
+        assert isinstance(self.topics_arr, za.Array)
+        assert isinstance(topic, str)
+        idx = self.topics_index[topic]
+        if idx in self.topics_index:
+            t = self.topics_arr[idx, Topic.PubDate]
+            assert isinstance(t, int)
+            return t
+        else:
+            return 0
 
-    def set_topic_pubDate(self, idx) -> bool:
+    def set_topic_pubDate(self, topic: str) -> bool:
         try:
             self.load_topics()
-            assert self.topics_arr is not None
+            assert isinstance(self.topics_arr, za.Array)
+            assert isinstance(topic, str)
+            idx = self.topics_index[topic]
             self.topics_arr[idx, Topic.PubDate] = int(time.time())
             return True
         except:
@@ -689,10 +711,12 @@ class Site:
             ), f"Topic mismatch: {t[Topic.Slug]} != {topic} "
             arr[idx] = self._update_topic_articles(t)
 
-    def sorted_topics(self, key=Topic.UnpubCount, force=False, full=False):
+    def sorted_topics(self, key=Topic.UnpubCount, force=False, full=False, rev=False):
         """Returns topics index sorted by the number of unpublished articles of each topics."""
         arr = self.load_topics(force)[0][:]
         idx = arr[:, key].argsort()
+        if rev:  # descending order
+            idx = idx[::-1]
         return arr[idx] if full else arr[idx, Topic.Slug]
 
 

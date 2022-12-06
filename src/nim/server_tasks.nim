@@ -15,21 +15,21 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
       warn "PUBLISHING DISABLED"
       await sleepAsync(100.seconds)
   try:
-    await syncTopics()
+    syncTopics()
     # Give some time to services to warm up
     # await sleepAsync(10.seconds)
     let t = getTime()
     var backoff = 1
     # start the topic sync thread from python
     withPyLock:
-      let watcher = site[].getAttr("topics_watcher")
+      let watcher = site.getAttr("topics_watcher")
       discard pySched[].initPool()
       discard pySchedApply[](watcher)
 
     while len(topicsCache) == 0:
       debug "pubtask: waiting for topics to be created..."
       await sleepAsync(backoff.seconds)
-      await syncTopics()
+      syncTopics()
       backoff += 1
     # Only publish one topic every `CRON_TOPIC`
     prevSize = len(topicsCache)
@@ -41,7 +41,7 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
   while true:
     try:
       if n <= 0:
-        await syncTopics()
+        syncTopics()
         n = len(topicsCache)
         # if new topics have been added clear homepage/sitemap
         if n != prevSize:
@@ -96,13 +96,13 @@ proc deleteLowTrafficArts*(topic: string): Future[void] {.gcsafe, async.} =
         await deleteArt(capts)
   for n in pagesToReset:
     withPyLock:
-      discard site[].update_pubtime(topic, n)
+      discard site.update_pubtime(topic, n)
 
 const cleanupInterval = (60 * 3600 * 2).seconds
 proc cleanupTask*(): Future[void] {.async.} =
   while true:
     try:
-      await syncTopics()
+      syncTopics()
       for topic in topicsCache.keys():
         await deleteLowTrafficArts(topic)
     except Exception:

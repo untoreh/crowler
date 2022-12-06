@@ -263,7 +263,7 @@ template divWrap(class = "", cnt: string): string =
   res
 
 proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
-  await syncTopics()
+  syncTopics()
   var a: Article
   withPyLock:
     a = default(Article)
@@ -275,7 +275,7 @@ proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
     trial = 0
     maxTries = cfg.HOME_ARTS * 3
     sepAds = adsGen(adsSeparator)
-    topic = await curTopic()
+    topic = curTopic()
     topicName = await topic.topicDesc
     sepLinks = await adsLinksGen(topicName, lang = lang)
 
@@ -284,7 +284,7 @@ proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
     trial.inc
     var topic: string
     withPyLock:
-      topic = site[].get_random_topic().to(string)
+      topic = site.get_random_topic().to(string)
     if topic == "": # this can happen if we ran out of topics
       continue
     topics.add topic

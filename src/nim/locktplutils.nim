@@ -1,6 +1,6 @@
 ## This file should be included
 
-import std/wrapnils
+import std/deques
 import chronos
 import locktpl
 
@@ -173,7 +173,7 @@ type
     lock: ThreadLock
     current: uint16
     count: uint16
-    waiters: seq[ptr Future[void]]
+    waiters: Deque[ptr Future[void]]
   AsyncSemaphore* = ptr AsyncSemaphoreObj
 
 proc init*(_: typedesc[AsyncSemaphore], n: Natural): AsyncSemaphore =
@@ -187,18 +187,26 @@ proc acquire*(sem: AsyncSemaphore) {.async.} =
     if sem.current > 0:
       sem.current.dec
       return
-  var fut = newFuture[void]("AsyncSemaphore.wait")
-  withLock(sem.lock):
-    sem.waiters.add fut.addr
-  await fut
-  withLock(sem.lock):
-    assert sem.current > 0
-    sem.current.dec
+  while true:
+    var fut = newFuture[void]("AsyncSemaphore.wait")
+    withLock(sem.lock):
+      sem.waiters.addLast fut.addr
+    await fut
+    withLock(sem.lock):
+      if sem.current > 0:
+        sem.current.dec
+        return
 
 proc release*(sem: AsyncSemaphore) {.async.} =
   withLock(sem.lock):
     assert sem.current < sem.count
     sem.current.inc
+    var w: ptr Future[void]
+    while sem.waiters.len > 0:
+      w = sem.waiters.popFirst()
+      if not w.isnil and not w[].isnil and not w[].finished:
+          w[].complete()
+          break
 
 template withSem*(sem: AsyncSemaphore) =
   await sem.acquire()

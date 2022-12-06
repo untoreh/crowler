@@ -350,8 +350,8 @@ template handleArticle(capts: auto, ctx: HttpRequestRef) =
   ##
   debug "article: fetching article"
   let tg = topicsCache.get(capts.topic, emptyTopic[])
-  checkNil(tg.group)
   if tg.topdir != -1:
+    checkNil(tg.group)
     try:
       page = getOrCache(reqCtx.key):
         debug "article: generating article"

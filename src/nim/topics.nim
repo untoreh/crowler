@@ -74,7 +74,11 @@ type TopicTuple* = tuple[slug, name: string, timestamp: int64, pubcount, unpubco
 proc toTopicTuple(py: PyObject): TopicTuple  =
   result.slug = py[0].to(string)
   result.name = py[1].to(string)
-  result.timestamp = py[2].to(int64)
+  let ts = py[2]
+  result.timestamp =
+    if ts.pyisint: ts.to(int64)
+    elif ts.pyisstr: ts.to(string).parseInt
+    else: 0
   result.pubcount = py[3].to(int)
   result.unpubcount = py[4].to(int)
 proc loadTopics*(force = false): Future[PySequence[TopicTuple]] {.async.} =

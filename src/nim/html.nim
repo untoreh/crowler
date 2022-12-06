@@ -394,6 +394,14 @@ proc buildFooter*(topic = ""; adsTopicName = ""; pagenum = ""; lang = "";
           text "Creative Commons Attribution 3.0 Unported License."
       script(src = JS_REL_URL, async = "")
 
+proc postSource(icon: string): VNode =
+  result =
+    buildHtml(img(src = icon,
+                  loading = "lazy",
+                  alt = "web",
+                  class = "material-icons"))
+  result.setAttr("onerror", defaultImageU8)
+
 proc postTitle(a: Article): Future[VNode] {.async.} =
   return buildHtml(tdiv(class = "title-wrap")):
     h1(class = "post-title", id = "main"):
@@ -406,8 +414,7 @@ proc postTitle(a: Article): Future[VNode] {.async.} =
         buildSocialShare(a)
         tdiv(class = "post-source"):
           a(href = a.url):
-            img(src = a.icon, loading = "lazy", alt = "web",
-                                        class = "material-icons")
+            postSource(a.icon)
             text a.getAuthor
         adLink tags, AdLinkStyle.ico
 

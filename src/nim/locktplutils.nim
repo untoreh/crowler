@@ -168,6 +168,42 @@ proc put*[K, V](t: AsyncTable[K, V], k: K, v: V) {.async.} =
 template `[]=`*[K, V](t: AsyncTable[K, V], k: K, v: V) =
   await t.put(k, v)
 
+type
+  AsyncSemaphoreObj = object
+    lock: ThreadLock
+    current: uint16
+    count: uint16
+    waiters: seq[ptr Future[void]]
+  AsyncSemaphore* = ptr AsyncSemaphoreObj
+
+proc init*(_: typedesc[AsyncSemaphore], n: Natural): AsyncSemaphore =
+  result = create(AsyncSemaphoreObj)
+  result.lock = newThreadLock()
+  result.count = n.uint16
+  result.current = n.uint16
+
+proc acquire*(sem: AsyncSemaphore) {.async.} =
+  withLock(sem.lock):
+    if sem.current > 0:
+      sem.current.dec
+      return
+  var fut = newFuture[void]("AsyncSemaphore.wait")
+  withLock(sem.lock):
+    sem.waiters.add fut.addr
+  await fut
+  withLock(sem.lock):
+    assert sem.current > 0
+    sem.current.dec
+
+proc release*(sem: AsyncSemaphore) {.async.} =
+  withLock(sem.lock):
+    assert sem.current < sem.count
+    sem.current.inc
+
+template withSem*(sem: AsyncSemaphore) =
+  await sem.acquire()
+  defer: await sem.release()
+
 # when isMainModule:
 #   import os
 #   import chronos_patches

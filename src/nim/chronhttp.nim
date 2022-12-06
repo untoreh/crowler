@@ -3,11 +3,13 @@ import chronos/apps/http/httpclient except TLSFlags
 import httputils
 import std/[httpcore, tables, monotimes, hashes, uri, macros, sequtils]
 
-import types, pyutils, utils, httptypes
+import types, pyutils, utils, httptypes, locktplutils
 
 var handler: Thread[void]
+var sem: AsyncSemaphore
 var futs {.threadvar.}: seq[Future[void]]
 const chronHttpDebug {.booldefine.} = false
+const maxConcurrentRequests = 100
 
 template cdebug(code) =
   # Failed requests stacktraces are too noisy
@@ -42,6 +44,7 @@ converter tobytes(s: string): seq[byte] = cast[seq[byte]](s.toSeq())
 const proxiedFlags = {NoVerifyHost, NoVerifyServerName, NewConnectionAlways}
 const sessionFlags = {NoInet6Resolution}
 proc requestTask(q: sink ptr Request) {.async.} =
+  withSem(sem)
   var trial = 0
   var
     sess: HttpSessionRef
@@ -127,5 +130,6 @@ proc requestHandler() = waitFor requestHandlerAsync()
 
 proc initHttp*() {.gcsafe.} =
   httptypes.initHttp()
+  sem = init(AsyncSemaphore, maxConcurrentRequests)
   if not handler.running:
     createThread(handler, requestHandler)

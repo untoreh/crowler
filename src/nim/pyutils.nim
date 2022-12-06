@@ -31,14 +31,21 @@ pygil.release()
 template withPyLock*(code): untyped =
   {.locks: [pyGil].}:
     try:
-      # echo getThreadId(), " -- ", getCurrentProcessId(), " -- ", procName()
       await pygil.acquire()
       code
     except:
       raise getCurrentException()
     finally:
-      # echo getThreadId(), " -- ", getCurrentProcessId(),  " -- unlocked"
       pygil.release()
+
+template withOutPylock*(code): untyped =
+  try:
+    pygil.release()
+    code
+  except:
+    raise getCurrentException()
+  finally:
+    await pygil.acquire()
 
 template syncPyLock*(code): auto =
   {.locks: [pyGil].}:
@@ -100,6 +107,15 @@ block:
     if dirExists(pypath):
       let sys = pyImport("sys")
       discard sys.path.append(pypath)
+
+macro pyObjExp*(defs: varargs[untyped]): untyped =
+  result = newNimNode(nnkStmtList)
+  for d in defs:
+    let
+      name = d[0]
+      def = d[1]
+    result.add quote do:
+      let `name`* {.guard: pyGil.} = `def`
 
 macro pyObjPtr*(defs: varargs[untyped]): untyped =
   result = newNimNode(nnkStmtList)
@@ -210,12 +226,11 @@ pygil.globalAcquire()
 let pycfg* = pyImport("config")
 doassert not pyisnone(pycfg)
 discard pyImport("log")
-pyObjPtrExp((ut, pyImport("utils")))
-doassert not pyisnone(ut[])
+pyObjExp((ut, pyImport("utils")))
+doassert not pyisnone(ut)
 discard pyImport("blacklist")
-let site* = create(PyObject)
-site[] = pyImport("sites").Site(WEBSITE_NAME)
-doassert not pyisnone(site[])
+pyObjExp((site, pyImport("sites").Site(WEBSITE_NAME)))
+doassert not pyisnone(site)
 pyObjPtrExp(
     (pySched, pyImport("scheduler")),
     (pySchedApply, pySched[].getAttr("apply"))

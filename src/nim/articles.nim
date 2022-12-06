@@ -34,7 +34,7 @@ proc getArticleUrl*(a: Article, lang: string): string {.inline.} = $(WEBSITE_URL
 
 proc isValidArticlePy*(py: PyObject): bool =
   {.locks: [pyGil].}:
-    ut[].is_valid_article(py).to(bool)
+    ut.is_valid_article(py).to(bool)
 
 proc getArticles*(topic: string, n = 3, pagenum: int = -1): Future[(int, seq[
     Article])] {.async.} =
@@ -62,7 +62,7 @@ proc getDoneArticles*(topic: string, pagenum: int, rev = true): Future[seq[
     Article]] {.async.} =
   withPyLock:
     let
-      grp = site[].topic_group(topic)
+      grp = site.topic_group(topic)
       arts = pyget(grp, $topicData.done / pagenum.intToStr, PyNone)
 
     if not arts.pyisnone:
@@ -81,7 +81,7 @@ proc allDoneContent*(topic: string): Future[seq[string]] {.async.} =
   var grp: PyObject
   var arts: PyObject
   withPyLock:
-    grp = site[].topic_group(topic)
+    grp = site.topic_group(topic)
   for p in 0..<lastPage:
     var pageLen = 0
     withPyLock:
@@ -215,7 +215,7 @@ proc deleteArt*(capts: UriCaptures, cacheOnly = false) {.async, gcsafe.} =
     withPyLock:
       let
         ts = Topics.fetch(capts.topic)
-        tg = ts.group[]
+        tg = ts.group
         pageArts = tg[$topicData.done][capts.page]
         pyslug = capts.art.nimValueToPy().newPyObject
       var toRemove: seq[int]

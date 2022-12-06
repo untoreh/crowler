@@ -15,7 +15,7 @@ if not dirExists(CJ_CACHE_PATH):
 
 proc get_site_config(name: string): string =
   syncPyLock():
-    return site[].getAttr("_config").callMethod("get", name).to(string)
+    return site.getAttr("_config").callMethod("get", name).to(string)
 
 import std/importutils
 proc children(x: XmlNode): seq[XmlNode] =

@@ -7,7 +7,7 @@ import types, pyutils, utils, httptypes
 
 
 pygil.globalAcquire()
-pyObjPtr((fetchData, ut[].getAttr("fetch_data")))
+pyObjPtr((fetchData, ut.getAttr("fetch_data")))
 pygil.release()
 
 var handler: ptr Future[void]

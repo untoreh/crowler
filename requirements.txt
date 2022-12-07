@@ -9,6 +9,7 @@ alt-profanity-check
 clean-text
 deep_translator
 textblob
+git+https://github.com/untoreh/embeddify
 
 ## requests
 pyssl

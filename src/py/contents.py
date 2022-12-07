@@ -35,11 +35,18 @@ def parsesource(url, topic, site: Site):
         f = exclude_blacklist(site, f)
         if f:
             logger.info("Adding %s feeds.", len(f))
-            FEEDS[site.name].extend(f)
+            assert isinstance(f, list)
+            if site.name not in FEEDS:
+                FEEDS[site.name] = f
+            else:
+                FEEDS[site.name].extend(f)
         a = art.fillarticle(url, data, topic, site)
         if a:
             logger.info("Adding %s articles", len(a))
-            ARTICLES[site.name].append(a)
+            if site.name not in ARTICLES:
+                ARTICLES[site.name] = [a]
+            else:
+                ARTICLES[site.name].append(a)
         elif len(f) == 0:
             logger.info("Url is neither an article nor a feed source. (%s)", url)
         LAST_SOURCE[site.name] = (f, a)

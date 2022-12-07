@@ -18,6 +18,13 @@ import utils as ut
 from sites import Site
 from sources import get_images
 from tagging import rake
+from praw.reddit import Submission
+from praw import Reddit
+from embeddify import Embedder
+from datetime import datetime
+
+reddit: Reddit = None
+emb: Embedder = None
 
 # NOTE: Check scikit version from time to time
 with warnings.catch_warnings():
@@ -295,6 +302,145 @@ def clean_content(content: str):
         return content
 
 
+def maybe_translate(title, content, lang, logf):
+    # Ensure articles are always in the chosen source language
+    if lang != tr.SLang.code:
+        logf("pyart: different lang? %s", lang)
+        content = tr.translate(content, to_lang=tr.SLang.code, from_lang=lang)
+        title = tr.translate(title, to_lang=tr.SLang.code, from_lang=lang)
+    return (title, content)
+
+
+def process_content(final, logf):
+
+    final["title"], final["content"] = maybe_translate(
+        final["title"], final["content"], final["lang"], logf
+    )
+
+    final["content"] = replace_profanity(final["content"])
+
+    if not final["content"] or not isrelevant(final["title"], final["content"]):
+        logf("content not relevant (%d)", len(final["content"] or ""))
+        return {}
+
+    final["content"] = clean_content(final["content"])
+    if not final["content"]:
+        logf("cleaned content is empty.")
+        return {}
+
+    return final
+
+
+def ensure_reddit():
+    global reddit, emb
+    if reddit is None:
+        reddit = Reddit(
+            client_id="I0vScOPlsiZ47b6dm9WWoQ",
+            client_secret="1Uq8QtEkVeRKKy4ryjpRsqsaXgWHsw",
+            user_agent="wslBot",
+        )
+    if emb is None:
+        emb = Embedder()
+
+
+def embed(s: Submission, final):
+    try:
+        if "oembed" in s.media:
+            o = s.media["oembed"]
+            if "thumbnail_url" in o:
+                final["imageUrl"] = o["thumbnail_url"]
+                final["imageTitle"] = o.get("title", s.title)
+                final["imageOrigin"] = s.url
+            if "html" in o:
+                final["content"] = o["html"]
+        else:
+            vid = s.media["reddit_video"]
+            url = vid["fallback_url"]
+            ext = parse_url(url).path.split(".")[-1]
+            width = vid["width"]
+            height = vid["height"]
+            final["content"] = f"""\
+<video width="{width}" height="{height}" controls>
+<source src="{url}" type="video/{ext}">
+Your browser does not support the video tag.
+</video>
+"""
+    except:
+        embed_code = emb(s.url)
+        if embed_code == s.url:
+            return None
+
+
+def process_reddit(url, topic, site, logf):
+    ensure_reddit()
+    final = {}
+    try:
+        s = reddit.submission(url=url)
+        final["title"] = s.title
+        if not final["title"]:
+            return {}
+        if s.media:
+            embed(s, final)
+            if not final["content"]:
+                logf("reddit failed to process media")
+                return {}
+            final["tags"] = rake(final["content"])
+        else:
+            content = s.selftext
+            if len(content) < cfg.ART_MIN_LEN:
+                logf("reddit content too short, appending comments")
+            comms = []
+            maxComms = 20  # NOTE: don't process more than 20 comments
+            target_len = len(content)
+            final["lang"] = tr.detect(content) if content else tr.detect(final["title"])
+            title = final["title"]
+            c = 0
+            for com in s.comments:
+                if com.body:
+                    com_final = {
+                        "lang": final["lang"],
+                        "title": title,
+                        "content": com.body,
+                    }
+                    if process_content(com_final, logf):
+                        comms.append(com_final["content"])
+                        target_len += len(comms[-1])
+                        if target_len >= cfg.ART_MIN_LEN:
+                            break
+                c += 1
+                if c >= maxComms:
+                    break
+            if target_len < cfg.ART_MIN_LEN:
+                logf("target len not men %s", target_len)
+                return {}
+            commStr = "\n".join(comms)
+            final["content"] = f"{content}\n{commStr}" if content else commStr
+            final["tags"] = rake(final["content"])
+
+        final["slug"] = ut.slugify(final["title"])
+        final["desc"] = s.subreddit.title
+        final["author"] = s.author.name
+        final["pubDate"] = str(datetime.fromtimestamp(s.created_utc))
+        final["url"] = s.shortlink
+        final["topic"] = topic
+        # Image
+        if ut.is_img_url(s.url):
+            final["imageUrl"] = s.url
+            final["imageTitle"] = s.title
+            final["imageOrigin"] = url
+        else:
+            search_img(final, site)
+        if "imageUrl" in final:
+            site.img_bloom.add(final["imageUrl"])
+        final["source"] = "reddit"
+        return final
+    except:
+        import traceback
+
+        traceback.print_exc()
+        log.warn("failed to process reddit %s", url)
+
+
 """Last Parsed Article (debugging)"""
 LPA = {}
 
@@ -305,6 +451,14 @@ def fillarticle(url, data, topic, site: Site):
 
     def logit(s, *args):
         log.info(f"pyart(%d): {s}", idf, *args)
+
+    if "reddit." in url:
+        final = process_reddit(url, topic, site, logit)
+        if not final:
+            return {}
+        else:
+            logit("parse successfull")
+            return final
 
     logit("parsing url: %s", url)
     final, tra, goo, la = {}, {}, {}, {}
@@ -345,24 +499,9 @@ def fillarticle(url, data, topic, site: Site):
             logit("no title found!", url)
             save_lpa()
             return {}
-        # Ensure articles are always in the chosen source language
-        if final["lang"] != tr.SLang.code:
-            logit("different lang? %s", final["lang"])
-            final["content"] = tr.translate(
-                final["content"], to_lang=tr.SLang.code, from_lang=final["lang"]
-            )
-            final["title"] = tr.translate(
-                final["title"], to_lang=tr.SLang.code, from_lang=final["lang"]
-            )
-        final["content"] = replace_profanity(final["content"])
-        if not final["content"] or not isrelevant(final["title"], final["content"]):
-            logit("content not relevant (%d)", len(final["content"] or ""))
-            save_lpa()
-            return {}
 
-        final["content"] = clean_content(final["content"])
-        if not final["content"]:
-            logit("cleaned content is empty.")
+        final = process_content(final, logit)
+        if not final:
             save_lpa()
             return {}
 
@@ -390,10 +529,7 @@ def fillarticle(url, data, topic, site: Site):
         imgUrl = final.get("imageUrl", "")
         img_dup = imgUrl in site.img_bloom
         if (not imgUrl) or img_dup or (not ut.is_img_url(imgUrl)):
-            img_urls = [
-                abs_url(goo["image"], url),
-                goo["opengraph"].get("image", "")
-            ]
+            img_urls = [abs_url(goo["image"], url), goo["opengraph"].get("image", "")]
             if not add_img(final, img_urls, site):
                 search_img(final, site)
         site.img_bloom.add(final["imageUrl"])

@@ -30,7 +30,7 @@ from log import LoggerLevel, logger
 
 # proc.online.default_request_params = default_request_params
 
-ENGINES = ["google", "startpage", "duckduckgo", "bing"]
+ENGINES = ["google", "startpage", "reddit", "duckduckgo", "bing"]
 ENGINES_IMG = [
     "google_images", # lang is not initialized problem
     "duckduckgo_images",

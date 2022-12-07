@@ -3,7 +3,7 @@ FROM debian:bookworm AS sonic
 ENV DEBIAN_FRONTEND=noninteractive
 ENV CURL_V 7.83.1
 RUN apt update; \
-    apt install -y  curl clang libclang-dev build-essential; \
+    apt install -y  curl clang libclang-dev build-essential libleveldb-dev; \
     # wget -q -O /usr/local/bin/curl https://github.com/moparisthebest/static-curl/releases/download/v$CURL_V/curl-amd64 && \
     # chmod +x /usr/local/bin/curl && \
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -q --profile minimal --default-toolchain stable -y && \
@@ -25,7 +25,7 @@ RUN curl -L https://github.com/ginuerzh/gost/releases/download/v${GOST_V}/gost-l
 FROM gost AS nimrt
 RUN apt -y install git lld file
 # This should install nim version 1.6.x
-ARG CACHE=1
+ARG CACHE=2
 RUN curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
 RUN echo PATH=/root/.nimble/bin:\$PATH >> /root/.profile
 RUN ln -sr /root/.choosenim/toolchains/*/tools /root/.nimble

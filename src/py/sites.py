@@ -714,7 +714,8 @@ class Site:
     def sorted_topics(self, key=Topic.UnpubCount, force=False, full=False, rev=False):
         """Returns topics index sorted by the number of unpublished articles of each topics."""
         arr = self.load_topics(force)[0][:]
-        idx = arr[:, key].argsort()
+        # NOTE: can't sort without coercion
+        idx = arr[:, key].astype(np.int64).argsort()
         if rev:  # descending order
             idx = idx[::-1]
         return arr[idx] if full else arr[idx, Topic.Slug]

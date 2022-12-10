@@ -2,6 +2,7 @@ import std/[os, sets, htmlparser, xmltree, parsexml, strformat, strutils, locks,
     sugar, streams, algorithm, macros]
 import karax/[vdom, karaxdsl]
 import chronos, chronos/asyncsync
+import lrucache
 
 import types, cfg, utils, cache, html_entities, html_misc, cj
 
@@ -23,11 +24,11 @@ let
   adsRelated* = getVNode()
   adsSeparator* = getVNode()
 
-var locksInitialized: bool
-var adsFirstRead*, assetsFirstRead*: bool
-var adsHeadLock*, adsHeaderLock*, adsSidebarLock*, adsFooterLock*,
-  adsLinksLock*, adsArticlesLock*, adsRelatedLock*,
-    adsSeparatorLock*: Lock
+var
+  locksInitialized: bool
+  adsFirstRead*, assetsFirstRead*: bool
+  adsHeadLock*, adsHeaderLock*, adsSidebarLock*, adsFooterLock*, adsLinksLock*,
+    adsArticlesLock*, adsRelatedLock*, adsSeparatorLock*: Lock
 
 var adsLinksCount, adsLinksIdx: int
 

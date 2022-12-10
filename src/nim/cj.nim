@@ -1,5 +1,5 @@
 import std/[os, uri, tables, httpcore, xmltree, xmlparser, algorithm,
-            parseutils, hashes, times, sets, strutils, deques, random], chronos, lrucache
+            parseutils, hashes, times, sets, strutils, deques, random], chronos
 
 import cfg, types, utils, nativehttp, pyutils, locktpl, cj_lang, generator, data
 
@@ -47,23 +47,9 @@ var
   sessions: LockLruCache[Query, ref HashSet[uint]]
   queryCache: LockLruCache[Query, Deque[Query]]
   sizeCache: LockLruCache[(Query, uint), seq[XmlNode]]
-
-proc initCJ*() =
-  if likely(CJ_INIT):
-    return
-  if CJ_ID.isnil:
-    CJ_ID = create(string)
-    CJ_ID[] = get_site_config("cjid")
-  if CJ_TOKEN.isnil:
-    CJ_TOKEN = create(string)
-    CJ_TOKEN[] = get_site_config("cjtoken")
-  db = init(LockDB, CJ_CACHE_PATH / "cj.db", ttl = initDuration(days = 180))
-  cache = initLockLruCache[string, XmlNode](32)
-  sessions = initLockLruCache[Query, ref HashSet[uint]](32)
-  queryCache = initLockLruCache[Query, Deque[Query]](32)
-  sizeCache = initLockLruCache[(Query, uint), seq[XmlNode]](32)
-  randomize()
-  CJ_INIT = true
+  apiCallsFuts: LockLruCache[Uri, Future[XmlNode]]
+  defaultQueryBanner: ptr XmlNode
+  defaultQueryText: ptr XmlNode
 
 var apiCounter = (lastMinute: default(Time), val: 0)
 const apiLimit = 25
@@ -102,17 +88,17 @@ proc compare_epc(a: XmlNode, b: XmlNode): int =
   elif aepc < bepc: -1
   else: 0
 
-template callApi() =
+proc callApi(url: Uri, headers: HttpHeaders): Future[Response] {.async.} =
   await delay()
-  let resp {.inject.} = (await get(url, headers = headers, proxied = false))
-  if resp.code != Http200:
-    raise newException(ValueError, resp.body)
+  result = (await get(url, headers = headers, proxied = false))
+  if result.code != Http200:
+    raise newException(ValueError, result.body)
 
 proc doQuery(url: Uri, headers: HttpHeaders = nil): Future[XmlNode] {.async.} =
   let k = $url
   var links = await getLinks(k)
   if links.isnil:
-    callApi()
+    let resp = await callApi(url, headers)
     let x = resp.body.parseXml
     if x.tag == "cj-api":
       let allLinks = x.child("links")
@@ -158,6 +144,7 @@ proc buildQuery(kws = "", lt = banner, id = "", token = "",
   url.query = params.encodeQuery()
   return (url, headers)
 
+
 proc ofSize(links: XmlNode, q: Query,  width = 728'u, strict: static[bool] = true,
                             vertical: static[bool] = false): seq[XmlNode] =
   sizeCache.lcheckOrPut((q, width)):
@@ -189,6 +176,38 @@ proc ofSize(links: XmlNode, q: Query,  width = 728'u, strict: static[bool] = tru
       result.sort(compare_epc, Descending)
     result
 
+proc initCJ*() =
+  if likely(CJ_INIT):
+    return
+  if CJ_ID.isnil:
+    CJ_ID = create(string)
+    CJ_ID[] = get_site_config("cjid")
+  if CJ_TOKEN.isnil:
+    CJ_TOKEN = create(string)
+    CJ_TOKEN[] = get_site_config("cjtoken")
+  db = init(LockDB, CJ_CACHE_PATH / "cj.db", ttl = initDuration(days = 180))
+  cache = initLockLruCache[string, XmlNode](32)
+  sessions = initLockLruCache[Query, ref HashSet[uint]](32)
+  queryCache = initLockLruCache[Query, Deque[Query]](32)
+  sizeCache = initLockLruCache[(Query, uint), seq[XmlNode]](32)
+  apiCallsFuts = initLockLruCache[Uri, Future[XmlNode]](10000)
+  try:
+    block:
+      let (url, headers) = buildQuery(lt = banner, id = CJ_ID[], token = CJ_TOKEN[])
+      info "Initial blocking cj api query for default banners..."
+      defaultQueryBanner = create(XmlNode)
+      defaultQueryBanner[] = waitFor doQuery(url, headers)
+    block:
+      let (url, headers) = buildQuery(lt = text, id = CJ_ID[], token = CJ_TOKEN[])
+      info "Initial blocking cj api query for default texts..."
+      defaultQueryText = create(XmlNode)
+      defaultQueryText[] = waitFor doQuery(url, headers)
+  except:
+    logexc()
+    quit()
+  randomize()
+  CJ_INIT = true
+
 template linkTag(link: XmlNode, t: string): string =
   let c = link.child(t)
   if not c.isnil:
@@ -205,14 +224,26 @@ proc id(link: XmlNode): uint = discard linkTag(link, "link-id").parseUint(result
 
 type BannerSize* = enum des, tab, pho
 
-proc fetchLinks(q: Query): Future[XmlNodeNotNil] {.async.} =
+proc fallback(q: Query): XmlNode {.gcsafe.} =
+  case q.ltv:
+    of banner: defaultQueryBanner[]
+    else: defaultQueryText[]
+
+proc fetchLinks(q: Query, timeout: static[int] = 500): Future[XmlNodeNotNil] {.async.} =
   var
     url: Uri
     headers: HttpHeaders
     links: XmlNode
   (url, headers) = buildQuery(kws = q.kws, lt = q.ltv, id = CJ_ID[],
       token = CJ_TOKEN[], lang = q.lang)
-  links = await doQuery(url, headers)
+
+  func ms(x: Natural): chronos.timer.Duration = chronos.timer.milliseconds(x)
+
+  let fut = lcheckOrPut(apiCallsFuts, url, doQuery(url, headers))
+  discard await race(fut, sleepAsync(timeout.ms))
+  links =
+    if fut.finished() and fut.completed(): fut.read()
+    else: fallback(q)
   checkNil(links):
     result = links
 
@@ -290,6 +321,7 @@ proc getBanner*(topic: string,
   const widths =
     when vertical: [160'u, 120, 80]
     else: [728'u, 468, 250]
+
   retry(result):
     let selected =
       case size:

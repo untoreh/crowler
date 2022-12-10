@@ -46,8 +46,8 @@ template translateIter(otree; vbtm: static[bool] = true) =
             (el.hasAttr("title") and el.isTranslatable("title")):
             translate(q.addr, el, srv)
 
-proc translateDom(fc: FileContext, hostname = WEBSITE_DOMAIN): Future[(
-    QueueDom, VNode, Future[bool])] {.async.} =
+type DomTranslation = tuple[queue: QueueDom, node: VNode, fut: Future[bool]]
+proc translateDom(fc: FileContext, hostname = WEBSITE_DOMAIN): Future[DomTranslation] {.async.} =
   translateEnv(dom)
   for node in otree.preorder():
     case node.kind:
@@ -61,7 +61,9 @@ proc translateDom(fc: FileContext, hostname = WEBSITE_DOMAIN): Future[(
       else: continue
   translateIter(otree, vbtm = true)
   debug "dom: finishing translations"
-  return (q, otree, translate(q.addr, srv, finish = true))
+  result.queue = q
+  result.node = otree
+  result.fut = translate(q.addr, srv, finish = true)
 
 proc replace[T, V](fut: sink Future[T], val: sink V): Future[V] {.async.} =
   discard await fut
@@ -79,18 +81,18 @@ template withTimeout(): VNode =
       translateFuts[jobId][0]
     else:
       let td = await translateDom(fc)
-      discard await race(td[2], sleepAsync(timeout.milliseconds))
-      if not td[2].finished():
+      discard await race(td.fut, sleepAsync(timeout.milliseconds))
+      if not td.fut.finished():
         debug "trans: eager translation timed out. (transId: {jobId})"
-        translateFuts[jobId] = (td[1], td[2])
+        translateFuts[jobId] = (td.node, td.fut)
         # signal that full translation is underway to js
-        td[1].find(VNodeKind.head).add buildHtml(meta(name = "translation",
+        td.node.find(VNodeKind.head).add buildHtml(meta(name = "translation",
             content = "processing"))
-      td[1]
+      td.node
   else:
     let td = await translateDom(fc)
-    discard await td[2]
-    td[1]
+    discard await td.fut
+    td.node
 
 proc translateLang*(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath = "",
                     ar = emptyArt[], timeout: static[int] = 0,

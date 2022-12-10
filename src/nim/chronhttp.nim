@@ -9,7 +9,7 @@ var handler: Thread[void]
 var sem: AsyncSemaphore
 var futs {.threadvar.}: seq[Future[void]]
 const chronHttpDebug {.booldefine.} = false
-const maxConcurrentRequests = 200
+const maxConcurrentRequests {.intdefine.} = 200
 
 template cdebug(code) =
   # Failed requests stacktraces are too noisy

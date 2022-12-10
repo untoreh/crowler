@@ -124,6 +124,10 @@ def ensure_sources(site, topic):
         raise ValueError("Could not ensure sources for topic %s.", topic)
     return sources
 
+SCRAPE_LOG = cfg.DATA_DIR / "scrape_logs.txt"
+def log_parsed(s):
+    with open(SCRAPE_LOG, "a+") as f:
+        f.write(s)
 
 def run_parse_job(site, topic):
     """
@@ -132,28 +136,38 @@ def run_parse_job(site, topic):
     try:
         sources = ensure_sources(site, topic)
     except ValueError:
-        logger.warning(
+        logger.warn(
             "Couldn't find sources for topic %s, site: %s.", topic, site.name
         )
         return None
 
-    logger.info("Parsing %d sources...for %s:%s", len(sources), topic, site.name)
-    arts, feeds = cnt.fromsources(sources, topic, site)
-    topic_path = site.topic_dir(topic)
+    try:
+        logger.info("Parsing %d sources...for %s:%s", len(sources), topic, site.name)
+        arts, feeds = cnt.fromsources(sources, topic, site)
+        topic_path = site.topic_dir(topic)
+    except:
+        logger.warn("parse job failed. \n %s", tb.format_exc())
 
-    if arts:
-        logger.info("%s@%s: Saving %d articles.", topic, site.name, len(arts))
-        ut.save_zarr(arts, k=ut.ZarrKey.articles, root=topic_path)
-        site.update_article_count(topic)
-    else:
-        logger.info("%s@%s: No articles found.", topic, site.name)
+    try:
+        if arts:
+            logger.info("%s@%s: Saving %d articles.", topic, site.name, len(arts))
+            ut.save_zarr(arts, k=ut.ZarrKey.articles, root=topic_path)
+            site.update_article_count(topic)
+        else:
+            logger.info("%s@%s: No articles found.", topic, site.name)
+    except:
+        logger.warn("parse job failed. \n %s", tb.format_exc())
 
-    if feeds:
-        logger.info("%s@%s: Saving %d articles.", topic, site.name, len(feeds))
-        ut.save_zarr(feeds, k=ut.ZarrKey.feeds, root=topic_path)
-    else:
-        logger.info("%s@%s: No feeds found.", topic, site.name)
+    try:
+        if feeds:
+            logger.info("%s@%s: Saving %d articles.", topic, site.name, len(feeds))
+            ut.save_zarr(feeds, k=ut.ZarrKey.feeds, root=topic_path)
+        else:
+            logger.info("%s@%s: No feeds found.", topic, site.name)
+    except:
+        logger.warn("parse job failed. \n %s", tb.format_exc())
 
+    log_parsed(f"Found {len(arts)} articles and {len(feeds)} feeds for topic {topic}.\n")
     return (arts, feeds)
 
 

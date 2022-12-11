@@ -1,14 +1,5 @@
-import tables,
+import std/[os, locks, uri, strutils, strformat, sequtils, hashes, tables, xmltree, htmlparser, with],
        karax / [karaxdsl, vdom, vstyles],
-       sequtils,
-       strutils,
-       strformat,
-       os,
-       std/with,
-       hashes,
-       htmlparser,
-       xmltree,
-       uri,
        lrucache,
        chronos,
        chronos/asyncsync
@@ -16,9 +7,9 @@ import tables,
 import cfg,
        utils,
        nativehttp,
-  html_misc,
-  html_entities,
-  ads
+       html_misc,
+       html_entities,
+       ads
 
 const CSS_MAX_SIZE = 75000
 const skipNodes = [VNodeKind.iframe, audio, canvas, embed, video, img,
@@ -407,9 +398,9 @@ proc initAmpImpl() =
 
 proc initAmp*() =
   try:
-    initHttp()
     initAmpImpl()
   except:
+    logexc()
     qdebug "server: failed to initAmp"
 
 

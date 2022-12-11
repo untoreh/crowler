@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from multiprocessing.pool import ThreadPool, Pool
+from os import cpu_count
 from time import sleep
 import sys
 
@@ -9,7 +10,7 @@ import sys
 POOL: None | ThreadPool = None
 PROC_POOL: None | Pool = None
 # This should affect http requests mostly
-POOL_SIZE = 64
+POOL_SIZE = cpu_count()
 
 def initPool(restart=False, thr=True, procs=False):
     global POOL, PROC_POOL

@@ -76,8 +76,9 @@ template withTimeout(): VNode =
     if jobId in translateFuts:
       # Concurrent requests can wait the same timeout number (for consistency), could be removed
       # and instead just serve the incomplete results...
-      discard await race(translateFuts[jobId][1], sleepAsync(
-          timeout.milliseconds))
+      raceAndCheck(translateFuts[jobId][1], to1=timeout.milliseconds, ignore=false)
+      # discard await race(translateFuts[jobId][1], sleepAsync(
+      #     timeout.milliseconds))
       translateFuts[jobId][0]
     else:
       let td = await translateDom(fc)

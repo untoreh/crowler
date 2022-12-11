@@ -41,14 +41,17 @@ import
 import translate except get
 from nativehttp import initHttp
 
+const requestSoftTimeout = chronos.timer.seconds(100) # Timeout of a request after which a 503 is sent
+const requestHardTimeout = chronos.timer.minutes(5) # Max processing time for a request
+
 type
   ParamKey = enum
     none,
     q, p, # sonic
-    c, # cache
-    d, # delete
-    t,  # translations
-    u # imgUrls
+    c,    # cache
+    d,    # delete
+    t,    # translations
+    u     # imgUrls
   Params = Table[ParamKey, string]
 
   ReqContext = object of RootObj
@@ -63,7 +66,7 @@ type
     respBody: ref string
     respCode: HttpCode
     lock: AsyncLock not nil # this is acquired while the rq is being processed
-    cached: bool    # done processing
+    cached: bool            # done processing
   ReqId = Hash # using time as request id means that the request cache should be thread local
 
 converter reqPtr(rc: ref ReqContext): uint64 = cast[uint64](rc)
@@ -213,13 +216,15 @@ template handle301*(loc: string = $WEBSITE_URL) =
   block:
     logexc()
     debug "server: redirecting."
-    await reqCtx.doReply(ifHtml(Http301), rqid, scode = Http301, headers = headers)
+    await reqCtx.doReply(ifHtml(Http301), rqid, scode = Http301,
+        headers = headers)
 
 template handle404*(loc = $WEBSITE_URL) =
   await reqCtx.doReply(ifHtml(Http404), rqid, scode = Http404)
 
 template handle503*(loc = $WEBSITE_URL) =
-  await reqCtx.doReply(ifHtml(Http503), rqid, scode = Http503)
+  await reqCtx.doReply(ifHtml(Http503), rqid, scode = Http503,
+                       headers = init(HttpTable, [($hretry, "28800")]))
 
 template abort(m: string) =
   debug m & ", aborting."
@@ -320,7 +325,8 @@ template handleTopic(capts: auto, ctx: HttpRequestRef) =
       ppage = ""
       checkNil(pagetree):
         let path = join([capts.topic, capts.page], "/")
-        let processed = await processPage(capts.lang, capts.amp, pagetree, relpath = capts.path)
+        let processed = await processPage(capts.lang, capts.amp, pagetree,
+            relpath = capts.path)
         checkNil(processed):
           ppage = processed.asHtml(minify_css = (capts.amp == ""))
       checkTrue ppage.len > 0, "topic: page gen 2 failed."
@@ -505,7 +511,8 @@ template handleParams() =
 template handleTranslation(): bool =
   if not transParam.isnull:
     try:
-      let tree = await processTranslatedPage(capts.lang, capts.amp, relpath = capts.path)
+      let tree = await processTranslatedPage(capts.lang, capts.amp,
+          relpath = capts.path)
       page = tree.asHtml(minify_css = (capts.amp == ""))
       pageCache[reqCtx.key] = page
       await reqCtx.doReply(page, rqid)
@@ -545,7 +552,7 @@ template handleDeletion(): bool =
       # Delete main topic page
       capts.art = ""
       deletePage(capts)
-      doReset(capts.path(slash=true))
+      doReset(capts.path(slash = true))
       # delete homepage
       deletePage("")
       doReset("/")
@@ -602,7 +609,8 @@ proc handleGet(ctx: HttpRequestRef): Future[void] {.gcsafe, async.} =
     await reqCtx.lock.acquire
     rqlocked = true
   defer:
-    if not reqCtx.isnil and rqlocked and reqCtx.lock.locked: # `handleDeletion` could have cleared the lock
+    if not reqCtx.isnil and rqlocked and
+        reqCtx.lock.locked: # `handleDeletion` could have cleared the lock
       reqCtx.lock.release
     # after lock acquisition reqCtx could have been swiched to `cached`
   let rqid = getReqId(relpath)
@@ -700,14 +708,15 @@ proc callback(ctx: RequestFence): Future[HttpResponseRef] {.async.} =
   if likely(not ctx.iserr):
     let rq = ctx.get
     if rq.meth == MethodGet:
-      await handleGet(rq)
+      let fut = handleGet(rq)
+      raceAndCheck(fut, requestSoftTimeout, requestHardTimeout)
       if rq.response.issome:
-          # Prevent connections from being kept alive to reduce load
-          let resp = rq.getResponse()
-          resp.state = HttpResponseState.Empty # HACK: can't set keepalive if state is not empty
-          resp.keepalive = false
-          resp.state = HttpResponseState.Finished
-          return resp
+        # Prevent connections from being kept alive to reduce load
+        let resp = rq.getResponse()
+        resp.state = HttpResponseState.Empty # HACK: can't set keepalive if state is not empty
+        resp.keepalive = false
+        resp.state = HttpResponseState.Finished
+        return resp
 
 template wrapInit(code: untyped): proc() =
   proc task(): void =

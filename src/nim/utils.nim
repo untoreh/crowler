@@ -68,6 +68,22 @@ template withWaitLock*(l: AsyncLock, code) =
   finally:
     l.release()
 
+template ignoreSpawn*[T](fut: Future[T]) =
+  proc f(fu: Future[T]) {.async.} = discard await fu
+  asyncSpawn f(fut)
+
+template raceAndCheck*[T](fut: Future[T], to1: timer.Duration,
+                          to2 = timer.seconds(0),
+                          ignore: static[bool] = true) =
+  let timeOutFut = sleepAsync(to1)
+  defer:
+    if not timeOutFut.finished:
+      timeOutFut.cancel()
+  discard await race(fut, timeOutFut)
+  when ignore:
+    if not fut.finished:
+      ignoreSpawn(when to2 != timer.seconds(0): fut.withTimeout(
+          to2) else: fut)
 
 template lgetOrPut*[T, K](c: T, k: K, v: untyped): untyped =
   ## Lazy `mgetOrPut`
@@ -109,7 +125,7 @@ template logexc*() {.dirty.} =
   when shouldLog and logLevelMacro <= lvlDebug:
     block:
       let excref = getCurrentException()
-      withLock(loggingLock):
+      withLock(`loggingLock`):
         if not excref.isnil:
           let exc = excref[]
           logger[].log lvlDebug, $exc
@@ -806,11 +822,11 @@ proc writeFileImpl[T](handle: OutputStream, data: T) {.fsMultiSync.} =
   handle.writeAndWait(data)
 
 proc writeFileAsync*[T](path: string, data: T) {.async.} =
-  let handle = Async fileOutput(path, allowAsyncOps=true)
+  let handle = Async fileOutput(path, allowAsyncOps = true)
   await writeFileImpl(handle, data)
 
 proc writeFileFs*[T](path: string, data: T) =
-  let handle = fileOutput(path, allowAsyncOps=true)
+  let handle = fileOutput(path, allowAsyncOps = true)
   writeFileImpl(handle, data)
 
 proc innerText*(n: VNode): string =

@@ -9,7 +9,7 @@ import
   chronhttp
 
 
-export Request, Response, RequestError, initHttp, HttpHeaders
+export Request, Response, RequestError, HttpHeaders, initHttp, httpIsInitialized
 
 proc raiseRequestError(msg = "Request failed.") =
   raise newException(RequestError, msg)

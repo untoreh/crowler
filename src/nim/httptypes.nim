@@ -36,6 +36,8 @@ proc initHttp*() =
   if httpOut.isnil:
     httpOut = newAsyncTable[ptr Request, bool]()
 
+proc httpIsInitialized*(): bool = not httpIn.isnil
+
 converter asDec*(b: bool): Decode =
   if b: Decode.yes
   else: Decode.no

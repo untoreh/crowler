@@ -92,6 +92,7 @@ type Header* = enum
   hencoding = "Content-Encoding"
   hcctrl = "Cache-Control"
   hlang = "Accept-Language"
+  hretry = "Retry-After"
   hetag = "ETag"
   hloc = "Location"
   href = "Referer"

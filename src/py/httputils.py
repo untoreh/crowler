@@ -27,7 +27,7 @@ class Response(NamedTuple):
     data: str | bytes
 
 
-def init_lru(n=1000):
+def init_lru(n=32):
     zict_storage = za.DirectoryStore(cfg.CACHE_DIR)
     zict_compressor = Func(compressor.encode, compressor.decode, zict_storage)
     zict_codec = Func(codec.encode, codec.encode, zict_compressor)

@@ -201,16 +201,19 @@ class Site:
             )
             return
         url = self.article_url(art, topic)
-        url = re.sub(self.domain_rgx, "", url)
-        dom = self.domain.split(".")[0]
-        message = f"{art['desc']}\nContinue at: {dom} {url}"
+        # url = re.sub(self.domain_rgx, "", url)
+        # url = self.domain.split(".")[0] + " " + url
+        # message = f"{art['desc']}\nContinue at: {url}"
+        message = art["desc"]
         try:
             assert pb.is_unproxied()
             self._fb_graph.post(
                 self._feed_path,
-                link=self.fb_page_url,
+                # link=self.fb_page_url,
+                link=url,
                 title=art["title"],
                 message=message,
+                scrape=True,
             )
             self._last_facebook = time.time()
             self._save_post_time("facebook", self._last_facebook)
@@ -247,7 +250,9 @@ class Site:
         self.load_topics()
         topic = self.get_random_topic()
         assert topic is not None
-        a = self.recent_article(topic)
+        a = None
+        while a is None or not a.get("imageUrl", ""): # ensure article has an image for socials
+            a = self.recent_article(topic)
         assert a is not None, "no article found"
         return (topic, a)
 
@@ -286,6 +291,7 @@ class Site:
         assert isinstance(a, dict)
         url = self.article_url(a, topic)
         status = "{}: {}".format(a["title"], url)
+        media = a.get("imageUrl", "")
         if len(url) > 280:
             return
         if len(status) > 280:
@@ -293,7 +299,7 @@ class Site:
             status = "{}: {}".format(tags, url)
             if len(status) > 280:
                 status = url
-        pu = self._twitter_api.PostUpdate(status=status)
+        pu = self._twitter_api.PostUpdate(status=status, media=media)
         self._last_twitter = time.time()
         self._save_post_time("twitter", self._last_twitter)
         return pu
@@ -315,7 +321,16 @@ class Site:
 
     def article_url(self, a: dict, topic=""):
         return "".join(
-            ("https://", self.domain, "/", a["topic"] or topic, "/", a["slug"])
+            (
+                "https://",
+                self.domain,
+                "/",
+                a["topic"] or topic,
+                "/",
+                str(a["page"]),
+                "/",
+                a["slug"],
+            )
         )
 
     @staticmethod

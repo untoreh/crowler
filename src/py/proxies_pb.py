@@ -8,8 +8,9 @@ import warnings
 from collections import deque
 from functools import partial
 from json.decoder import JSONDecodeError
-from multiprocessing import Process, Queue
+from multiprocessing import Queue
 from pathlib import Path
+from threading import Lock
 from typing import List, Union
 
 with warnings.catch_warnings():
@@ -25,8 +26,8 @@ from trafilatura import downloads as tradl
 from trafilatura import settings as traset
 from user_agent import generate_user_agent
 
-import scheduler as sched
 import log
+import scheduler as sched
 
 PROXIES_ENABLED = True
 STATIC_PROXY = True
@@ -35,7 +36,7 @@ PROXY_EP_S5 = "socks5://localhost:8878"
 PROXY_EP_S4 = "socks4://localhost:8879"
 PROXY_EP_HTTP = "http://localhost:8880"
 PROXY_DICT = {"http": STATIC_PROXY_EP, "https": STATIC_PROXY_EP}
-REQ_TIMEOUT = 20
+REQ_TIMEOUT = 30
 CURRENT_PROXY = ""
 
 if "CURL_CLASS" not in globals():
@@ -199,38 +200,60 @@ TYPES = [
     "CONNECT:80",
 ]
 
-PROXIES_SET = set()
-PROXIES_HTTP_SET = set()
-N_PROXIES = 200
-PROXIES = deque(maxlen=N_PROXIES)
-PROXIES_HTTP = deque(maxlen=N_PROXIES)
-PROXIES.extendleft([STATIC_PROXY_EP])
-PROXIES_HTTP.extendleft([STATIC_PROXY_EP])
+MAX_PROXIES = 200
+PROXIES_URLS = []
+PROXIES_URLS_HTTP = []
+PROXIES_HTTP = []
+PROXIES_HTTPS = []
+PROXIES_S4 = []
+PROXIES_S5 = []
+PROXIES_IDX = [0, 0]  # raw, http
+PROXIES_URLS.append(STATIC_PROXY_EP)
+PROXIES_HTTP.append(STATIC_PROXY_EP)
+LOCK = Lock()
+PROXY_MAP = {
+    "http": PROXIES_HTTP,
+    "https": PROXIES_HTTPS,
+    "socks4": PROXIES_S4,
+    "socks5": PROXIES_S5,
+}
 PB: Union[Broker, None] = None
 
 
-def next_proxy(proxies):
-    i = 0
-    while True:
-        if len(proxies) > 0:
-            if i >= len(proxies):
-                i = 0
-            yield proxies[i]
-            i += 1
+# NOTE: Iterators don't work with proxy classes :(
+def next_proxy(http=False):
+    with LOCK:
+        if http:
+            tp = 1  # http
+            li = PROXIES_URLS_HTTP
         else:
-            yield STATIC_PROXY_EP
-
-
-PROXY_ITER = iter(next_proxy(PROXIES))
-PROXY_HTTP_ITER = iter(next_proxy(PROXIES_HTTP))  # for non https proxies
+            tp = 0  # raw
+            li = PROXIES_URLS
+        idx = PROXIES_IDX[tp]
+        size = len(li)
+        if size > 0:
+            if idx >= size:
+                idx = 0
+            PROXIES_IDX[tp] = idx + 1
+            return li[idx]
+        else:
+            return STATIC_PROXY_EP
 
 import json
 
-typemap = {
+scheme_map = {
     "CONNECT:80": "http",
     "CONNECT:25": "http",
     "HTTP": "http",
     "HTTPS": "http",
+    "SOCKS4": "socks4",
+    "SOCKS5": "socks5",
+}
+proto_map = {
+    "CONNECT:80": "http",
+    "CONNECT:25": "http",
+    "HTTP": "http",
+    "HTTPS": "https",
     "SOCKS4": "socks4",
     "SOCKS5": "socks5",
 }
@@ -249,39 +272,62 @@ def read_proxies(f):
     try:
         proxies = json.loads(proxies)
     except JSONDecodeError:
-        assert proxies.endswith(",\n")
-        proxies = proxies.rstrip(",\n")
-        proxies += "]"  # proxybroker keeps the json file unclosed open
-        proxies = json.loads(proxies)
+        if proxies.endswith(",\n"):
+            proxies = proxies.rstrip(",\n")
+            proxies += "]"  # proxybroker keeps the json file unclosed open
+            proxies = json.loads(proxies)
+        else:
+            proxies = []
     return proxies
 
 
 @retry(tries=3, delay=1, backoff=3.0)
 def sync_from_files(files: List[Path]):
     try:
-        PROXIES_SET = set(PROXIES)
+        global MAX_PROXIES
+        urls = []
+        urls_http = []
+        prev = {proto: ls[:] for (proto, ls) in PROXY_MAP.items()}
+        new = {proto: list() for proto in PROXY_MAP.keys()}
         for f in files:
             proxies = read_proxies(f)
             if proxies is None:
                 continue
-            for p in proxies:
+            # Use reverse order since the tail are the most recent ones, and cycling starts from idx 0
+            for p in proxies[::-1]:
                 host = p["host"]
                 port = p["port"]
                 types = p["types"]
                 for t in types:
                     tp = t["type"]
-                    tpm = typemap[tp]
-                    url = f"{tpm}://{host}:{port}"
-                    if tp == "http":
-                        PROXIES_HTTP_SET.add(url)
+                    proto = proto_map[tp]
+                    ip = f"{host}:{port}"
+                    new[proto].append(ip)
+                    if tp != "HTTP":
+                        schm = scheme_map[tp]
+                        urls.append(f"{schm}://{host}:{port}")
                     else:
-                        PROXIES_SET.add(url)
-        PROXIES.clear()
-        PROXIES.extendleft(PROXIES_SET)
-        PROXIES_HTTP.clear()
-        PROXIES_HTTP.extendleft(PROXIES_HTTP_SET)
+                        urls_http.append(f"http://{host}:{port}")
+        proxies_avg = 0
+        del PROXIES_URLS[:]
+        PROXIES_URLS.extend(urls)
+        del PROXIES_URLS_HTTP[:]
+        PROXIES_URLS_HTTP.extend(urls_http)
+        for (proto, ls) in PROXY_MAP.items():
+            del ls[:]  # manager list proxy does not have `clear` method
+            proto_proxies = new[proto]  # the latest list
+            proxies_avg += len(proto_proxies)  # how many new to? to update the tail
+            proto_proxies.extend(prev[proto])  # append the previous ones
+            proto_proxies = list(set(proto_proxies))  # deduplicate
+            ls.extend(proto_proxies[:MAX_PROXIES])  # trim according to MAX_PROXIES
+        MAX_PROXIES = (
+            min(50, proxies_avg // len(PROXY_MAP)) * 2
+        )  # update the tail number
     except:
-        log.logger.debug("Could't sync proxies, was the file being written?")
+        import traceback
+
+        traceback.print_exc()
+        log.logger.warn("Could't sync proxies, was the file being written?")
 
 
 DEFAULT_PEER_CONFIG = """
@@ -299,28 +345,42 @@ def update_gost_config(
     """Updates the peers list of the GOST proxy."""
     sync_from_files(proxies_files)
     new_config = {}
-    for tp in ProxyType:
-        new_config[tp] = [DEFAULT_PEER_CONFIG]
-    for p in PROXIES:
-        # print(p)
-        match p[:6]:
-            case "http:/":
-                new_config[ProxyType.http].append(f"peer {p}")
-            case "socks5":
-                new_config[ProxyType.socks5].append(f"peer {p}")
-            case "socks4":
-                new_config[ProxyType.socks4].append(f"peer {p}")
-    for k, v in new_config.items():
-        path = config_dir / f"{k.value}{config_suffix}.txt"
+    for (proto, proxies) in PROXY_MAP.items():
+        if proto == "https":
+            proto = "http"
+        cfg = new_config.get(proto, [DEFAULT_PEER_CONFIG])
+        for p in proxies:
+            cfg.append(f"peer {proto}://{p}")
+        new_config[proto] = cfg
+
+    for (proto, cfg) in new_config.items():
+        path = config_dir / f"{proto}{config_suffix}.txt"
         # print("\n".join(v))
         with open(path, "w") as f:
-            f.write("\n".join(v))
+            f.write("\n".join(cfg))
+
+    # for (proto, p) in PROXY_MAP:
+    #     schm = scheme_map[proto]
+    # case "HTTP": ProxyType.http
+    # print(p)
+    # match p[:6]:
+    #     case "http:/":
+    #         new_config[ProxyType.http].append(f"peer {p}")
+    #     case "socks5":
+    #         new_config[ProxyType.socks5].append(f"peer {p}")
+    #     case "socks4":
+    #         new_config[ProxyType.socks4].append(f"peer {p}")
+    # for k, v in new_config.items():
+    #     path = config_dir / f"{k.value}{config_suffix}.txt"
+    #     # print("\n".join(v))
+    #     with open(path, "w") as f:
+    #         f.write("\n".join(v))
 
 
 PROXY_SYNC_JOB = None
 
 
-def proxy_sync_forever(proxies_files: List[Path], config_dir: Path, interval=60):
+def proxy_sync_forever(proxies_files: List[Path], config_dir: Path, interval=15):
     global PROXY_SYNC_JOB
     if PROXY_SYNC_JOB is None or PROXY_SYNC_JOB.ready():
 
@@ -341,9 +401,9 @@ def get_proxy(static=True, http=False) -> str:
         return (
             STATIC_PROXY_EP
             if static
-            else next(PROXY_ITER)
-            if not http or len(PROXIES_HTTP_SET) <= 1
-            else next(PROXY_HTTP_ITER)
+            else next_proxy()
+            if not http or len(PROXIES_HTTP) <= 1
+            else next_proxy(http=True)
         )
     except:
         return STATIC_PROXY_EP
@@ -398,7 +458,7 @@ def find_proxies(out: Queue, limit=LIMIT, loop=None):
 def flush_queue(out: Queue):
     for _ in range(out.qsize()):
         p = out.get()
-        PROXIES.appendleft(p)
+        PROXIES_URLS.appendleft(p)
 
 
 def find_proxies_proc(limit: int = LIMIT):

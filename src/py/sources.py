@@ -1,8 +1,8 @@
-import copy
 import os
 import sys
-from random import shuffle, randint
+from random import shuffle
 from time import sleep
+from typing import Dict, List
 
 import searx
 from searx import search
@@ -12,9 +12,10 @@ import config as cfg
 import proxies_pb as pb
 import scheduler as sched
 import translator as tr
+import traceback as tb
 from log import LoggerLevel, logger
 
-# the searx.search module has a variable named `processors`
+# the searx.search module has a variable/ named `processors`
 # import importlib
 
 # proc = importlib.import_module("searx.search.processors", package="searx")
@@ -30,132 +31,194 @@ from log import LoggerLevel, logger
 
 # proc.online.default_request_params = default_request_params
 
-ENGINES = ["google", "startpage", "reddit", "duckduckgo", "bing"]
-ENGINES_IMG = [
-    "google_images", # lang is not initialized problem
-    "duckduckgo_images",
-    "bing_images",
-    # "unsplash",
-    "flickr_noapi",
-    "frinkiac",
-    # "openverse", # error 400
+SEARX_ENABLED_CATEGORIES = [
+    "general",
+    "images",
+    "videos",
+    "apps",
+    "software wikis",
+    "science",
+    "music",
+    "web",
+    "news",
+    "other",
+    "others",
+    "map",
+    "dictionaries",
+    "q&a",
 ]
-# ENGINES_IMG_ONLY = {"flickr_noapi", "frinkiac", "openverse"}
-""
-N_ENGINES = len(ENGINES)
-N_ENGINES_IMG = len(ENGINES_IMG)
-R_ENGINES = []
+# DEFAULT_ENGINES = ["google", "startpage", "reddit", "duckduckgo", "bing"]
+# DEFAULT_ENGINES_IMG = [
+#     "google_images",  # lang is not initialized problem
+#     "duckduckgo_images",
+#     "bing_images",
+#     "flickr_noapi",
+#     "frinkiac",
+# ]
+
+ENGINES_PROXIES = {}
 
 
-def get_engine():
-    engines = ENGINES.copy()
-    shuffle(engines)
-    for e in engines:
-        yield e
+def def_engine_proxies():
+    global ENGINES_PROXIES
+    engines = searx.settings["engines"]
+    for egn in engines:
+        ENGINES_PROXIES[egn["name"]] = {
+            "http": pb.STATIC_PROXY_EP,
+            "https": pb.STATIC_PROXY_EP,
+        }
 
 
-def img_engine_name(engine):
-    return engine.replace("_", "-")
+def set_egn_proxy(name: str):
+    ENGINES_PROXIES[name]["http"] = pb.get_proxy(static=False, http=True)
+    ENGINES_PROXIES[name]["https"] = pb.get_proxy(static=False, http=False)
 
 
-def get_engine_img():
-    engines = [img_engine_name(e) for e in ENGINES_IMG.copy()]
-    shuffle(engines)
-    for e in engines:
-        yield e
+def switch_searx_proxies(engine):
+    if isinstance(engine, (str, EngineRef)):
+        name = engine.name if isinstance(engine, EngineRef) else engine
+        set_egn_proxy(name)
+    else:
+        assert (
+            isinstance(engine, List)
+            and len(engine)
+            and isinstance(engine[0], EngineRef)
+        )
+        for e in engine:
+            set_egn_proxy(e.name)
 
 
-searx_proxies = {"http": pb.STATIC_PROXY_EP, "https": pb.STATIC_PROXY_EP}
-def switch_searx_proxies():
-    searx_proxies["http"] = pb.get_proxy(static=False, http=True)
-    searx_proxies["https"] = pb.get_proxy(static=False, http=False)
-
-def get_engine_params(engine, cat=None):
-    cats = cat if cat is not None else "general" if engine in ENGINES else "images"
-    params = {
-        "shortcut": engine if cats != "images" else f"{engine[0:2]}i",
-        # "shortcut": engine,
-        "engine": engine,
-        # "name": engine.split("_")[0],
-        "name": img_engine_name(engine),
-        "timeout": cfg.REQ_TIMEOUT,
-        "categories": cats,
-    }
-    params["network"] = {
-        "verify": False,
-        "proxies": searx_proxies,
-        "retries": 3,
-        "retry_on_http_error": True,
-        "max_redirects": 30,
-    }
-    return params
+def print_engine_proxy(engine):
+    for egn in searx.settings["engines"]:
+        if egn["name"] == engine:
+            print(egn["network"]["proxies"])
 
 
-ENGINES_INITIALIZED = False
+def get_searx_settings():
+    settings = searx.settings
+    for egn in settings["engines"]:
+        egn["timeout"] = cfg.REQ_TIMEOUT
+        egn["network"] = {
+            "verify": False,
+            "proxies": ENGINES_PROXIES[egn["name"]],
+            "retries": 0,
+            "retry_on_http_error": False,
+            "max_redirects": 30,
+        }
+    settings["outgoing"].update(
+        {
+            "request_timeout": cfg.REQ_TIMEOUT,
+            "max_request_timeout": cfg.REQ_TIMEOUT + 1,
+            "pool_connections": 100,
+            "pool_maxsize": 3,
+            "verify": False,
+            # "enable_http": True,
+            # "retries": 1,
+        }
+    )
+    return settings["engines"]
+
+
+PROCESSORS = None
+ENGINES: Dict[str, List[EngineRef]] = {}
+SCHEDULED_SEARCHES = {}
+
+
+def hotfixes():
+    # fix for non initialized langs
+    eng = searx.engines.engines.get("google-images")
+    if not eng is None and not eng.supported_languages:
+        if not eng.supported_languages:
+            eng.supported_languages = eng.fetch_supported_languages()
 
 
 def ensure_engines(force=False):
-    global ENGINES_INITIALIZED
-    if force or not ENGINES_INITIALIZED:
+    global ENGINES, PROCESSORS, SCHEDULED_SEARCHES
+    if force or PROCESSORS is None:
         print("Ensuring searx engines are loaded...")
         searx.network.network.NETWORKS.clear()
         searx.search.PROCESSORS.clear()
         searx.engines.engines.clear()
-        settings = [get_engine_params(engine) for engine in ENGINES]
-        settings.extend([get_engine_params(engine) for engine in ENGINES_IMG])
-        search.initialize(settings_engines=settings)
-        # fix for non initialized langs
-        eng = searx.engines.engines.get("google-images")
-        if not eng is None and not eng.supported_languages:
-            if not eng.supported_languages:
-                eng.supported_languages = eng.fetch_supported_languages()
-        ENGINES_INITIALIZED = True
+        def_engine_proxies()
+        search.initialize(settings_engines=get_searx_settings())
+        hotfixes()
+
+        if not ENGINES:
+            for cat in SEARX_ENABLED_CATEGORIES:
+                ENGINES[cat] = [
+                    EngineRef(engine.name, cat)
+                    for engine in searx.engines.categories[cat]
+                ]
+    assert searx.search.PROCESSORS
+    if PROCESSORS is None:
+        PROCESSORS = searx.search.PROCESSORS
+
+
+def all_searx_categories():
+    list(searx.engines.categories.keys())
+
+
+def unsuspend_processors():
+    for eng in PROCESSORS.values():
+        eng.suspended_status.resume()
+
+
+def cancel_search(kw: str):
+    del SCHEDULED_SEARCHES[kw]
 
 
 def single_search(
     kw,
-    engine,
+    engine=None,
     pages=1,
     lang="all",
     timeout=cfg.REQ_TIMEOUT,
     category="general",
-    depth=1,
+    force=False,
 ):
     res = []
-    logger.info(f"Processing single search, engine: {engine}")
-    switch_searx_proxies()
-    for p in range(pages):
+    logger.info(f"Processing engine search, kw: {kw}")
+    assert isinstance(ENGINES, Dict)
+    engines = (
+        ENGINES[category]
+        if engine is None
+        else [engine]
+        if isinstance(engine, EngineRef)
+        else [EngineRef(engine, category)]
+    )
+    time_ranges = ["", "year"]
+    current_tr = "month"
+    while True:
+        if not force and kw not in SCHEDULED_SEARCHES:
+            return []
+        switch_searx_proxies(engine)
+        unsuspend_processors()
         s = SearchQuery(
             kw,
-            [EngineRef(engine, category)],
+            engines,
+            safesearch=1,
+            time_range=current_tr,
             timeout_limit=timeout,
-            pageno=p,
+            # pageno=p,
             lang=lang,
         )
         q = search.Search(s).search()
-        if len(q.unresponsive_engines) > 0:
-            raise ValueError(q.unresponsive_engines.pop())
         q_res = q.get_ordered_results()
         if len(q_res) > 0:
             res.extend(q_res)
+            break
+        elif not len(time_ranges):
+            break
+        else:
+            current_tr = time_ranges.pop()
     return res
 
 
-def try_search(*args, depth=1, backoff=0.3, max_tries=4, **kwargs):
-    ensure_engines()
+def try_search(kw, *args, **kwargs):
     try:
-        return single_search(*args, **kwargs, depth=depth)
-    except Exception as e:
-        logger.debug("Caught search exception %s", type(e))
-        if depth < max_tries:
-            sleep(backoff)
-            return try_search(
-                *args,
-                **kwargs,
-                depth=depth + 1,
-                backoff=backoff + 0.3,
-                max_tries=max_tries,
-            )
+        return single_search(kw, *args, **kwargs)
+    except:
+        logger.warn("Caught search exception %s", tb.format_exc())
     return []
 
 
@@ -170,59 +233,46 @@ def dedup_results(results):
     return all_results
 
 
-def fromkeyword(keyword="trending", verbose=False, filter_lang=False):
+def fromkeyword(
+    keyword="trending", category="general", verbose=False, filter_lang=False, sync=True
+):
     """
-    `n_engines`: How many search engines to query.
+    Search a keyword across all supported engines for given  category.
     """
     try:
-        ensure_engines()
-        engines = ENGINES.copy()
-        shuffle(engines)
+        SCHEDULED_SEARCHES[keyword] = True
         logger.info("Finding sources for keyword: %s", keyword)
-        assert isinstance(cfg.POOL_SIZE, int)
+        ensure_engines()
+        engines = ENGINES[category]
         kwlang = tr.detect(keyword) if filter_lang else "all"
-        res = sched.POOL.starmap(
-            try_search,
-            [
-                (keyword, engines[n], 1, kwlang)
-                for n in range(min(len(engines), cfg.POOL_SIZE))
-            ],
-        )
+        jobs = []
+        for e in engines:
+            jobs.append(sched.apply(try_search, keyword, e, 1, kwlang))
+        res = []
+        if sync:
+            for j in jobs:
+                res.extend(j.get())
+        else:
+            return jobs
     except KeyboardInterrupt:
+        assert sched.PROC_POOL is not None
         print("Caught KB interrupt.")
-        sched.POOL.close()
+        sched.PROC_POOL.close()
         print("Terminating pool...")
-        sched.POOL.terminate()
+        sched.PROC_POOL.terminate()
         # shut up requests in flight warning
         sys.stdout = os.devnull
         sys.stderr = os.devnull
-        with LoggerLevel(level=None):
+        with LoggerLevel(quiet=True):
             exit()
     res = dedup_results(res)
     if verbose:
         print(res)
+    del SCHEDULED_SEARCHES[keyword]
     return res
 
 
-def fromkeyword_async(keyword="trending", n_engines=1, filter_lang=False):
-    """
-    `n_engines`: How many search engines to query.
-    """
-    logger.info("Finding sources for keyword: %s", keyword)
-    n = 0
-    kwjobs = []
-    kwlang = tr.detect(keyword) if filter_lang else "all"
-    ensure_engines()
-    for egn in get_engine():
-        n += 1
-        if n > n_engines:
-            break
-        j = sched.apply(try_search, keyword, egn, 1, kwlang)
-        kwjobs.append(j)
-    return kwjobs
-
-
-from typing import NamedTuple
+from typing import Dict, NamedTuple
 
 
 class Img(NamedTuple):
@@ -233,24 +283,23 @@ class Img(NamedTuple):
 
 def get_images(kw, maxiter=3, min_count=1, raw=False):
     """"""
-    ensure_engines()
     results = []
-    itr = 0
     logger.info(f"fetching images for {kw}")
     try:
-        for egn in get_engine_img():
+        # engines = ENGINES["images"]
+        # for e in
+        for n in range(1, maxiter + 1):
             response = try_search(
                 kw,
-                egn,
-                pages=1,
+                None,
+                pages=n,
                 lang="all",
                 timeout=cfg.REQ_TIMEOUT,
                 category="images",
             )
             results.extend(response)
-            if len(results) > min_count or itr > maxiter:
+            if len(results) > min_count:
                 break
-            itr += 1
     finally:
         return (
             results

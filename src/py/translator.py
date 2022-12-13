@@ -109,7 +109,7 @@ class Translator:
     _max_query_len = 5000
     _inflight = 0
 
-    def __init__(self, provider="GoogleTranslator"):
+    def __init__(self, provider="GoogleTranslator", sync_proxies = False):
 
         self._tr = getattr(deep_translator, provider)
         self._translate: Dict[Tuple[str, str], Callable] = {}
@@ -118,7 +118,8 @@ class Translator:
         for (_, code) in TLangs:
             self._translate[(self._sl, code)] = self._tr(source=self._sl, target=code)
         sched.initPool(procs=False)
-        pb.proxy_sync_forever(cfg.PROXIES_FILES, cfg.PROXIES_DIR)
+        if sync_proxies:
+            pb.proxy_sync_forever(cfg.PROXIES_FILES, cfg.PROXIES_DIR)
         log.info("translator: initialized.")
 
     @staticmethod

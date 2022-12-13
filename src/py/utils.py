@@ -126,6 +126,9 @@ def splitStr(string, sep="\\s+"):
     else:
         return (_.group(1) for _ in finditer(f"(?:^|{sep})((?:(?!{sep}).)*)", string))
 
+def partition(lst, size = cfg.POOL_SIZE):
+    for i in range(0, len(lst), size):
+        yield lst[i : i+size]
 
 def similar(a, b):
     return SequenceMatcher(None, a, b).ratio()

@@ -419,7 +419,7 @@ def process_reddit(url, topic, site, logf):
 
         final["slug"] = ut.slugify(final["title"])
         final["desc"] = s.subreddit.title
-        final["author"] = s.author.name
+        final["author"] = s.author.name if s.author else s.title
         final["pubDate"] = str(datetime.fromtimestamp(s.created_utc))
         final["url"] = s.shortlink
         final["topic"] = topic
@@ -470,11 +470,11 @@ def fillarticle(url, data, topic, site: Site):
 
     try:
         try:
-            tra = trafi(url, data)
+            tra = trafi(url, data) or {}
         except:
             pass
         try:
-            goo = goose(url, data).infos
+            goo = goose(url, data).infos or {}
         except:
             pass
         assert isinstance(tra, dict)

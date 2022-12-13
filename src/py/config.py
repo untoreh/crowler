@@ -6,6 +6,7 @@ from pathlib import Path
 
 from proxies_pb import REQ_TIMEOUT
 from scheduler import POOL_SIZE
+assert isinstance(POOL_SIZE, int)
 
 if os.getenv("LIBPYTHON_PATH", "").endswith("d.so"):
     sys.path.extend(
@@ -60,9 +61,9 @@ SOCKS5PEERS_FILE = PROXIES_DIR / "socks5peers.txt"
 SOCKS4PEERS_FILE = PROXIES_DIR / "socks4peers.txt"
 HTTPPEERS_FILE = PROXIES_DIR / "httppeers.txt"
 # how many keywords to try for extracting source links from search engines
-KW_SAMPLE_SIZE = 10
+KW_SAMPLE_SIZE = 4
 # How much should a source job take
-KW_SEARCH_TIMEOUT = 60
+KW_SEARCH_TIMEOUT = 240
 # how many source links to process for extracting feeds and articles
 SRC_MAX_TRIES = 2
 REMOVE_SOURCES = json.loads(os.getenv("REMOVE_SOURCES", "true").lower())
@@ -88,3 +89,4 @@ SITES_DIR = DATA_DIR / "sites"
 
 SITES_CONFIG = None
 TOPICS_BLACKLIST = DATA_DIR / "topics-blacklist.txt"
+

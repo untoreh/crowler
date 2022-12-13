@@ -7,18 +7,19 @@ import shutil
 import time
 import traceback as tb
 from typing import List, Union
+
 import zarr as za
 from numpy import ndarray
 
 import blacklist
 import config as cfg
 import contents as cnt
+import log
 import proxies_pb as pb
 import scheduler as sched
 import sources  # NOTE: searx has some namespace conflicts with google.ads, initialize after the `adwords_keywords` module
 import topics as tpm
 import utils as ut
-from log import logger
 from sites import Job, Site, Topic
 
 
@@ -46,52 +47,63 @@ def get_kw_batch(site: Site, topic):
     ut.save_file("\n".join(kws), queue, root=None, ext="txt", as_json=False, mode="w")
     return batch
 
+def initialize():
+    sources.ensure_engines()
+    sched.initPool(True, procs=True)
+    pb.proxy_sync_forever(cfg.PROXIES_FILES, cfg.PROXIES_DIR)
 
 def run_sources_job(site: Site, topic):
     """
     Run one iteration of the job to find source links from keywords. Sources are used to find articles.
     This function should never be called directly, instead `parse` should use it when it runs out of sources.
     """
-    logger.info("Getting kw batch...")
-    sched.initPool()
+    log.info("Getting kw batch...")
+    initialize()
     batch = get_kw_batch(site, topic)
     root = site.topic_sources(topic)
     results = dict()
     jobs = dict()
     ready = dict()
-    for (n, kw) in enumerate(batch):
-        logger.info("Keywords: %d/%d.", n, cfg.KW_SAMPLE_SIZE)
-        kwjobs = sources.fromkeyword_async(kw, n_engines=3)
-        jobs[kw] = kwjobs
-        results[kw] = []
-        ready[kw] = 0
-    start = time.time()
-    while len(jobs) > 0:
-        logger.debug(f"Remaining kws: {len(jobs)}")
-        if time.time() - start > cfg.KW_SEARCH_TIMEOUT:
-            logger.debug("Timing out kw search..")
-            break
-        for kw in ready.keys():
-            if not kw:
-                continue
-            if kw in jobs:
-                kwjobs = jobs[kw]
-                for (n, j) in enumerate(kwjobs):
-                    if j.ready():
-                        res = j.get()
-                        results[kw].extend(res)
-                        ready[kw] += 1
-            if ready[kw] == 3 and ready[kw] >= 0:
-                kwresults = blacklist.exclude_blacklist_sources(
-                    site, results[kw], blacklist.exclude_sources
-                )
-                kwresults = sources.dedup_results(kwresults)
-                if kwresults:
-                    ut.save_file(kwresults, ut.slugify(kw), root=root)
-                del jobs[kw]
-                ready[kw] = -1
-                logger.debug(f"Processed kw: {kw}")
-            time.sleep(0.25)
+    try:
+        for (n, kw) in enumerate(batch):
+            log.info("Keywords: %d/%d.", n, cfg.KW_SAMPLE_SIZE)
+            jobs[kw] = sources.fromkeyword(kw, sync=False)
+            results[kw] = []
+            n = len(jobs[kw])
+            ready[kw] = (0, n)
+        start = time.time()
+        while len(jobs) > 0:
+            log.info(f"Remaining kws: {len(jobs)}")
+            if time.time() - start > cfg.KW_SEARCH_TIMEOUT:
+                log.info("Timing out kw search..")
+                break
+            for kw in ready.keys():
+                if not kw:
+                    continue
+                if kw in jobs:
+                    kwjobs = jobs[kw]
+                    for (n, j) in enumerate(kwjobs):
+                        if j.ready():
+                            res = j.get()
+                            results[kw].extend(res)
+                            (done, processing) = ready[kw]
+                            ready[kw] = (done + 1, processing)
+                # save every 2 done jobs
+                (done, processing) = ready[kw]
+                if done >= 2 or done >= processing:
+                    kwresults = blacklist.exclude_blacklist_sources(
+                        site, results[kw], blacklist.exclude_sources
+                    )
+                    kwresults = sources.dedup_results(kwresults)
+                    if kwresults:
+                        ut.save_file(kwresults, ut.slugify(kw), root=root)
+                    del jobs[kw]
+                    ready[kw] = (0, processing - done)
+                    log.info(f"Processed kw: {kw}")
+                time.sleep(0.25)
+    finally:
+        for kw in jobs.keys():
+            sources.cancel_search(kw)
 
 
 def get_kw_sources(site: Site, topic, remove=cfg.REMOVE_SOURCES):
@@ -108,26 +120,38 @@ def get_kw_sources(site: Site, topic, remove=cfg.REMOVE_SOURCES):
                     os.remove(results_path)
                 kws = json.loads(res)
                 if not kws and not remove:
-                    logger.debug("Removing empty sources file %s.", os.path.basename(f))
+                    log.debug("Removing empty sources file %s.", os.path.basename(f))
                     os.remove(results_path)
                     continue
                 return kws
 
 
-def ensure_sources(site, topic):
+def ensure_sources(site, topic, max_trials=3):
     sources = get_kw_sources(site, topic)
-    if not sources:
-        logger.info("No sources remaining, fetching new sources...")
-        run_sources_job(site, topic)
-        sources = get_kw_sources(site, topic)
+    trials = 0
+    while not sources and trials < max_trials:
+        log.info(
+            "No sources remaining (%s@%s), fetching new sources...", topic, site.name
+        )
+        try:
+            run_sources_job(site, topic)
+            sources = get_kw_sources(site, topic)
+        except:
+            log.warn("Sources job failed %s(%d)", topic, trials)
+            pass
+        trials += 1
     if not sources:
         raise ValueError("Could not ensure sources for topic %s.", topic)
     return sources
 
+
 SCRAPE_LOG = cfg.DATA_DIR / "scrape_logs.txt"
+
+
 def log_parsed(s):
     with open(SCRAPE_LOG, "a+") as f:
         f.write(s)
+
 
 def run_parse_job(site, topic):
     """
@@ -136,39 +160,38 @@ def run_parse_job(site, topic):
     try:
         sources = ensure_sources(site, topic)
     except ValueError:
-        logger.warn(
-            "Couldn't find sources for topic %s, site: %s.", topic, site.name
-        )
+        log.warn("Couldn't find sources for topic %s, site: %s.", topic, site.name)
         return None
 
-    try:
-        logger.info("Parsing %d sources...for %s:%s", len(sources), topic, site.name)
-        arts, feeds = cnt.fromsources(sources, topic, site)
-        topic_path = site.topic_dir(topic)
-    except:
-        logger.warn("parse job failed. \n %s", tb.format_exc())
+    log.info("Parsing %d sources...for %s:%s", len(sources), topic, site.name)
+    part = 0
+    for src in ut.partition(sources):
+        try:
+            log.info("Parsing: %s(%d)", topic, part)
+            arts, feeds = cnt.fromsources(src, topic, site)
+            topic_path = site.topic_dir(topic)
+        except:
+            log.warn("failed to parse sources \n %s", tb.format_exc())
 
-    try:
-        if arts:
-            logger.info("%s@%s: Saving %d articles.", topic, site.name, len(arts))
-            ut.save_zarr(arts, k=ut.ZarrKey.articles, root=topic_path)
-            site.update_article_count(topic)
-        else:
-            logger.info("%s@%s: No articles found.", topic, site.name)
-    except:
-        logger.warn("parse job failed. \n %s", tb.format_exc())
+        try:
+            if arts:
+                log.info("%s@%s: Saving %d articles.", topic, site.name, len(arts))
+                ut.save_zarr(arts, k=ut.ZarrKey.articles, root=topic_path)
+                site.update_article_count(topic)
+        except:
+            log.warn("failed to save articles \n %s", tb.format_exc())
 
-    try:
-        if feeds:
-            logger.info("%s@%s: Saving %d articles.", topic, site.name, len(feeds))
-            ut.save_zarr(feeds, k=ut.ZarrKey.feeds, root=topic_path)
-        else:
-            logger.info("%s@%s: No feeds found.", topic, site.name)
-    except:
-        logger.warn("parse job failed. \n %s", tb.format_exc())
+        try:
+            if feeds:
+                log.info("%s@%s: Saving %d feeds .", topic, site.name, len(feeds))
+                ut.save_zarr(feeds, k=ut.ZarrKey.feeds, root=topic_path)
+        except:
+            log.warn("failed to save feeds \n %s", tb.format_exc())
 
-    log_parsed(f"Found {len(arts)} articles and {len(feeds)} feeds for topic {topic}.\n")
-    return (arts, feeds)
+    log_parsed(
+        f"Found {len(arts)} articles and {len(feeds)} feeds for topic {topic}.\n"
+    )
+    return
 
 
 def get_feeds(site: Site, topic, n=3, resize=True) -> Union[List, ndarray]:
@@ -194,16 +217,16 @@ def run_feed_job(site: Site, topic):
     """
     feed_links = get_feeds(site, topic, 3)
     if not len(feed_links):
-        logger.warning("Couldn't find feeds for topic %s@%s", topic, site.name)
+        log.warn("Couldn't find feeds for topic %s@%s", topic, site.name)
         return None
-    logger.info("Search %d feeds for articles...", len(feed_links))
+    log.info("Search %d feeds for articles...", len(feed_links))
     articles = cnt.fromfeeds(feed_links, topic, site)
     if len(articles):
-        logger.info("%s@%s: Saving %d articles.", topic, site.name, len(articles))
+        log.info("%s@%s: Saving %d articles.", topic, site.name, len(articles))
         ut.save_zarr(articles, k=ut.ZarrKey.articles, root=site.topic_dir(topic))
         site.update_article_count(topic)
     else:
-        logger.info("%s@%s: No articles were found queued.", topic, site.name)
+        log.info("%s@%s: No articles were found queued.", topic, site.name)
     return articles
 
 
@@ -211,14 +234,14 @@ def new_topic(site: Site, force=False):
     last_topic = tpm.get_last_topic(site)
     if force or time.time() - last_topic["time"] > cfg.NEW_TOPIC_FREQ:
         newtopic = tpm.new_topic(site)
-        logger.info("topics: added new topic %s", newtopic)
+        log.info("topics: added new topic %s", newtopic)
+
 
 def site_loop(site: Site, throttle=5):
+    initialize()
     site.load_topics()
-    sched.initPool()
     backoff = 0
     while True:
-        pb.proxy_sync_forever(cfg.PROXIES_FILES, cfg.PROXIES_DIR)
         try:
             topics = site.sorted_topics(key=Topic.UnpubCount)
             # print(h.heap())
@@ -227,36 +250,36 @@ def site_loop(site: Site, throttle=5):
                     if site.is_paste_interval(Job.parse, topic):
                         run_parse_job(site, topic)
             except:
-                logger.warn("parse job failed. \n %s", tb.format_exc())
+                log.warn("parse job failed. \n %s", tb.format_exc())
             try:
                 for topic in topics:
                     if site.is_paste_interval(Job.feed, topic):
                         run_feed_job(site, topic)
             except:
-                logger.warn("feed job failed. \n %s", tb.format_exc())
+                log.warn("feed job failed. \n %s", tb.format_exc())
             try:
                 if site.new_topics_enabled:
                     new_topic(site)
             except:
-                logger.warn("new topics  failed. \n %s", tb.format_exc())
+                log.warn("new topics  failed. \n %s", tb.format_exc())
             try:
                 if site.is_paste_interval(Job.reddit):
                     site.reddit_submit()
             except:
-                logger.warn("reddit failed. \n %s", tb.format_exc())
+                log.warn("reddit failed. \n %s", tb.format_exc())
             try:
                 if site.is_paste_interval(Job.twitter):
                     site.tweet()
             except:
-                logger.warn("twitter failed. \n %s", e)
+                log.warn("twitter failed. \n %s", e)
             try:
                 if site.is_paste_interval(Job.facebook):
                     site.facebook_post()
             except:
-                logger.warn("facebook failed. \n %s", tb.format_exc())
+                log.warn("facebook failed. \n %s", tb.format_exc())
             time.sleep(throttle)
         except:
-            logger.warning(f"{tb.format_exc()} (site: {site.name})")
+            log.warn(f"{tb.format_exc()} (site: {site.name})")
             backoff += 1
             time.sleep(backoff)
 
@@ -265,9 +288,9 @@ def run_server(sites):
     # from guppy import hpy
     # h = hpy()
     if len(sites) == 0:
-        logger.warn("no sites provided.")
+        log.warn("no sites provided.")
         return
-    sched.initPool()
+    initialize()
     jobs = {}
     for sitename in sites:
         site = Site(sitename)

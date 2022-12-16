@@ -105,8 +105,8 @@ class Job(Enum):
     parse = -1
     feed = -1
     reddit = 60 * 60 * 24
-    twitter = 60 * 60 * 4
-    facebook = 60 * 60 * 8
+    twitter = 60 * 60 * 2
+    facebook = 60 * 60 * 4
 
 
 class Site:
@@ -126,6 +126,7 @@ class Site:
     _last_twitter: float = 0
     _last_facebook: float = 0
     _last_reddit: float = 0
+    _fb_use_source_url = False
 
     def __init__(self, sitename=""):
         if not cfg.SITES_CONFIG_FILE.exists():
@@ -151,6 +152,8 @@ class Site:
         self.created_dt = datetime.fromisoformat(self.created)
         self.domain: str = self._config.get("domain", "")
         self.domain_rgx = re.compile(f"(?:https?:)?//{self.domain}")
+        self.url = "https://" + self.domain
+        self._title = None
         assert (
             self.domain != ""
         ), f"domain not found in site configuration for {self._name} read from {cfg.SITES_CONFIG_FILE}"
@@ -200,11 +203,15 @@ class Site:
                 f"Could not choose an article while publishing to fb page, site: {self.name}."
             )
             return
-        url = self.article_url(art, topic)
-        # url = re.sub(self.domain_rgx, "", url)
-        # url = self.domain.split(".")[0] + " " + url
-        # message = f"{art['desc']}\nContinue at: {url}"
-        message = art.get("tags", "") or art.get("desc", "")
+        message = ", ".join(art.get("tags", [])) or art.get("desc", "")
+        if self._fb_use_source_url:
+            url = art.get("url", "")
+            # article_url = self.article_url(art, topic)
+            # article_url = re.sub(self.domain_rgx, "", article_url)
+            # article_url = self.domain.split(".")[0] + " " + url
+            message = f"{message}\n\nFind more news at,\n{self.title}"
+        else:
+            url = self.article_url(art, topic)
         try:
             assert pb.is_unproxied()
             self._fb_graph.post(
@@ -218,7 +225,11 @@ class Site:
             self._last_facebook = time.time()
             self._save_post_time("facebook", self._last_facebook)
         except Exception as e:
-            log.warn(e)
+            if "abusive" in str(e):
+                log.warn("Using original url for facebook posts.")
+                self._fb_use_source_url = True
+            else:
+                log.warn(e)
 
     def _init_reddit(self):
         import base64
@@ -251,7 +262,9 @@ class Site:
         topic = self.get_random_topic()
         assert topic is not None
         a = None
-        while a is None or not a.get("imageUrl", ""): # ensure article has an image for socials
+        while a is None or not a.get(
+            "imageUrl", ""
+        ):  # ensure article has an image for socials
             a = self.recent_article(topic)
         assert a is not None, "no article found"
         return (topic, a)
@@ -376,6 +389,14 @@ class Site:
     @property
     def name(self):
         return self._name
+
+    @property
+    def title(self):
+        if self._title is None:
+            assert self.domain.count(".") == 1
+            toplevel, domain = self.domain.split(".")
+            self._title = f"{toplevel} dot {domain}".title()
+        return self._title
 
     def load_articles(self, topic: str, k=ZarrKey.articles, subk: int | str = ""):
         return load_zarr(k=k, subk=subk, root=self.topic_dir(topic))

@@ -204,7 +204,7 @@ class Site:
         # url = re.sub(self.domain_rgx, "", url)
         # url = self.domain.split(".")[0] + " " + url
         # message = f"{art['desc']}\nContinue at: {url}"
-        message = art["desc"]
+        message = art.get("tags", "") or art.get("desc", "")
         try:
             assert pb.is_unproxied()
             self._fb_graph.post(

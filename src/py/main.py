@@ -47,10 +47,12 @@ def get_kw_batch(site: Site, topic):
     ut.save_file("\n".join(kws), queue, root=None, ext="txt", as_json=False, mode="w")
     return batch
 
+
 def initialize():
     sources.ensure_engines()
     sched.initPool(True, procs=True)
     pb.proxy_sync_forever(cfg.PROXIES_FILES, cfg.PROXIES_DIR)
+
 
 def run_sources_job(site: Site, topic):
     """
@@ -269,12 +271,18 @@ def site_loop(site: Site, throttle=5):
                 log.warn("reddit failed. \n %s", tb.format_exc())
             try:
                 if site.is_paste_interval(Job.twitter):
-                    site.tweet()
+                    j = sched.apply(site.tweet)
+                    j.wait(60)
+                    if not j.ready():
+                        log.warn("tweet job timed out (60s) for site %s", site.name)
             except:
                 log.warn("twitter failed. \n %s", e)
             try:
                 if site.is_paste_interval(Job.facebook):
-                    site.facebook_post()
+                    j = sched.apply(site.facebook_post)
+                    j.wait(60)
+                    if not j.ready():
+                        log.warn("facebook post timed out (60s) for site %s", site.name)
             except:
                 log.warn("facebook failed. \n %s", tb.format_exc())
             time.sleep(throttle)

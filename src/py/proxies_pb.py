@@ -36,7 +36,7 @@ PROXY_EP_S5 = "socks5://localhost:8878"
 PROXY_EP_S4 = "socks4://localhost:8879"
 PROXY_EP_HTTP = "http://localhost:8880"
 PROXY_DICT = {"http": STATIC_PROXY_EP, "https": STATIC_PROXY_EP}
-REQ_TIMEOUT = 30
+REQ_TIMEOUT = 20
 CURRENT_PROXY = ""
 
 if "CURL_CLASS" not in globals():

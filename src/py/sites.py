@@ -195,7 +195,9 @@ class Site:
         self.fb_page_url = "https://facebook.com/" + self._fb_page_id
         self._last_facebook = self._load_post_time("facebook")
 
-    def facebook_post(self):
+    def facebook_post(self, trial = 0):
+        if trial > 3:
+            return
         self.load_topics()
         topic, art = self.choose_article()
         if not isinstance(art, dict):
@@ -228,6 +230,7 @@ class Site:
             if "abusive" in str(e):
                 log.warn("Using original url for facebook posts.")
                 self._fb_use_source_url = True
+                self.facebook_post(trial + 1)
             else:
                 log.warn(e)
 
@@ -395,7 +398,7 @@ class Site:
         if self._title is None:
             assert self.domain.count(".") == 1
             toplevel, domain = self.domain.split(".")
-            self._title = f"{toplevel} dot {domain}".title()
+            self._title = f"{toplevel.title()} dot {domain}"
         return self._title
 
     def load_articles(self, topic: str, k=ZarrKey.articles, subk: int | str = ""):

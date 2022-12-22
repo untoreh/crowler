@@ -191,7 +191,6 @@ def single_search(
     while True:
         if not force and kw not in SCHEDULED_SEARCHES:
             return []
-        switch_searx_proxies(engine)
         unsuspend_processors()
         s = SearchQuery(
             kw,
@@ -202,7 +201,9 @@ def single_search(
             # pageno=p,
             lang=lang,
         )
-        q = search.Search(s).search()
+        switch_searx_proxies(engine)
+        with LoggerLevel(None):
+            q = search.Search(s).search()
         q_res = q.get_ordered_results()
         if len(q_res) > 0:
             res.extend(q_res)

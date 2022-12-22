@@ -470,18 +470,18 @@ def fillarticle(url, data, topic, site: Site):
 
     try:
         try:
-            tra = trafi(url, data) or {}
+            tra = trafi(url, data)
         except:
-            pass
+            tra = {}
         try:
-            goo = goose(url, data).infos or {}
+            goo = goose(url, data).infos
         except:
-            pass
+            goo = {}
         assert isinstance(tra, dict)
         assert isinstance(goo, dict)
 
         # first try content
-        if len(tra["text"]) >= len(goo.get("cleaned_text", "")):
+        if len(tra.get("text", "")) >= len(goo.get("cleaned_text", "")):
             src = "traf"
             final["content"] = tra["text"]
             final["source"] = "tra"

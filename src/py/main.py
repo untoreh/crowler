@@ -50,7 +50,7 @@ def get_kw_batch(site: Site, topic):
 
 def initialize():
     sources.ensure_engines()
-    sched.initPool(True, procs=True)
+    sched.initPool(True, procs=False)
     pb.proxy_sync_forever(cfg.PROXIES_FILES, cfg.PROXIES_DIR)
 
 

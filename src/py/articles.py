@@ -470,11 +470,11 @@ def fillarticle(url, data, topic, site: Site):
 
     try:
         try:
-            tra = trafi(url, data)
+            tra = trafi(url, data) or {}
         except:
             tra = {}
         try:
-            goo = goose(url, data).infos
+            goo = goose(url, data).infos or {}
         except:
             goo = {}
         assert isinstance(tra, dict)

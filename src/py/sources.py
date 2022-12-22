@@ -13,7 +13,7 @@ import proxies_pb as pb
 import scheduler as sched
 import translator as tr
 import traceback as tb
-from log import LoggerLevel, logger
+from log import LoggerLevel, logger, logging
 
 # the searx.search module has a variable/ named `processors`
 # import importlib

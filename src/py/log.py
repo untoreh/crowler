@@ -18,7 +18,8 @@ def setloglevel(logger=logger, lvl=logger_level):
 
 setloglevel()
 # Shut up httpx errors
-setloglevel(logging.getLogger("httpx"), lvl=logging.CRITICAL)
+for module in ("python_socks", "httpx", "searxx.engines", "asyncio"):
+    setloglevel(logging.getLogger(module), lvl=logging.CRITICAL)
 DEFAULT_LEVELS = {}
 
 

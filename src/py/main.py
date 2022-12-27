@@ -48,10 +48,10 @@ def get_kw_batch(site: Site, topic):
     return batch
 
 
-def initialize():
+def initialize(procs=False):
     log.setloglevel()
+    sched.initPool(True, procs=procs)
     sources.ensure_engines()
-    sched.initPool(True, procs=False)
     pb.proxy_sync_forever(cfg.PROXIES_FILES, cfg.PROXIES_DIR)
 
 
@@ -69,20 +69,21 @@ def run_sources_job(site: Site, topic):
     ready = dict()
     try:
         for (n, kw) in enumerate(batch):
+            if not kw:
+                continue
             log.info("Keywords: %d/%d.", n, cfg.KW_SAMPLE_SIZE)
             jobs[kw] = sources.fromkeyword(kw, sync=False)
             results[kw] = []
             n = len(jobs[kw])
             ready[kw] = (0, n)
         start = time.time()
-        while len(jobs) > 0:
-            log.info(f"Remaining kws: {len(jobs)}")
+        done_kws = []
+        while len(ready) > 0:
+            log.debug(f"Remaining kws: {len(ready)}")
             if time.time() - start > cfg.KW_SEARCH_TIMEOUT:
                 log.info("Timing out kw search..")
                 break
             for kw in ready.keys():
-                if not kw:
-                    continue
                 if kw in jobs:
                     kwjobs = jobs[kw]
                     for (n, j) in enumerate(kwjobs):
@@ -100,10 +101,16 @@ def run_sources_job(site: Site, topic):
                     kwresults = sources.dedup_results(kwresults)
                     if kwresults:
                         ut.save_file(kwresults, ut.slugify(kw), root=root)
-                    del jobs[kw]
                     ready[kw] = (0, processing - done)
                     log.info(f"Processed kw: {kw}")
-                time.sleep(0.25)
+                if processing <= 0:
+                    done_kws.append(kw)
+            for kw in done_kws:
+                del jobs[kw]
+                del ready[kw]
+            del done_kws[:]
+            time.sleep(0.25)
+
     finally:
         for kw in jobs.keys():
             sources.cancel_search(kw)
@@ -140,7 +147,7 @@ def ensure_sources(site, topic, max_trials=3):
             run_sources_job(site, topic)
             sources = get_kw_sources(site, topic)
         except:
-            log.warn("Sources job failed %s(%d)", topic, trials)
+            log.debug("Sources job failed %s(%d)", topic, trials)
             pass
         trials += 1
     if not sources:
@@ -163,18 +170,19 @@ def run_parse_job(site, topic):
     try:
         sources = ensure_sources(site, topic)
     except ValueError:
-        log.warn("Couldn't find sources for topic %s, site: %s.", topic, site.name)
+        log.debug("Couldn't find sources for topic %s, site: %s.", topic, site.name)
         return None
 
     log.info("Parsing %d sources...for %s:%s", len(sources), topic, site.name)
     part = 0
+    arts = feeds = None
     for src in ut.partition(sources):
         try:
             log.info("Parsing: %s(%d)", topic, part)
             arts, feeds = cnt.fromsources(src, topic, site)
             topic_path = site.topic_dir(topic)
         except:
-            log.warn("failed to parse sources \n %s", tb.format_exc())
+            log.debug("failed to parse sources \n %s", tb.format_exc())
 
         try:
             if arts:
@@ -220,7 +228,7 @@ def run_feed_job(site: Site, topic):
     """
     feed_links = get_feeds(site, topic, 3)
     if not len(feed_links):
-        log.warn("Couldn't find feeds for topic %s@%s", topic, site.name)
+        log.debug("Couldn't find feeds for topic %s@%s", topic, site.name)
         return None
     log.info("Search %d feeds for articles...", len(feed_links))
     articles = cnt.fromfeeds(feed_links, topic, site)
@@ -234,14 +242,22 @@ def run_feed_job(site: Site, topic):
 
 
 def parse_worker(site, topic):
+    backoff = 1
     while True:
-        time.sleep(site.time_until_next(Job.parse, topic))
+        idle = site.time_until_next(Job.parse, topic)
+        time.sleep(idle + backoff)
+        if idle == 1:
+            backoff += 1
         run_parse_job(site, topic)
 
 
 def feed_worker(site, topic):
+    backoff = 1
     while True:
-        time.sleep(site.time_until_next(Job.feed, topic))
+        idle = site.time_until_next(Job.feed, topic)
+        time.sleep(idle + backoff)
+        if idle == 1:
+            backoff += 1
         run_feed_job(site, topic)
 
 
@@ -260,7 +276,6 @@ def topics_worker(site: Site):
 
 
 def site_scheduling(site: Site, throttle=60):
-    initialize()
     site.load_topics()
     try:
         topics = site.sorted_topics(key=Topic.UnpubCount)
@@ -291,22 +306,32 @@ def run_server(sites):
         return
     initialize()
     jobs = {}
-    for sitename in sites:
-        site = Site(sitename)
-        jobs[site] = sched.apply(site_scheduling, site)
+
+    def dispatch(name):
+        try:
+            site = Site(name)
+            jobs[site] = sched.apply(site_scheduling, site)
+        except:
+            time.sleep(1)
+            dispatch(name)
+
+    list(map(dispatch, sites))
     # NOTE: this runs indefinitely
     while True:
-        for (site, j) in jobs.items():
-            if j.ready():
-                jobs[site] = sched.apply(site_scheduling, site)
-        time.sleep(5)
+        try:
+            for (site, j) in jobs.items():
+                j.wait()
+                if j.ready():
+                    dispatch(site.name)
+        except:
+            time.sleep(5)
 
 
 JOBS_MAP = {
     "sources": run_sources_job,
     "parse": run_parse_job,
     "feed": run_feed_job,
-    "topic": new_topic,
+    "topic": tpm.new_topic,
 }
 
 if __name__ == "__main__":

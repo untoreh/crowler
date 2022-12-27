@@ -9,8 +9,7 @@ import sys
 
 POOL: None | ThreadPool = None
 PROC_POOL: None | Pool = None
-# This should affect http requests mostly
-POOL_SIZE = cpu_count()
+POOL_SIZE = 128
 
 
 def initPool(restart=False, thr=True, procs=False, initializer=None, initargs=[]):

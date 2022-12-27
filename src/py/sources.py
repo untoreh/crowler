@@ -120,7 +120,7 @@ def get_searx_settings():
 
 
 PROCESSORS = None
-ENGINES: Dict[str, List[EngineRef]] = {}
+ENGINES_TRACKING: Dict[str, Dict[EngineRef, int]] = {}  # {cat, {egn_ref, n_fails}}
 SCHEDULED_SEARCHES = {}
 
 
@@ -133,7 +133,7 @@ def hotfixes():
 
 
 def ensure_engines(force=False):
-    global ENGINES, PROCESSORS, SCHEDULED_SEARCHES
+    global PROCESSORS, SCHEDULED_SEARCHES
     if force or PROCESSORS is None:
         print("Ensuring searx engines are loaded...")
         searx.network.network.NETWORKS.clear()
@@ -143,12 +143,12 @@ def ensure_engines(force=False):
         search.initialize(settings_engines=get_searx_settings())
         hotfixes()
 
-        if not ENGINES:
+        if not ENGINES_TRACKING:
             for cat in SEARX_ENABLED_CATEGORIES:
-                ENGINES[cat] = [
-                    EngineRef(engine.name, cat)
-                    for engine in searx.engines.categories[cat]
-                ]
+                engines_for_cat = searx.engines.categories[cat]
+                ENGINES_TRACKING[cat] = {
+                    EngineRef(engine.name, cat): 0 for engine in engines_for_cat
+                }
     assert searx.search.PROCESSORS
     if PROCESSORS is None:
         PROCESSORS = searx.search.PROCESSORS
@@ -178,9 +178,9 @@ def single_search(
 ):
     res = []
     logger.info(f"Processing engine search, kw: {kw}")
-    assert isinstance(ENGINES, Dict)
+    assert isinstance(ENGINES_TRACKING, Dict)
     engines = (
-        ENGINES[category]
+        list(ENGINES_TRACKING[category].keys())
         if engine is None
         else [engine]
         if isinstance(engine, EngineRef)
@@ -191,27 +191,33 @@ def single_search(
     while True:
         if not force and kw not in SCHEDULED_SEARCHES:
             return []
-        unsuspend_processors()
-        s = SearchQuery(
-            kw,
-            engines,
-            safesearch=1,
-            time_range=current_tr,
-            timeout_limit=timeout,
-            # pageno=p,
-            lang=lang,
-        )
-        switch_searx_proxies(engine)
-        with LoggerLevel(None):
+        try:
+            unsuspend_processors()
+            s = SearchQuery(
+                kw,
+                engines,
+                safesearch=1,
+                time_range=current_tr,
+                timeout_limit=timeout,
+                # pageno=p,
+                lang=lang,
+            )
+            switch_searx_proxies(engine)
             q = search.Search(s).search()
-        q_res = q.get_ordered_results()
-        if len(q_res) > 0:
-            res.extend(q_res)
-            break
-        elif not len(time_ranges):
-            break
-        else:
-            current_tr = time_ranges.pop()
+            q_res = q.get_ordered_results()
+            if len(q_res) > 0:
+                res.extend(q_res)
+                break
+            elif not len(time_ranges):
+                break
+            else:
+                current_tr = time_ranges.pop()
+        except:
+            for e in engines:
+                cat = ENGINES_TRACKING.get(category, {})
+                fails = cat.get(e, 0)
+                cat[e] = fails + 1
+                ENGINES_TRACKING[category] = cat
     return res
 
 
@@ -235,16 +241,26 @@ def dedup_results(results):
 
 
 def fromkeyword(
-    keyword="trending", category="general", verbose=False, filter_lang=False, sync=True
+    keyword="trending",
+    category="general",
+    verbose=False,
+    filter_lang=False,
+    sync=True,
+    top_egn=5,
 ):
     """
     Search a keyword across all supported engines for given  category.
+
+    `top_egn`: only search across the top n best performing engines.
     """
     try:
         SCHEDULED_SEARCHES[keyword] = True
         logger.info("Finding sources for keyword: %s", keyword)
         ensure_engines()
-        engines = ENGINES[category]
+        ranks = sorted(ENGINES_TRACKING[category].items(), key=lambda x: x[1])
+        engines = [e[0] for e in ranks[:top_egn]]
+        assert isinstance(engines[0], EngineRef)
+
         kwlang = tr.detect(keyword) if filter_lang else "all"
         jobs = []
         for e in engines:

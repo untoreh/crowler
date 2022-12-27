@@ -49,6 +49,7 @@ def get_kw_batch(site: Site, topic):
 
 
 def initialize():
+    log.setloglevel()
     sources.ensure_engines()
     sched.initPool(True, procs=False)
     pb.proxy_sync_forever(cfg.PROXIES_FILES, cfg.PROXIES_DIR)
@@ -232,64 +233,54 @@ def run_feed_job(site: Site, topic):
     return articles
 
 
-def new_topic(site: Site, force=False):
+def parse_worker(site, topic):
+    while True:
+        time.sleep(site.time_until_next(Job.parse, topic))
+        run_parse_job(site, topic)
+
+
+def feed_worker(site, topic):
+    while True:
+        time.sleep(site.time_until_next(Job.feed, topic))
+        run_feed_job(site, topic)
+
+
+def next_topic_idle(site):
     last_topic = tpm.get_last_topic(site)
-    if force or time.time() - last_topic["time"] > cfg.NEW_TOPIC_FREQ:
-        newtopic = tpm.new_topic(site)
-        log.info("topics: added new topic %s", newtopic)
+    return max(3600, cfg.NEW_TOPIC_FREQ - (time.time() - last_topic["time"]))
 
 
-def site_loop(site: Site, throttle=5):
+def topics_worker(site: Site):
+    while True:
+        time.sleep(next_topic_idle(site))
+        topic = tpm.new_topic(site)
+        sched.apply(parse_worker, site, topic)
+        sched.apply(feed_worker, site, topic)
+        log.info("topics: added new topic %s", topic)
+
+
+def site_scheduling(site: Site, throttle=60):
     initialize()
     site.load_topics()
-    backoff = 0
-    while True:
-        try:
-            topics = site.sorted_topics(key=Topic.UnpubCount)
-            # print(h.heap())
-            try:
-                for topic in topics:
-                    if site.is_paste_interval(Job.parse, topic):
-                        run_parse_job(site, topic)
-            except:
-                log.warn("parse job failed. \n %s", tb.format_exc())
-            try:
-                for topic in topics:
-                    if site.is_paste_interval(Job.feed, topic):
-                        run_feed_job(site, topic)
-            except:
-                log.warn("feed job failed. \n %s", tb.format_exc())
-            try:
-                if site.new_topics_enabled:
-                    new_topic(site)
-            except:
-                log.warn("new topics  failed. \n %s", tb.format_exc())
-            try:
-                if site.is_paste_interval(Job.reddit):
-                    site.reddit_submit()
-            except:
-                log.warn("reddit failed. \n %s", tb.format_exc())
-            try:
-                if site.is_paste_interval(Job.twitter):
-                    j = sched.apply(site.tweet)
-                    j.wait(60)
-                    if not j.ready():
-                        log.warn("tweet job timed out (60s) for site %s", site.name)
-            except:
-                log.warn("twitter failed. \n %s", e)
-            try:
-                if site.is_paste_interval(Job.facebook):
-                    j = sched.apply(site.facebook_post)
-                    j.wait(60)
-                    if not j.ready():
-                        log.warn("facebook post timed out (60s) for site %s", site.name)
-            except:
-                log.warn("facebook failed. \n %s", tb.format_exc())
+    try:
+        topics = site.sorted_topics(key=Topic.UnpubCount)
+        # print(h.heap())
+        for topic in topics:
+            sched.apply(parse_worker, site, topic)
+            sched.apply(feed_worker, site, topic)
+        if site.new_topics_enabled:
+            sched.apply(topics_worker)
+        if site.has_reddit:
+            sched.apply(site.reddit_worker)
+        if site.has_twitter:
+            sched.apply(site.twitter_worker)
+        if site.has_facebook:
+            sched.apply(site.facebook_worker)
+        while True:
             time.sleep(throttle)
-        except:
-            log.warn(f"{tb.format_exc()} (site: {site.name})")
-            backoff += 1
-            time.sleep(backoff)
+    except:
+        log.warn(f"{tb.format_exc()} (site: {site.name})")
+        exit()
 
 
 def run_server(sites):
@@ -302,12 +293,12 @@ def run_server(sites):
     jobs = {}
     for sitename in sites:
         site = Site(sitename)
-        jobs[site] = sched.apply(site_loop, site)
+        jobs[site] = sched.apply(site_scheduling, site)
     # NOTE: this runs indefinitely
     while True:
         for (site, j) in jobs.items():
             if j.ready():
-                jobs[site] = sched.apply(site_loop, site)
+                jobs[site] = sched.apply(site_scheduling, site)
         time.sleep(5)
 
 
@@ -315,7 +306,7 @@ JOBS_MAP = {
     "sources": run_sources_job,
     "parse": run_parse_job,
     "feed": run_feed_job,
-    "newtopic": new_topic,
+    "topic": new_topic,
 }
 
 if __name__ == "__main__":
@@ -339,5 +330,5 @@ if __name__ == "__main__":
         if args.topic != "":
             JOBS_MAP[args.job](st, args.topic)
         else:
-            assert args.job == "newtopic", "Job not understood."
+            assert args.job == "topic", "Job not understood."
             JOBS_MAP[args.job](st, force=True)

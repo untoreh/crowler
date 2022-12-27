@@ -44,6 +44,7 @@ import config as cfg
 import log
 import proxies_pb as pb
 import utils as ut
+import scheduler as sched
 from utils import ZarrKey, load_zarr, save_zarr
 
 SITES = {}
@@ -195,7 +196,7 @@ class Site:
         self.fb_page_url = "https://facebook.com/" + self._fb_page_id
         self._last_facebook = self._load_post_time("facebook")
 
-    def facebook_post(self, trial = 0):
+    def facebook_post(self, trial=0):
         if trial > 3:
             return
         self.load_topics()
@@ -233,6 +234,14 @@ class Site:
                 self.facebook_post(trial + 1)
             else:
                 log.warn(e)
+
+    def facebook_worker(self):
+        while True:
+            time.sleep(self.time_until_next(Job.facebook))
+            j = sched.apply(self.facebook_post)
+            j.wait(60)
+            if not j.ready():
+                log.warn("facebook post timed out (60s) for site %s", self.name)
 
     def _init_reddit(self):
         import base64
@@ -286,6 +295,11 @@ class Site:
         self._save_post_time("reddit", self._last_reddit)
         return s
 
+    def reddit_worker(self):
+        while True:
+            time.sleep(self.time_until_next(Job.reddit))
+            self.reddit_submit()
+
     def _init_twitter(self):
 
         consumer_key = self._config.get("twitter_consumer_key")
@@ -320,6 +334,14 @@ class Site:
         self._save_post_time("twitter", self._last_twitter)
         return pu
 
+    def twitter_worker(self):
+        while True:
+            time.sleep(self.time_until_next(Job.twitter))
+            j = sched.apply(self.tweet)
+            j.wait(60)
+            if not j.ready():
+                log.warn("tweet job timed out (60s) for site %s", self.name)
+
     def recent_article(self, topic: str):
         arts = self.get_last_done(topic)
         assert isinstance(arts, za.Array), "ZArray instance error"
@@ -350,33 +372,36 @@ class Site:
         )
 
     @staticmethod
-    def _sources_check(arr: za.Array):
+    def _sources_time(arr: za.Array):
+        if not len(arr):
+            return 1
         upd = arr.attrs.get("updated")
         if not upd:
             upd = arr.attrs["updated"] = time.time()
-        return time.time() - upd > len(arr) * 20 * 60
+        return max(1, (len(arr) * 20 * 60) - (time.time() - upd))
 
-    def is_paste_interval(self, kind: Job, topic: str = ""):
-        # How much time should wait between jobs
+    @staticmethod
+    def _social_time(last, kind):
+        return max(1, kind.value - (time.time() - last))
+
+    def time_until_next(self, kind: Job, topic: str = ""):
+        # How much time should we wait until next job
         match kind:
             case Job.parse:
                 assert isinstance(topic, str)
                 arts = self.load_articles(topic)
-                return len(arts) == 0 or self._sources_check(arts)
+                return self._sources_time(arts)
             case Job.feed:
                 assert isinstance(topic, str)
                 feeds = self.load_feeds(topic)
-                return len(feeds) == 0 or self._sources_check(feeds)
+                return self._sources_time(feeds)
             case Job.reddit:
-                return self.has_reddit and time.time() - self._last_reddit > kind.value
+                return self._social_time(self._last_reddit, kind) if self.has_reddit else 1
             case Job.facebook:
-                return (
-                    self.has_facebook and time.time() - self._last_facebook > kind.value
-                )
+                return self._social_time(self._last_facebook, kind) if self.has_facebook else 1
             case Job.twitter:
-                return (
-                    self.has_twitter and time.time() - self._last_twitter > kind.value
-                )
+                return self._social_time(self._last_twitter, kind) if self.has_twitter else 1
+        return 1
 
     def topic_feed_interval(self, topic: str):
         # How much time should wait between parse jobs

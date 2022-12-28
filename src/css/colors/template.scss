@@ -101,6 +101,12 @@ body {
   .entry .image-link img {
     background-color: var(--light-background, white);
   }
+  .dropdown-breadcrumbs ul, .topic-pages {
+    box-shadow: 0 0 4px var(--dark-border1);
+    li {
+      border-color: var(--dark-border1);
+    }
+  }
   // .search-suggest {
   //   background: var(--text-secondary-on-dark);
   //   color: var(--text-primary-on-dark);

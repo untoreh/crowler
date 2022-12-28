@@ -481,7 +481,8 @@ def fillarticle(url, data, topic, site: Site):
         assert isinstance(goo, dict)
 
         # first try content
-        if len(tra.get("text", "")) >= len(goo.get("cleaned_text", "")):
+        tra_len = len(tra.get("text", ""))
+        if tra_len and tra_len >= len(goo.get("cleaned_text", "")):
             src = "traf"
             final["content"] = tra["text"]
             final["source"] = "tra"
@@ -494,9 +495,9 @@ def fillarticle(url, data, topic, site: Site):
             logit("too short! %d", len(final["content"]))
 
         final["lang"] = tr.detect(final["content"])
-        final["title"] = remove_urls(tra["title"] or goo.get("title"))
-        if final["title"] is None:
-            logit("no title found!", url)
+        final["title"] = remove_urls(tra.get("title", "") or goo.get("title", ""))
+        if not final["title"]:
+            logit("no title found!")
             save_lpa()
             return {}
 

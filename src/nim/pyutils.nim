@@ -289,9 +289,8 @@ proc `slice`*[S](s: PySequence[S]; start: int | PyObject; stop: int | PyObject;
 proc `[]=`*[S, K, V](s: PySequence[S]; k: K; v: S) =
   s.setitem(k, v)
 
-{.experimental: "notnil".}
-proc `$`*[T](s: PySequence[T] not nil): string =
-  if s.py.isnil:
+proc `$`*[T](s: PySequence[T]): string =
+  if s.isnil or s.py.isnil:
     ""
   else:
     pybi[](s.py).to(string)

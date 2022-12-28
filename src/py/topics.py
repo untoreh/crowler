@@ -5,6 +5,7 @@ import time
 
 from pytrends.request import TrendReq
 from textblob import TextBlob
+import re
 
 import adwords_keywords as adk
 import config as cfg
@@ -129,6 +130,7 @@ def new_topic(site: Site, max_tries=3):
         tries += 1
 
 
+years_rgx = re.compile("\d{4}")
 def suggest(topic: str):
     assert topic
     global _KEYWORDS
@@ -141,6 +143,8 @@ def suggest(topic: str):
             s = _KEYWORDS.suggest(kws[:20], langloc=None)
             if len(s) == 0:
                 break
+            for n in range(len(s)): # remove years
+                s[n] = re.sub(years_rgx, "", s[n])
             sugs.extend(s)
             kws = s
     return list(dict.fromkeys(sugs))  ## dedup

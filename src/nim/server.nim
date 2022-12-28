@@ -121,7 +121,6 @@ proc initThreadImpl() {.gcsafe.} =
   debug "thread: assets"
   loadAssets()
   debug "thread: ads"
-  initCJ()
   readAdsConfig()
 
   threadInitialized = true
@@ -314,7 +313,7 @@ template handleTopic(capts: auto, ctx: HttpRequestRef) =
       let pagenum = if capts.page == "": $(
           await topic.lastPageNum) else: capts.page
       debug "topic: page: ", capts.page
-      topicPage(topic, pagenum, false, lang = capts.lang)
+      topicPage(topic, pagenum, false, lng = capts.lang)
       checkNil pagetree, "topic: pagetree couldn't be generated."
       let
         pagepath = capts.topic / capts.page

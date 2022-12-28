@@ -175,12 +175,12 @@ def run_parse_job(site, topic):
 
     log.info("Parsing %d sources...for %s:%s", len(sources), topic, site.name)
     part = 0
-    arts = feeds = None
+    arts = feeds = []
+    topic_path = site.topic_dir(topic)
     for src in ut.partition(sources):
         try:
             log.info("Parsing: %s(%d)", topic, part)
             arts, feeds = cnt.fromsources(src, topic, site)
-            topic_path = site.topic_dir(topic)
         except:
             log.debug("failed to parse sources \n %s", tb.format_exc())
 

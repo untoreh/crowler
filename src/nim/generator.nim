@@ -56,6 +56,7 @@ proc filterNext*[T](g: var Iterator[T], pred: Predicate[T]): T =
   while true:
     v = g.nextImplIter()
     if pred(v):
+      assert not v.isnil
       return v
     if g.current == g.s.low:
       break

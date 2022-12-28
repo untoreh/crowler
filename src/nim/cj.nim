@@ -350,6 +350,28 @@ proc adsLinksGen*(topic: string, kws: seq[string] = @[],
       result = link.cjHtml
   result = newGen[XmlNode, string](links.children, mut)
 
+# NOTE: this goes in the `ads.nim` file when this module is enabled
+# proc allSizeBanners*(topic: string, kws: seq[string] = @[],
+#     lang: string = "English", vertical: static[bool] = false, class = "",
+#         fallback: static[bool] = false, doClear: static[bool] = false): Future[
+#     VNode] {.async.} =
+#   var textLinks: Generator[XmlNode, string]
+#   when fallback:
+#     textLinks = await adsLinksGen(topic, kws, lang)
+#   result = buildHtml(tdiv(class = fmt"ads-{class}"))
+#   template banner(clr): string =
+#     await getBanner(topic, kws, sz, lang, vertical, doClear = clr)
+#   for sz in [des, tab, pho]:
+#     let ad = buildHtml(tdiv(class = $sz))
+#     var b = banner(doClear)
+#     if b.len == 0:
+#       b.add banner(true)
+#     ad.add b.verbatim
+#     when fallback:
+#       if ad[0].len == 0:
+#         ad[0].add textLinks.next().verbatim
+#     result.add ad
+
 when isMainModule:
   initHttp()
   initCJ()

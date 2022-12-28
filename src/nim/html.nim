@@ -215,38 +215,114 @@ proc buildLang(path: string): VNode =
     langsList(path)
   result.add langs
 
+proc topicPages(topic: string; count: int): VNode =
+  buildHtml(ul(class = "topic-pages")):
+    a(class = "topic-link", href = ($(WEBSITE_URL / topic))):
+      text "Latest Articles"
+    for n in countDown(count, 1): # inclusive
+      li(class = "topic-pg", title = (fmt"{topic}#{n}")):
+        let url = $(WEBSITE_URL / topic / $n)
+        a(class = "topic-pg-link", href = url):
+          text "#" & $n
+
 proc topicsList*(ucls: string; icls: string; small: static[
     bool] = true): Future[VNode] {.async.} =
   result = newVNode(VNodeKind.ul)
   result.setAttr("class", ucls)
   let topics = await loadTopics(-MENU_TOPICS) # NOTE: the sign is negative, we load the most recent N topics
   result.add buildHtml(tdiv(class = "topics-shadow"))
-  var topic_slug, topic_name: string
+  var topic, name: string
   var isEmpty: bool
+  var donePagesCount: int
   for i in 0..<topics.len:
     withPyLock:
-      (topic_slug, topic_name) = ($topics[i][0], $topics[i][1])
-      isEmpty = isEmptyTopic(topic_slug)
+      (topic, name) = ($topics[i][0], $topics[i][1])
+      isEmpty = isEmptyTopic(topic)
+      donePagesCount = if isEmpty: 0 else: len(await topicDonePages(topic,
+          locked = false))
     if isEmpty:
       continue
     let liNode = buildHtml(li(class = fmt"{icls}")):
       # tdiv(class = "mdc-icon-button__ripple") # not used without material icons
-      a(href = ($(WEBSITE_URL / topic_slug)), title = topic_name,
-          class = "mdc-ripple-button"):
+      a(title = name, class = "mdc-ripple-button topic-menu"):
         tdiv(class = "mdc-ripple-surface  mdc-ripple-upgraded")
         when small:
           # only use the first letter
-          text $topic_name.runeAt(0).toUpper # loadTopics iterator returns pyobjects
+          text $name.runeAt(0).toUpper # loadTopics iterator returns pyobjects
         else:
-          text topic_name
+          text name
+      topicPages(topic, donePagesCount)
       when small:
         br()
       else:
         span(class = "separator")
     result.add liNode
 
-proc buildMenuSmall*(crumbs: string; topicUri: Uri; path: string): Future[
-    VNode] {.gcsafe, async.} =
+proc topicsLinks(cls = ""; kind = VNodeKind.li): Future[seq[VNode]] {.async.} =
+  var topic, name: string
+  var n_topics: int
+  let topics = await loadTopics()
+  withPyLock:
+    n_topics = topics.len
+  for i in 0..<n_topics:
+    withPyLock():
+      (topic, name) = ($topics[i][0], $topics[i][1])
+    result.add:
+      buildHtml(li(class = cls)):
+        a(href = ($(WEBSITE_URL / topic)), title = name):
+          text name
+
+proc buildCrumbs(ar: Article; topic = ""; page = "";
+    lang = ""): Future[VNode] {.async.} =
+  result = buildHtml(tdiv(class = "dropdown-breadcrumbs"))
+  let topic = something(topic, ar.topic)
+  let page = something(page, $ar.page)
+  # result.add buildHtml(tdiv(class = "icon i-mdi-sitemap"))
+  result.add buildButton("i-mdi-sitemap", "icon breadcrumb-btn",
+      title = "Navigation")
+  const itemCls = "breadcrumb-item"
+  result.add:
+    buildHtml(ul(class = "breadcrumb-list")):
+      li(class = itemCls):
+        a(href = ($WEBSITE_URL)):
+          span:
+            text "home >> "
+          text WEBSITE_TITLE
+      if len(lang) > 0:
+        li(class = itemCls):
+          a(href = ($(WEBSITE_URL / lang))):
+            span:
+              text "lang >> "
+            text lang
+      if len(topic) > 0:
+        li(class = itemCls):
+          a(href = ($(WEBSITE_URL / lang / topic))):
+            span:
+              text "topic >> "
+            text await topic.topicDesc
+      if page != "-1":
+        li(class = itemCls):
+          a(href = ($(WEBSITE_URL / lang / topic / page))):
+            span:
+              text "page >> "
+            text "#" & page
+      if not ar.isEmpty():
+        li(class = itemCls):
+          let url = if lang != "": getArticleUrl(ar, lang) else: getArticleUrl(ar)
+          a(href = ($url)):
+            span:
+              text "article >> "
+            text ar.title
+      li(class = itemCls):
+        a(class = "all-topics"):
+          span:
+            text "all topics: "
+      for tp in (await topicsLinks(itemCls & " topic")): tp
+
+
+
+proc buildMenuSmall*(currentPage: string; topicUri: Uri; path: string;
+    ar = emptyArt[]; lang = ""): Future[VNode] {.gcsafe, async.} =
   let relpath = $(topicUri / path)
   return buildHtml():
     section(class = "menu-list mdc-top-app-bar--fixed-adjust"):
@@ -262,9 +338,9 @@ proc buildMenuSmall*(crumbs: string; topicUri: Uri; path: string): Future[
       # Topics
       await topicsList(ucls = "menu-list-topics", icls = "menu-topic-item")
 
-proc buildMenuSmall*(crumbs: string; topicUri: Uri; a = emptyArt[]): Future[
-    VNode] {.async.} =
-  return await buildMenuSmall(crumbs, topicUri, a.getArticlePath)
+proc buildMenuSmall*(currentPage: string; topicUri: Uri; ar = emptyArt[
+    ]; lang = ""): Future[VNode] {.async.} =
+  return await buildMenuSmall(currentPage, topicUri, ar.getArticlePath, ar, lang)
 
 proc buildLogo(pos: string): VNode =
   buildHtml():
@@ -277,8 +353,8 @@ proc buildLogo(pos: string): VNode =
         img(src = LOGO_URL, loading = "lazy", alt = "logo-light")
 
 
-proc buildMenu*(crumbs: string; topicUri: Uri; path: string): Future[
-    VNode] {.async.} =
+proc buildMenu*(currentPage: string; topicUri: Uri; path: string; ar = emptyArt[
+    ]; topic = ""; page = ""; lang = ""): Future[VNode] {.async.} =
   return buildHtml(header(class = "mdc-top-app-bar menu", id = "app-bar")):
     tdiv(class = "mdc-top-app-bar__row"):
       section(class = "mdc-top-app-bar__section mdc-top-app-bar__section--align-start"):
@@ -293,10 +369,12 @@ proc buildMenu*(crumbs: string; topicUri: Uri; path: string): Future[
                     title = "Switch website color between dark and light theme.")
         # Page location
         a(class = "page mdc-ripple-button mdc-top-app-bar__title",
-          title = crumbs,
+          title = currentPage,
           href = pathLink(path.parentDir, rel = false)):
           tdiv(class = "mdc-ripple-surface")
-          text crumbs
+          text currentPage
+        # crumbs
+        await buildCrumbs(ar, topic = topic, page = page, lang = lang)
         # Topics list
         await topicsList(ucls = "app-bar-topics", icls = "topic-item", small = false)
       section(class = "mdc-top-app-bar__section mdc-top-app-bar__section--align-end",
@@ -311,8 +389,9 @@ proc buildMenu*(crumbs: string; topicUri: Uri; path: string): Future[
         # logo
         buildLogo("right")
 
-template buildMenu*(crumbs: string; topicUri: Uri; a: Article): untyped =
-  buildMenu(crumbs, topicUri, a.getArticlePath)
+template buildMenu*(currentPage: string; topicUri: Uri; ar: Article;
+    lang = ""): untyped =
+  buildMenu(currentPage, topicUri, ar.getArticlePath, ar, lang = "")
 
 proc buildRelated*(a: Article): Future[VNode] {.async.} =
   ## Get a list of related articles by querying search db with tags and title words
@@ -356,7 +435,7 @@ proc buildRelated*(a: Article): Future[VNode] {.async.} =
       if c >= cfg.N_RELATED:
         return
 
-proc buildFooter*(topic = ""; adsTopicName = ""; pagenum = ""; lang = "";
+proc buildFooter*(topic = ""; pagenum = ""; lang = ""; path = "";
     ar = emptyArt): Future[VNode] {.async.} =
   return buildHtml(tdiv(class = "site-footer container max border medium no-padding")):
     footer(class = "padding absolute blue white-text primary left bottom"):
@@ -385,9 +464,6 @@ proc buildFooter*(topic = ""; adsTopicName = ""; pagenum = ""; lang = "";
         a(href = "/terms-of-service"):
           text("Terms of Service")
       for ad in adsFrom(adsFooter): ad
-      await allSizeBanners(adsTopicName, ar.tags,
-                           lang = lang, vertical = false,
-                                  class = "footer")
       tdiv(class = "footer-copyright"):
         text "Except where otherwise noted, this website is licensed under a "
         a(rel = "license", href = "http://creativecommons.org/licenses/by/3.0/deed.en_US"):
@@ -445,25 +521,21 @@ proc buildBody(ar: Article; website_title: string = WEBSITE_TITLE;
   checkNil(ar)
   let
     topicName = (await ar.topic.topicDesc).toUpper
-    crumbs = &"{topicName} / N{ar.page}"
+    currentPage = &"{topicName}#{ar.page}"
     topicUri = parseUri("/" & ar.topic)
     related = await buildRelated(ar)
   return buildHtml(body(class = "", topic = (ar.topic), style = preline_style)):
-    await buildMenu(crumbs, topicUri, ar)
-    await buildMenuSmall(crumbs, topicUri, ar)
+    await buildMenu(currentPage, topicUri, ar, lang = lang)
+    await buildMenuSmall(currentPage, topicUri, ar, lang = lang)
     for ad in adsFrom(adsSidebar): ad
-    await allSizeBanners(topicName, ar.tags, lang, vertical = true,
-                         class = "sidebar",
-                         doClear = true) # This is the first call, clear session
     main(class = "mdc-top-app-bar--fixed-adjust"):
       for ad in adsFrom(adsHeader): ad
-      await allSizeBanners(topicName, ar.tags, lang, class = "header")
       await postTitle(ar)
       await postContent(ar.content, ar.unsafeAddr, topic = topicName, lang = lang)
       postFooter(ar.pubdate)
       hr()
       related
-    await buildFooter(ar.topic, topicName, ar.page.intToStr)
+    await buildFooter(ar.topic, ar.page.intToStr)
 
 proc pageTitle*(title: string; slug: string): VNode =
   buildHtml(tdiv(class = "title-wrap")):
@@ -478,7 +550,7 @@ proc pageFooter*(topic: string; pagenum: string; home: bool): Future[
     pn = if pagenum == "s": -1
              else: pagenum.parseInt
   return buildHtml(tdiv(class = "post-footer")):
-    nav(class = "page-crumbs"):
+    nav(class = "page-nav"):
       span(class = "prev-page"):
         if pn > 0:
           a(href = (topic_path / (pn - 1).intToStr)):
@@ -587,15 +659,15 @@ proc buildPost*(a: Article; lang = ""): Future[VNode] {.async.} =
     bbody
 
 proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode = nil;
-                topic = ""; lang, desc: string = ""; adsTopic = "";
+                topic = ""; lang, desc: string = "";
                     ar = emptyArt[]): Future[VNode] {.gcsafe, async.} =
-  var topicName, crumbs: string
+  var topicName, currentPage: string
   if topic.isEmptyOrWhitespace:
-    topicName = (await adsTopic.topicDesc).toUpper
-    crumbs = "/ "
+    topicName = WEBSITE_TITLE.toUpper
+    currentPage = "/ "
   else:
     topicName = (await topic.topicDesc).toUpper
-    crumbs = fmt"/ {topicName} /"
+    currentPage = fmt"/ {topicName} /"
   let
     topicUri = parseUri("/" & topic)
     path = topic / slug
@@ -605,22 +677,18 @@ proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode =
     # NOTE: we use the topic attr for the body such that
     # from browser JS we know which topic is the page about
     body(class = "", topic = topic, style = preline_style):
-      await buildMenu(crumbs, topicUri, path)
-      await buildMenuSmall(crumbs, topicUri, path)
+      await buildMenu(currentPage, topicUri, path, ar, topic = topic,
+          page = slug, lang = lang)
+      await buildMenuSmall(currentPage, topicUri, path, ar, lang = lang)
       for ad in adsFrom(adsSidebar): ad
-      await allSizeBanners(topicName, ar.tags, lang, vertical = true,
-                           class = "sidebar",
-                           doClear = true) # This is the first call, clear session
       main(class = "mdc-top-app-bar--fixed-adjust"):
         for ad in adsFrom(adsHeader): ad
-        await allSizeBanners(topicName, ar.tags, lang, vertical = false,
-            class = "header")
         if title != "":
           pageTitle(title, slug)
         content
         if not pagefooter.isNil():
           pageFooter
-      await buildFooter(topic, topicName, slug)
+      await buildFooter(topic, path = slug)
 
 import macros
 macro wrapContent(content: string; wrap: static[bool]): untyped =
@@ -632,14 +700,21 @@ macro wrapContent(content: string; wrap: static[bool]): untyped =
       verbatim(`content`)
 
 
-proc buildPage*(title, content, lang: string; wrap: static[bool] = false;
-       pagefooter = emptyVNode()): Future[VNode] {.async.} =
+proc buildPage*(title,
+                content,
+                lang: string;
+                wrap: static[bool] = false;
+                pagefooter = emptyVNode()): Future[VNode] {.async.} =
   let slug = slugify(title)
-  return await buildPage(title = title, content.wrapContent(wrap), slug, pagefooter)
+  return await buildPage(title = title, content.wrapContent(wrap), slug,
+      pagefooter, lang = lang)
 
-proc buildPage*(content, lang: string; wrap: static[bool] = false;
-    pagefooter = emptyVNode()): Future[VNode] {.async.} =
-  return await buildPage(title = "", content.wrapContent(wrap), slug = "", pagefooter)
+proc buildPage*(content,
+                lang: string;
+                wrap: static[bool] = false;
+                pagefooter = emptyVNode()): Future[VNode] {.async.} =
+  return await buildPage(title = "", content.wrapContent(wrap), slug = "",
+      pagefooter, lang = lang)
 
 proc ldjData*(el: VNode; filepath, relpath: string; lang: langPair; a: Article) =
   ##

@@ -64,6 +64,25 @@ function toggleLangs(e, hide = false) {
   toggleShow(el, hide);
 }
 
+function toggleCrumbs(e, hide = false) {
+  let el = $(".breadcrumb-list", e.target.parentElement.parentElement);
+  toggleShow(el, hide);
+}
+
+function hideTopics() {
+  let topics = $$(".topic-pages");
+  topics.forEach((l) => toggleShow(l, true));
+}
+
+function toggleTopic(e, hide = false) {
+  let el = $(".topic-pages", e.target.parentElement.parentElement);
+  if (!hide) {
+    hideTopics();
+  }
+  toggleShow(el, hide);
+}
+
+
 function closeMenus(e) {
   let el = e.target;
   let cls = el.classList;
@@ -73,11 +92,21 @@ function closeMenus(e) {
     langs.forEach((l) => toggleShow(l, true));
   }
   let pcls = el.parentElement.classList;
+  if (!pcls.contains("breadcrumb-btn")) {
+    let crumbs = $$(".breadcrumb-list");
+    crumbs.forEach((l) => toggleShow(l, true));
+  }
+  if (!pcls.contains("topic-menu") && !pcls.contains("menu-topic-menu")) {
+    let topics = $$(".topic-pages");
+    topics.forEach((l) => toggleShow(l, true));
+  }
   if (
     !cls.contains("menu-btn") &&
     !cls.contains("menu-list") &&
     !pcls.contains("menu-list") &&
-    !pcls.contains("menu-lang-btn")
+    !pcls.contains("menu-lang-btn") &&
+    !pcls.contains("breadcrumb-btn") &&
+    !pcls.contains("topic-menu")
   ) {
     toggleDrawer(null, true);
   }
@@ -91,6 +120,9 @@ export function main() {
   $("html,body").onclick = closeMenus;
   $(".menu-btn").onclick = toggleDrawer;
   $$(".menu-lang-btn").forEach((el) => (el.onclick = toggleLangs));
+  $$(".dropdown-breadcrumbs > button").forEach((el) => (el.onclick = toggleCrumbs));
+  $$(".topic-item").forEach((el) => (el.onclick = toggleTopic))
+  $$(".menu-topic-item").forEach((el) => (el.onclick = toggleTopic))
 
   // button
   const iconButtonRipple = new MDCRipple($(".mdc-icon-button"));

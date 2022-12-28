@@ -143,7 +143,7 @@ def ensure_engines(force=False):
         search.initialize(settings_engines=get_searx_settings())
         hotfixes()
 
-        if not ENGINES_TRACKING:
+        if not len(ENGINES_TRACKING):
             for cat in SEARX_ENABLED_CATEGORIES:
                 engines_for_cat = searx.engines.categories[cat]
                 ENGINES_TRACKING[cat] = {

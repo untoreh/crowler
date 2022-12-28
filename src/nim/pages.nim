@@ -106,7 +106,7 @@ proc articleEntry(ar: Article, topic = ""): Future[VNode] {.async.} =
   let relpath = getArticlePath(ar)
   try:
     return buildHtml(article(class = "entry")):
-      buildImgUrl(ar, defsrc=defaultImageU8)
+      buildImgUrl(ar, defsrc = defaultImageU8)
       h2(class = "entry-title", id = ar.slug):
         a(href = relpath):
           text ar.title
@@ -140,30 +140,28 @@ proc articleEntry(ar: Article, topic = ""): Future[VNode] {.async.} =
 
 proc buildShortPosts*(arts: seq[Article], topic = "", lang = ""): Future[
     string] {.async.} =
-  # let sepAds =
-  #   buildHtml(tdiv(class="sep-ads")):
-  #     for ad in adsFrom(adsSeparator): ad
-
   var sepAds = adsGen(adsSeparator)
-  var sepLinks = await adsLinksGen((await topic.topicDesc), lang = lang)
+  var sepLinks = adsGen(adsSeparator)
   let hr = buildHtml(hr())
 
   for a in arts:
     result.add $(await articleEntry(a, topic))
     result.add hr
-    let ads = buildHtml(tdiv(class="sep-ads"))
-    let sep = filterNext(sepAds, notEmpty)
-    if not sep.isnil:
-      ads.add sep
-    ads.add sepLinks.filterNext(notEmpty).verbatim
+    let ads = buildHtml(tdiv(class = "sep-ads"))
+    let sep1 = filterNext(sepAds, notEmpty)
+    if not sep1.isnil:
+      ads.add sep1
+    let sep2 = sepLinks.filterNext(notEmpty)
+    if not sep2.isnil:
+      ads.add sep2
     result.add ads
 
-template topicPage*(name: string, pn: string, istop = false, lang = "") {.dirty.} =
+template topicPage*(name: string, pn: string, istop = false, lng = "") {.dirty.} =
   ## Writes a single page (fetching its related articles, if its not a template) to storage
   let pnInt = pn.parseInt
   let arts = await getDoneArticles(name, pagenum = pnInt)
   debug "topics: name page for page {pnInt} ({len(arts)})"
-  let content = await buildShortPosts(arts, name, lang)
+  let content = await buildShortPosts(arts, name, lng)
   # if the page is not finalized, it is the homepage
   let footer = await pageFooter(name, pn, home = istop)
   let pagetree =
@@ -172,6 +170,7 @@ template topicPage*(name: string, pn: string, istop = false, lang = "") {.dirty.
       content = verbatim(content),
       slug = pn,
       pagefooter = footer,
+      lang = lng,
       topic = name)
 
 {.experimental: "notnil".}
@@ -227,7 +226,7 @@ proc pageFromTemplate*(tpl, lang, amp: string): Future[string] {.async.} =
   txt = multiReplace(txt, vars)
   let
     slug = slugify(title)
-    page = await buildPage(title = title, content = txt, lang, wrap = true)
+    page = await buildPage(title = title, content = txt, lang = lang, wrap = true)
   checkNil(page):
     let processed = await processPage(lang, amp, page, relpath = tpl)
     checkNil(processed, fmt"failed to process template {tpl}, {lang}, {amp}"):
@@ -277,9 +276,8 @@ proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
     sepAds = adsGen(adsSeparator)
     topic = curTopic()
     topicName = await topic.topicDesc
-    sepLinks = await adsLinksGen(topicName, lang = lang)
+    sepLinks = adsGen(adsSeparator)
 
-  var topics: seq[string] # used to give *some* topics to the page builder
   while nArts < cfg.HOME_ARTS and trial < maxTries:
     trial.inc
     var topic: string
@@ -287,20 +285,19 @@ proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
       topic = site.get_random_topic().to(string)
     if topic == "": # this can happen if we ran out of topics
       continue
-    topics.add topic
     let arts = await getLastArticles(topic, 1)
     if len(arts) > 0:
       let ar = arts[0]
       if ar.slug notin processed:
         content.add $(await articleEntry(ar))
-        content.add divWrap("ads-sep", sepLinks.filterNext(notEmpty))
+        content.add buildHtml(tdiv(class = "ads-sep"), sepLinks.filterNext(notEmpty))
         processed.incl ar.slug
         nArts.inc
   let pagetree = await buildPage(title = "",
                        content = verbatim(content),
                        slug = "",
+                       lang = lang,
                        topic = "",
-                       adsTopic = topics[0],
                        desc = WEBSITE_DESCRIPTION)
   checkNil(pagetree):
     return await processPage(lang, amp, pagetree)
@@ -338,8 +335,8 @@ proc buildSearchPage*(topic: string, kws: string, lang: string,
   let tree = await buildPage(title = fmt"""Search results for: "{keywords}"{fromcat}""",
                       content = verbatim(content),
                       slug = "/s/" & kws,
+                      lang = lang,
                       pagefooter = footer,
-                      adsTopic = topic,
                       topic = "") # NOTE: Search box is sitewide
   checkNil(tree):
     return (await processPage(lang, "", tree, relpath = capts.path)).asHtml(

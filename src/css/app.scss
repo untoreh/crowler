@@ -84,7 +84,7 @@ footer {
   }
 }
 
-.page-crumbs {
+.page-nav {
   display: inline-flex;
   flex-direction: row;
   width: 100%;
@@ -196,7 +196,7 @@ footer {
 .site-footer {
   font-family: Times;
   font-size: 1rem;
-  z-index: 100;
+  z-index: 99; // 100 is for mobile drawer
 }
 
 .footer-links {
@@ -404,6 +404,7 @@ header .page {
   height: calc(100% - 1rem);
   min-width: 2rem;
   text-align: center;
+  text-tecoration: none;
 }
 
 .material-icons {
@@ -450,7 +451,7 @@ header .page {
     object-fit: cover;
     border-radius: 0.75rem;
     // background: url("https://api.iconify.design/bx/image.svg") center
-      // center/cover no-repeat; // this should make the placeholder img icon visible on dark mode, but inverts every image
+    // center/cover no-repeat; // this should make the placeholder img icon visible on dark mode, but inverts every image
     // body.dark & {
     //   filter: invert(1.0);
     // }
@@ -487,6 +488,34 @@ header .page {
     }
   }
 }
+
+@mixin topic-pages {
+  ul.topic-pages {
+    @include border-style;
+    position: fixed;
+    list-style: none;
+    max-width: 80vw;
+    width: 10rem;
+    top: -100vh;
+    padding: 0;
+    margin: 0;
+    background: var(--mdc-theme-secondary);
+    .topic-pg {
+      background: var(--mdc-theme-secondary);
+      filter: opacity(1);
+      display: inline-flex;
+      width: calc(100% / 3);
+      padding: 0;
+      line-height: 3rem;
+      a {
+        padding: 0;
+        width: 100%;
+        border: none;
+        border-radius: 0;
+      }
+    }
+  }
+}
 .app-bar-topics {
   display: none;
   padding: 0 1rem 0 1rem;
@@ -501,6 +530,7 @@ header .page {
     display: none;
   }
   & .topic-item {
+    cursor: pointer;
     display: inline-block;
     padding: 0 0.5rem 0 0.5rem;
     color: var(--mdc-theme-on-primary);
@@ -539,6 +569,10 @@ header .page {
       right: 0;
       border-color: var(--mdc-theme-on-secondary);
     }
+    ul.topic-pages.show {
+      top: 4rem;
+    }
+    @include topic-pages;
   }
 }
 
@@ -586,6 +620,7 @@ section[role="toolbar"] {
     display: none;
   }
   & .menu-topic-item {
+    cursor: pointer;
     vertical-align: middle;
     padding: 0;
     border-top: 1px dotted var(--mdc-theme-surface);
@@ -601,6 +636,17 @@ section[role="toolbar"] {
       font-weight: bold;
       text-transform: uppercase;
       text-decoration: none;
+    }
+    .topic-pages.show {
+      top: unset;
+      left: 4rem;
+    }
+    @include topic-pages;
+    ul.topic-pages {
+      margin-top: -3.5rem;
+    }
+    .topic-link {
+      font-size: 0.8rem;
     }
   }
 }
@@ -753,6 +799,71 @@ form.search {
   &:hover {
     filter: invert(1);
     background-color: var(--mdc-theme-primary);
+  }
+}
+
+.dropdown-breadcrumbs {
+  display: block;
+  color: var(--mdc-theme-text-on-primary);
+  margin: 0;
+  padding: 0;
+  border: none;
+  > .icon {
+    color: var(--mdc-theme-on-primary);
+  }
+  a {
+    text-decoration: none;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    display: inline-flex;
+    padding: 0.25rem 1rem;
+    width: calc(100% - 2rem);
+  }
+  ul.show {
+    top: 4rem;
+  }
+  ul {
+    max-height: 80vh;
+    overflow-y: scroll;
+    position: fixed;
+    // top: 4rem;
+    top: -100vh;
+    margin: 0;
+    font-size: 0.9rem;
+    font-variant: none;
+    list-style-type: none;
+    background: var(--mdc-theme-primary);
+    padding: 0;
+    @include border-style;
+    li {
+      max-width: 90vw;
+      width: 20rem;
+      padding: 0.25rem 0;
+      border-top: 1px solid var(--mdc-theme-surface);
+      border-width: 1px;
+      text-align: justify;
+      &.topic {
+        text-align: center;
+      }
+      a {
+        &.all-topics {
+          span {
+            width: 100%;
+          }
+        }
+        span {
+          padding: 0.25rem 0.25rem 0.25rem 0.5rem;
+          text-transform: uppercase;
+          font-size: 0.75rem;
+          font-weight: bold;
+          background: var(--mdc-theme-secondary);
+          filter: opacity(0.8) invert(0.1);
+          margin-right: 0.25rem;
+          width: 4rem;
+          text-align: center;
+        }
+      }
+    }
   }
 }
 

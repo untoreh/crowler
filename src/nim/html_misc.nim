@@ -33,7 +33,7 @@ proc pathLink*(path: string, code = "", rel = true,
   let (dir, name, _) = path.splitFile
   let name_cleaned = name.replace(sre "(index|404)$", "")
   $(
-      (if rel: baseUri else: WEBSITE_URL) /
+      (if rel: baseUri else: config.websiteUrl) /
       (if amp: "amp/" else: "") /
       code /
       dir /
@@ -47,9 +47,9 @@ proc buildImgUrl*(ar: Article; cls = "image-link", defsrc = ""): VNode =
   if ar.imageUrl != "":
     # add `?` because chromium doesn't treat it as a string otherwise
     let burl = "?u=" & ar.imageUrl.toBString(true)
-    bsrc = "//" & $(WEBSITE_URL_IMG / IMG_SIZES[1] / burl)
+    bsrc = "//" & $(config.websiteUrl_IMG / IMG_SIZES[1] / burl)
     for (view, size) in zip(IMG_VIEWPORT, IMG_SIZES):
-      srcsetstr.add "//" & $(WEBSITE_URL_IMG / size / burl)
+      srcsetstr.add "//" & $(config.websiteUrl_IMG / size / burl)
       srcsetstr.add " " & view & ","
   let i = buildHtml(img(class = "", src = something(bsrc, defsrc), srcset = srcsetstr, loading = "lazy"))
   i.setAttr("onerror", defaultImgOnError)

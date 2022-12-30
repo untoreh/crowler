@@ -10,6 +10,7 @@ import times except milliseconds
 
 export nimpy
 export pyLib, locks
+mixin config
 
 when defined(findPyLib):
   import osproc
@@ -229,7 +230,7 @@ discard pyImport("log")
 pyObjExp((ut, pyImport("utils")))
 doassert not pyisnone(ut)
 discard pyImport("blacklist")
-pyObjExp((site, pyImport("sites").Site(WEBSITE_NAME)))
+pyObjExp((site, pyImport("sites").Site(config.websiteName)))
 doassert not pyisnone(site)
 pyObjPtrExp(
     (pySched, pyImport("scheduler")),

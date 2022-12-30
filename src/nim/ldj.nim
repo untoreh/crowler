@@ -280,10 +280,33 @@ proc jbreadcrumbs(crumbs: seq[(string, string)]): JsonNode =
 
 template breadcrumbs*(code: untyped): JsonNode = jm jbreadcrumbs(`code`)
 
-proc crumbsNode*(a: Article): auto =
-    @[("Home", $WEBSITE_URL),
-        ("Page", $(WEBSITE_URL / a.topic / $a.page)),
-        ("Post", getArticleUrl(a))]
+proc crumbsNode*(ar: Article): seq[(string, string)]=
+    @[("Home", $config.websiteUrl),
+      ("Topic", $(config.websiteUrl / ar.topic)),
+        ("Page", $(config.websiteUrl / ar.topic / $ar.page)),
+        ("Post", getArticleUrl(ar))]
+
+proc crumbsNode*(topic: string): auto =
+    @[("Home", $config.websiteUrl),
+      ("Topic", $(config.websiteUrl / topic))]
+
+proc crumbsNode*(topic: string, page: string): auto =
+    @[("Home", $config.websiteUrl),
+      ("Topic", $(config.websiteUrl / topic)),
+        ("Page", $(config.websiteUrl / topic / page)),]
+
+proc crumbsNode*(): auto =
+    @[("Home", $config.websiteUrl)]
+
+template asBreadcrumbs*(ar: Article, topic = "", page = ""): seq[(string, string)] =
+  if page == "":
+    if isEmpty(ar):
+      if topic == "": crumbsNode()
+      else: crumbsNode(topic)
+    else: crumbsNode(ar)
+  else:
+    when defined(debug): assert topic.len > 0
+    crumbsNode(topic, page)
 
 type
     Book = ref tuple
@@ -674,7 +697,7 @@ proc initLDJ*() =
 initLDJ()
 # when isMainModule:
 #     let
-#         url = $WEBSITE_URL
+#         url = $config.websiteUrl
 #         auth = "fra"
 #         year = 2022
 #         pls = {"asd": 1, "pls": 2}

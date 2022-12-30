@@ -6,7 +6,7 @@ description   = "site"
 license       = "MIT"
 srcDir        = "src/nim"
 installExt    = @["nim"]
-bin           = @["cli"]
+bin           = @["cli", "cli_tasks"]
 skipdirs      = @["vendor"]
 
 # Dependencies
@@ -23,6 +23,7 @@ requires "normalize"
 requires "harpoon"
 requires "scorper#devel"
 requires "nimterop#master"
+requires "parsetoml"
 # requires "https://github.com/untoreh/nimdbx" # Use version! not #branch
 requires "zstd"
 requires "fusion"

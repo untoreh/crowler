@@ -13,7 +13,7 @@ var lshThread: Thread[void]
 var futs {.threadvar.}: seq[Future[void]]
 
 proc getLSPath(topic: string): string =
-  DATA_PATH / "sites" / WEBSITE_NAME / "topics" / topic / "lsh"
+  config.dataPath / "sites" / config.websiteName / "topics" / topic / "lsh"
 
 proc init*(_: typedesc[PublishedArticles]): PublishedArticles =
   let hasher = initMinHasher[uint64](64)

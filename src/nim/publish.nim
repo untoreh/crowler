@@ -16,7 +16,6 @@ import cfg,
        types,
        utils,
        html,
-       rss,
        topics,
        articles,
        cache,
@@ -25,6 +24,9 @@ import cfg,
        sitemap,
        lsh,
        sharedqueue
+
+when cfg.RSS_ON_PUBLISH:
+  import rss
 
 let pageset = initLockTable[string, bool]()
 
@@ -238,7 +240,7 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   infopub "finalizing pages"
   await finalizePages(topic, pagenum, newpage, nPagePosts.addr)
   # update feed file
-  when cfg.RSS:
+  when cfg.RSS_ON_PUBLISH:
     infopub "updating feeds"
     let tfeed = await topic.fetchFeed
     tfeed.update(topic, doneArts, dowrite = true)
@@ -292,7 +294,8 @@ proc maybePublish*(topic: string) {.gcsafe, async.} =
 proc resetTopic(topic: string) =
   syncPyLock():
     discard site.reset_topic_data(topic)
-  pageCache.delete(topic.feedKey)
+  when cfg.RSS_ON_PUBLISH:
+    pageCache.delete(topic.feedKey)
   clearSiteMap(topic, all = true)
   waitFor saveLS(topic, init(PublishedArticles))
 

@@ -79,7 +79,9 @@ function toggleTopic(e, hide = false) {
   if (!hide) {
     hideTopics();
   }
-  toggleShow(el, hide);
+  if (el) {
+    toggleShow(el, hide);
+  }
 }
 
 
@@ -92,7 +94,7 @@ function closeMenus(e) {
     langs.forEach((l) => toggleShow(l, true));
   }
   let pcls = el.parentElement.classList;
-  if (!pcls.contains("breadcrumb-btn")) {
+  if (!pcls.contains("dropdown-breadcrumbs") && !pcls.contains("breadcrumb-btn")) {
     let crumbs = $$(".breadcrumb-list");
     crumbs.forEach((l) => toggleShow(l, true));
   }

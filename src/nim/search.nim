@@ -44,10 +44,11 @@ proc sanitize*(s: string): string =
       "\\\"") # FIXME: this should be done by sonic module
 
 proc addToBackLog(capts: UriCaptures) =
-  let f = open(SONIC_BACKLOG, fmAppend)
-  defer: f.close()
-  let l = join([capts.topic, capts.page, capts.art, capts.lang], ",")
-  writeLine(f, l)
+  {.cast(gcsafe).}:
+    let f = open(config.sonicBacklog, fmAppend)
+    defer: f.close()
+    let l = join([capts.topic, capts.page, capts.art, capts.lang], ",")
+    writeLine(f, l)
 
 var pushLock: ptr AsyncLock
 import std/locks
@@ -69,7 +70,7 @@ proc push*(capts: UriCaptures, content: string) {.async.} =
       withPyLock:
         j = pySched[].apply(
           pySonic[].push,
-          WEBSITE_DOMAIN,
+          config.websiteDomain,
           "default", # TODO: Should we restrict search to `capts.topic`?
           key,
           cnt,
@@ -125,7 +126,7 @@ when not defined(release):
     ## Push all backlogged articles to search database
     withPyLock:
       assert isopen()
-    for l in lines(SONIC_BACKLOG):
+    for l in lines(config.sonicBacklog):
       let
         s = l.split(",")
         topic = s[0]
@@ -134,7 +135,7 @@ when not defined(release):
         lang = s[3]
       var relpath = lang / topic / page / slug
       await push(relpath)
-    await writeFileAsync(SONIC_BACKLOG, "")
+    await writeFileAsync(config.sonicBacklog, "")
 
 
 type
@@ -164,7 +165,7 @@ proc querySonic(msg: SonicMessage): Future[seq[string]] {.async.} =
   logall "sonic: query -- {keywords}"
   let lang3 = await SLang.code.toISO3
   withPyLock:
-    let res = pySonic[].query(WEBSITE_DOMAIN, "default", keywords, lang = lang3, limit = limit)
+    let res = pySonic[].query(config.websiteDomain, "default", keywords, lang = lang3, limit = limit)
     if not pyisnone(res):
       let s = res.pyToSeqStr()
       return s
@@ -175,7 +176,7 @@ proc suggestSonic(msg: SonicMessage): Future[seq[string]] {.async.} =
   let (topic, input, lang, limit) = msg.args
   logall "suggest: topic: {topic}, input: {input}"
   withPyLock:
-    let sug = pySonic[].suggest(WEBSITE_DOMAIN, "default", input.split[^1], limit = limit)
+    let sug = pySonic[].suggest(config.websiteDomain, "default", input.split[^1], limit = limit)
     if not pyisnone(sug):
       let s = sug.pyToSeqStr()
       return s
@@ -184,7 +185,7 @@ proc deleteFromSonic*(capts: UriCaptures): int =
   ## Delete an article from sonic db
   let key = join([capts.topic, capts.page, capts.art], "/")
   syncPyLock:
-    discard pySonic[].flush(WEBSITE_DOMAIN, object_name = key)
+    discard pySonic[].flush(config.websiteDomain, object_name = key)
 
 const pushLogFile = "/tmp/sonic_push_log.json"
 proc readPushLog(): Future[JsonNode] {.async.} =
@@ -203,7 +204,7 @@ proc pushAllSonic*() {.async.} =
   let pushLog = await readPushLog()
   if pushLog.len == 0:
     withPyLock:
-      discard pySonic[].flush(WEBSITE_DOMAIN)
+      discard pySonic[].flush(config.websiteDomain)
   defer:
     withPyLock:
       discard pySonic[].consolidate()
@@ -235,7 +236,7 @@ proc pushAllSonic*() {.async.} =
       pushLog[topic] = %pagenum
       await writePushLog(pushLog)
       await pygil.acquire
-  info "Indexed search for {WEBSITE_DOMAIN} with {total} objects."
+  info "Indexed search for {config.websiteDomain} with {total} objects."
 
 from chronos/timer import seconds, Duration
 

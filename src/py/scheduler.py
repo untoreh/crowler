@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from multiprocessing.pool import ThreadPool, Pool
-from os import cpu_count
+from os import cpu_count, getenv
 from time import sleep
 import sys
 
@@ -9,8 +9,7 @@ import sys
 
 POOL: None | ThreadPool = None
 PROC_POOL: None | Pool = None
-POOL_SIZE = 128
-
+POOL_SIZE = int(getenv("PYTHON_WORKERS", cpu_count() or 1))
 
 def initPool(restart=False, thr=True, procs=False, initializer=None, initargs=[]):
     global POOL, PROC_POOL

@@ -115,7 +115,7 @@ proc topicDescPy*(topic: string): string {.inline, withLocks: [pyGil].} = site.g
 proc topicDescPyAsync*(topic: string): Future[string] {.async.} =
   withPyLock:
     return topic.topicDescPy
-proc topicUrl*(topic: string, lang: string): string = $(WEBSITE_URL / lang / topic)
+proc topicUrl*(topic: string, lang: string): string = $(config.websiteUrl / lang / topic)
 
 
 proc pageSize*(topic: string, pagenum: int): Future[int] {.async.} =

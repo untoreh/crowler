@@ -21,15 +21,15 @@ proc getArticlePath*(capts: UriCaptures): string =
 proc getArticlePath*(a: PyObject, topic: string): string {.inline.} =
   $(baseUri / topic / $a["page"] / ($a["slug"]).slugify)
 proc getArticleUrl*(a: PyObject, topic: string): string {.inline.} =
-  $(WEBSITE_URL / getArticlePath(a, topic))
+  $(config.websiteUrl / getArticlePath(a, topic))
 proc getArticleUrl*(a: PyObject, topic: string,
     lang: string): string {.inline.} =
-  $(WEBSITE_URL / lang / getArticlePath(a, topic))
+  $(config.websiteUrl / lang / getArticlePath(a, topic))
 
 proc getArticlePath*(a: Article): string {.inline.} = $(baseUri / $a.topic /
     $a.page / a.slug)
-proc getArticleUrl*(a: Article): string = $(WEBSITE_URL / getArticlePath(a))
-proc getArticleUrl*(a: Article, lang: string): string {.inline.} = $(WEBSITE_URL / lang /
+proc getArticleUrl*(a: Article): string = $(config.websiteUrl / getArticlePath(a))
+proc getArticleUrl*(a: Article, lang: string): string {.inline.} = $(config.websiteUrl / lang /
         getArticlePath(a))
 
 proc isValidArticlePy*(py: PyObject): bool =

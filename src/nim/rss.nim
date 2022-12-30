@@ -94,7 +94,7 @@ proc articleItem(ar: Article): XmlNode =
 proc getTopicFeed*(topic: string, title: string, description: string, arts: seq[Article]): Feed =
   chann.clearChannel()
   channTitle[0].text = title.escape
-  channLink[0].text = ($(WEBSITE_URL / topic)).escape
+  channLink[0].text = ($(config.websiteUrl / topic)).escape
   channDesc[0].text = description.escape
   for ar in arts:
       chann.add articleItem(ar)
@@ -102,7 +102,7 @@ proc getTopicFeed*(topic: string, title: string, description: string, arts: seq[
 
 proc feedLink*(title, path: string): VNode {.gcsafe.} =
     feedLinkEl.setAttr("title", title)
-    feedLinkEl.setAttr("href", $(WEBSITE_URL / path))
+    feedLinkEl.setAttr("href", $(config.websiteUrl / path))
     deepCopy(feedLinkEl)
 
 proc feedKey*(topic: string): string = topic & "-feed.xml"
@@ -166,43 +166,36 @@ proc fetchFeed*(topic: string): Future[Feed] {.async.} =
             result = topicFeeds.put(topic, parseXml(feedStr))
 
 proc fetchFeedString*(): Future[string] {.async.} =
-  return pageCache.lgetOrPut(static(WEBSITE_TITLE.feedKey)):
+  return pageCache.lgetOrPut(config.websiteTitle.feedKey):
     var arts: seq[Article]
     let pytopics = await loadTopics(cfg.MENU_TOPICS)
     var topicName: string
-    try:
-      await pygil.acquire
+    withPyLock:
       for topic in pytopics:
-        pygil.release
-        withPyLock:
-          topicName = topic[0].to(string) ## topic holds topic name and description
-        let ta = await getLastArticles(topicName)
-        if ta.len > 0:
-          arts.add ta[^1]
-        await pygil.acquire
-    finally:
-      pygil.release
+        topicName = topic[0].to(string) # topic holds topic name and description
+        withOutPyLock:
+          let ta = await getLastArticles(topicName)
+          if ta.len > 0:
+            arts.add ta[^1]
     await feedLock[].acquire
     defer: feedLock[].release
-    let sfeed = getTopicFeed("", WEBSITE_TITLE, WEBSITE_DESCRIPTION, arts)
-    topicFeeds[WEBSITE_TITLE] = sfeed
+    let sfeed = getTopicFeed("", config.websiteTitle, config.websiteDescription, arts)
+    topicFeeds[config.websiteTitle] = sfeed
     sfeed.toXmlString
 
 proc fetchFeed*(): Future[Feed] {.async.} =
   try:
-    result = topicFeeds[WEBSITE_TITLE]
+    result = topicFeeds[config.websiteTitle]
   except:
     let feedStr = await fetchFeedString()
     result = try:
-      topicFeeds[WEBSITE_TITLE]
+      topicFeeds[config.websiteTitle]
     except KeyError:
-      topicFeeds.put(WEBSITE_TITLE, parseXml(feedStr))
+      topicFeeds.put(config.websiteTitle, parseXml(feedStr))
 
-
-initFeed()
 
 when isMainModule:
     syncTopics()
     let topic = "dedi"
     # pageCache[].del(topic)
-    # pageCache[].del(WEBSITE_TITLE)
+    # pageCache[].del(config.websiteTitle)

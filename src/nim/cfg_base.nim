@@ -6,8 +6,7 @@ import os,
 const releaseMode* = os.getenv("NIM", "") == "release"
 let dockerMode* {.compileTime.} = os.getenv("DOCKER", "") != ""
 
-const PROJECT_PATH* = when releaseMode: ""
-                 else: os.getenv("PROJECT_DIR", "")
+const PROJECT_PATH* = os.getenv("PROJECT_DIR", "/site")
 
 let logger* = create(ConsoleLogger)
 logger[] = newConsoleLogger(fmtStr = "[$time] - $levelname: ")
@@ -29,15 +28,16 @@ proc logLevelFromEnv(): auto =
     else:
         lvlInfo
 
-let logLevel = logLevelFromEnv()
 const logLevelMacro* = logLevelFromEnv()
+let logLevel* = logLevelFromEnv()
 proc initLogging*() = setLogFilter(logLevel)
 initLogging()
 static: echo "cfg: debug level set to: " & $logLevelMacro
 
 export logging
 
-const
-    WEBSITE_DEBUG_PORT* = when releaseMode or dockerMode: "" else: os.getenv("WEBSITE_DEBUG_PORT", ":5050")
-    customPages* = ["dmca", "terms-of-service", "privacy-policy"]
-    webDomains* = ["wsl", "wsl"]
+let WEBSITE_DEBUG_PORT* =
+  when releaseMode or dockerMode: ""
+  else: os.getenv("WEBSITE_DEBUG_PORT", ":5050")
+
+const BASE_URL* = Uri()

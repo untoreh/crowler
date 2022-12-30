@@ -1,0 +1,7 @@
+website_name = "dev"
+website_domain = "wsl"
+website_scheme = "http://"
+website_port = "5050"
+website_title = "A test website."
+website_description = "This is a test description"
+website_contact = "contact@localhost"

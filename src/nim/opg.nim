@@ -98,7 +98,7 @@ proc opgPage*(a: Article): seq[XmlNode] =
   let
     tp = static("article")
     url = getArticleUrl(a)
-    siteName = static(WEBSITE_TITLE)
+    siteName = config.websiteTitle
   result = opgTags(a.title, tp, url, a.imageUrl, a.desc, siteName, locale, prefix = "article")
   for t in a.tags:
     result.add metaTag("article:tag", t)
@@ -116,7 +116,7 @@ proc opgPage*(title: string, description: string,
   let
     title = title
     tp = static("website")
-    url = $(WEBSITE_URL / path)
+    url = $(config.websiteUrl / path)
   result = opgTags(title, tp, url, "", description, "", locale)
   result.add twitterMeta("card", "summary")
   result.add twitterMeta("creator", twitterUrl[])

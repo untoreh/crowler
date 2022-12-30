@@ -78,10 +78,10 @@ func newPwa(name, startUrl: string, shortName = "",
   result.setField lang, lang
   result.setField direction, "auto"
 
-func siteManifest*(): string =
-  let pwa = newPwa(name = WEBSITE_TITLE, startUrl = "/",
-      shortName = WEBSITE_NAME, description = WEBSITE_DESCRIPTION)
-  pwa.setIcon(src = FAVICON_SVG_URL, sizes = "48x48 72x72 96x96 128x128 256x256 512x512", typ = "svg")
+proc siteManifest*(): string =
+  let pwa = newPwa(name = config.websiteTitle, startUrl = "/",
+      shortName = config.websiteName, description = config.websiteDescription)
+  pwa.setIcon(src = config.faviconSvgUrl, sizes = "48x48 72x72 96x96 128x128 256x256 512x512", typ = "svg")
   return $pwa.json
 
 import karax/[vdom, karaxdsl]

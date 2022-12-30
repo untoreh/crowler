@@ -114,8 +114,8 @@ proc initThreadImpl() {.gcsafe.} =
   initTranslate()
 
   debug "thread: cache"
-  reqCtxCache = initLockLruCache[string, ref ReqContext](4096)
-  assetsCache = initLockLruCache[string, string](256)
+  reqCtxCache = initLockLruCache[string, ref ReqContext](32)
+  assetsCache = initLockLruCache[string, string](32)
   debug "thread: topics"
   initTopics()
   debug "thread: assets"
@@ -204,12 +204,13 @@ proc doReply(reqCtx: ref ReqContext, rqid: ReqId) {.async.} = respond()
 
 {.push dirty.}
 
-const redirectJs = fmt"""<script>window.location.replace("{WEBSITE_URL}");</script>"""
+let redirectJsStr = fmt"""<script>window.location.replace("{config.websiteUrl}");</script>"""
+let redirectJS = redirectJsStr.unsafeAddr
 template ifHtml(els): string =
-  if reqCtx.mime == "text/html": redirectJs
+  if reqCtx.mime == "text/html": redirectJs[]
   else: $els
 
-template handle301*(loc: string = $WEBSITE_URL) =
+template handle301*(loc: string = $config.websiteUrl) =
   let headers = init(HttpTable, [($hloc, loc)])
   # headers[$hloc] = loc
   block:
@@ -218,10 +219,10 @@ template handle301*(loc: string = $WEBSITE_URL) =
     await reqCtx.doReply(ifHtml(Http301), rqid, scode = Http301,
         headers = headers)
 
-template handle404*(loc = $WEBSITE_URL) =
+template handle404*(loc = $config.websiteUrl) =
   await reqCtx.doReply(ifHtml(Http404), rqid, scode = Http404)
 
-template handle503*(loc = $WEBSITE_URL) =
+template handle503*(loc = $config.websiteUrl) =
   await reqCtx.doReply(ifHtml(Http503), rqid, scode = Http503,
                        headers = init(HttpTable, [($hretry, "28800")]))
 
@@ -301,7 +302,7 @@ template dispatchImg() =
     reqCtx.mime = mime
     let headers = init(HttpTable, [($hcctrl, "2678400s")])
   else:
-    reqCtx.mime = DEFAULT_IMAGE_MIME
+    reqCtx.mime = config.defaultImageMime
     page = defaultImageData
   await reqCtx.doReply(page, rqid, )
 
@@ -310,10 +311,13 @@ template handleTopic(capts: auto, ctx: HttpRequestRef) =
   if capts.topic in topicsCache:
     page = getOrCache(reqCtx.key):
       let topic = capts.topic
-      let pagenum = if capts.page == "": $(
-          await topic.lastPageNum) else: capts.page
+      var istop = false
+      let pagenum = if capts.page == "":
+                      istop = true
+                      $(await topic.lastPageNum)
+                    else: capts.page
       debug "topic: page: ", capts.page
-      topicPage(topic, pagenum, false, lng = capts.lang)
+      topicPage(topic, pagenum, istop, lng = capts.lang)
       checkNil pagetree, "topic: pagetree couldn't be generated."
       let
         pagepath = capts.topic / capts.page
@@ -332,7 +336,7 @@ template handleTopic(capts: auto, ctx: HttpRequestRef) =
       ppage
     updateHits(capts)
     await reqCtx.doReply(page, rqid, )
-  elif capts.topic in customPages:
+  elif capts.topic in config.websiteCustomPages:
     debug "topic: looking for custom page"
     page = getOrCache(reqCtx.key):
       let ppage = await pageFromTemplate(capts.topic, capts.lang, capts.amp)
@@ -345,10 +349,10 @@ template handleTopic(capts: auto, ctx: HttpRequestRef) =
     if filename in assetsFiles[]:
       page = getOrCache(filename):
         # allow to cache this unconditionally of the file existing or not
-        await readFileAsync(DATA_ASSETS_PATH / filename)
+        await readFileAsync(config.dataAssetsPath / filename)
       await reqCtx.doReply(page, rqid, )
     else:
-      debug "topic: asset not found at {DATA_ASSETS_PATH / filename:.120}"
+      debug "topic: asset not found at {config.dataAssetsPath / filename:.120}"
       handle301()
 
 template handleArticle(capts: auto, ctx: HttpRequestRef) =
@@ -368,10 +372,10 @@ template handleArticle(capts: auto, ctx: HttpRequestRef) =
     except ValueError:
       debug "article: redirecting to topic because page is empty"
       handle301()
-      # handle301($(WEBSITE_URL / capts.amp / capts.lang / capts.topic))
+      # handle301($(config.websiteUrl / capts.amp / capts.lang / capts.topic))
   else:
     handle301()
-    # handle301($(WEBSITE_URL / capts.amp / capts.lang))
+    # handle301($(config.websiteUrl / capts.amp / capts.lang))
 
 template handleSearch(ctx: HttpRequestRef) =
   # extract the referer to get the correct language
@@ -379,7 +383,7 @@ template handleSearch(ctx: HttpRequestRef) =
     refuri = parseUri(ctx.headers.getString(href))
     refcapts = refuri.path.uriTuple
   if capts.lang == "" and refcapts.lang != "":
-    handle301($(WEBSITE_URL / refcapts.lang / join(capts, n = 1)))
+    handle301($(config.websiteUrl / refcapts.lang / join(capts, n = 1)))
   else:
     page = searchCache.lcheckOrPut(reqCtx.key):
       # there is no specialized capture for the query
@@ -740,15 +744,16 @@ proc doServe*(address: string, callback: HttpProcessCallback) =
 proc startServer*(doclear = false, port = 0, loglevel = "info") =
 
   let serverPort =
-    if port == 0: os.getEnv("SITE_PORT", "5050").parseInt
+    if port == 0: config.websitePort
     else: port
 
   initThread()
-  initCache()
+  initCache(doclear)
   initStats()
   readAdsConfig()
 
-  runTasks()
+  initTopics()
+  runTasks(@[mem])
   runAdsWatcher()
   runAssetsWatcher()
 
@@ -775,6 +780,6 @@ when isMainModule:
   # initSonic()
   # let argt = getLastArticles(topic)
   # echo buildRelated(argt[0])
-  imgCache.clear()
-  pageCache.clear()
-  startServer()
+  # imgCache.clear()
+  # pageCache.clear()
+  startServer(doclear=true)

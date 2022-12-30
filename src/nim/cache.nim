@@ -15,12 +15,18 @@ let searchCache* = initLockLruCache[string, string](32)
 var pageCache*: LockDB
 var imgCache*: LockDB
 
-proc initCache*() =
+proc initCache*(doclear=false, comp=true) =
   try:
     setNil(pageCache):
-      init(LockDB, WEBSITE_PATH / "page", initDuration(days = 1))
+      init(LockDB, config.websitePath / "page", initDuration(days = 1))
     setNil(imgCache):
-      init(LockDB, WEBSITE_PATH / "image", initDuration(days = 50))
+      init(LockDB, config.websitePath / "image", initDuration(days = 50))
+    if doclear:
+      pageCache.clear()
+      imgCache.clear()
+    elif comp:
+      pageCache.compact()
+      imgCache.compact()
   except:
     logexc()
     qdebug "cache: failed init"

@@ -6,7 +6,7 @@ import cfg, types, utils, nativehttp, pyutils, locktpl, cj_lang, generator, data
 {.experimental: "notnil".}
 type XmlNodeNotNil = XmlNode not nil
 
-const CJ_CACHE_PATH = DATA_PATH / "ads" / WEBSITE_NAME / "cj"
+const CJ_CACHE_PATH = config.dataPath / "ads" / config.websiteName / "cj"
 const CJ_LINKS_ENDPOINT = parseUri("https://link-search.api.cj.com/v2/link-search")
 
 if not dirExists(CJ_CACHE_PATH):

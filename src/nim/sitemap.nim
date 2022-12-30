@@ -22,7 +22,7 @@ const
 {.push gcsafe.}
 
 proc buildRobots*(disallow: seq[string] = @[]): string =
-  result = &"Sitemap: {$(WEBSITE_URL / sitemapxml)}"
+  result = &"Sitemap: {$(config.websiteUrl / sitemapxml)}"
   result.add "\nUser-Agent: *"
   if disallow.len > 0:
     for path in disallow:
@@ -40,16 +40,16 @@ import std/parseutils
 
 proc sitemapUrl*(): string =
   ## site sitemap
-  $(WEBSITE_URL / "sitemap.xml")
+  $(config.websiteUrl / "sitemap.xml")
 
 proc sitemapUrl*(topic: string): string =
   ## topic sitemap
   checkTrue topic != "", "Topic is empty."
-  $(WEBSITE_URL / topic / "sitemap.xml")
+  $(config.websiteUrl / topic / "sitemap.xml")
 
 proc sitemapUrl*(topic: string, pagenum: int): string =
   ## page sitemap
-  $(WEBSITE_URL / topic / $pagenum / "sitemap.xml")
+  $(config.websiteUrl / topic / $pagenum / "sitemap.xml")
 
 proc sitemapUrl*(topic: string, pagenum: string): string =
   if topic == "":
@@ -65,7 +65,7 @@ proc sitemapUrl*(topic: string, pagenum: string): string =
 proc sitemapUrl*(topic: string, _: bool): string =
   ## page sitemap
   checkTrue topic != "", "Topic is empty."
-  $(WEBSITE_URL / topic / "index.xml")
+  $(config.websiteUrl / topic / "index.xml")
 
 {.pop.}
 
@@ -130,7 +130,7 @@ proc buildTopicPagesSitemap*(topic: string): Future[XmlNode] {.async.} =
   syncTopics()
   var nEntries = 0
   let done = await topicDonePages(topic)
-  template langUrl(lang): untyped {.dirty.} = $(WEBSITE_URL / lang / topic /
+  template langUrl(lang): untyped {.dirty.} = $(config.websiteUrl / lang / topic /
       pages[n])
   withPyLock:
     # add the most recent articles first (pages with higher idx)

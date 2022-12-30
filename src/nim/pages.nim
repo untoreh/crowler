@@ -18,9 +18,11 @@ import html_misc,
        ads,
        server_types
 
-const tplRep = @{"WEBSITE_DOMAIN": WEBSITE_DOMAIN}
-const ppRep = @{"WEBSITE_URL": $WEBSITE_URL.combine(),
-                 "WEBSITE_DOMAIN": WEBSITE_DOMAIN}
+let tplRepObj = @{"config.websiteDomain": config.websiteDomain}
+let tplRep* = tplRepObj.unsafeAddr
+let ppRepObj = @{"config.websiteUrl": $config.websiteUrl.combine(),
+                 "config.websiteDomain": config.websiteDomain}
+let ppRep* = ppRepObj.unsafeAddr
 
 proc getSubDirs(path: string): seq[int] =
   var dirs = collect((for f in walkDirs(path / "*"):
@@ -91,7 +93,7 @@ proc pageArticles*(topic: string; pagenum: int): seq[string] =
 
 proc articleExcerpt(a: Article): string =
   let alen = len(a.content) - 1
-  let maxlen = min(alen, ARTICLE_EXCERPT_SIZE)
+  let maxlen = min(alen, config.articleExcerptSize)
   if maxlen == alen:
     return a.content
   else:
@@ -156,7 +158,8 @@ proc buildShortPosts*(arts: seq[Article], topic = "", lang = ""): Future[
       ads.add sep2
     result.add ads
 
-template topicPage*(name: string, pn: string, istop = false, lng = "") {.dirty.} =
+template topicPage*(name: string, pn: string, istop = false,
+    lng = "") {.dirty.} =
   ## Writes a single page (fetching its related articles, if its not a template) to storage
   let pnInt = pn.parseInt
   let arts = await getDoneArticles(name, pagenum = pnInt)
@@ -168,10 +171,11 @@ template topicPage*(name: string, pn: string, istop = false, lng = "") {.dirty.}
     await buildPage(
       title = "", # this is NOT a `title` tag
       content = verbatim(content),
-      slug = pn,
+      slug = (if istop: "" else: pn),
       pagefooter = footer,
       lang = lng,
-      topic = name)
+      topic = name
+      )
 
 {.experimental: "notnil".}
 proc transId(lang, relpath: string): string = SLang.code & lang & relpath
@@ -214,19 +218,21 @@ proc processTranslatedPage*(lang: string, amp: string, relpath: string): Future[
     else: node
 
 proc pageFromTemplate*(tpl, lang, amp: string): Future[string] {.async.} =
-  var txt = await readfileAsync(ASSETS_PATH / "templates" / tpl & ".html")
+  var txt = await readfileAsync(config.assetsPath / "templates" / tpl & ".html")
+  let domain = config.websiteDomain
   let (vars, title, desc) =
     case tpl:
-      of "dmca": (tplRep, "DMCA", fmt"dmca compliance for {WEBSITE_DOMAIN}")
-      of "tos": (ppRep, "Terms of Service",
-          fmt"Terms of Service for {WEBSITE_DOMAIN}")
-      of "privacy-policy": (ppRep, "Privacy Policy",
-          fmt"Privacy Policy for {WEBSITE_DOMAIN}")
-      else: (tplRep, tpl, "")
+      of "dmca": (tplRep[], "DMCA", fmt"dmca compliance for {domain}")
+      of "tos": (ppRep[], "Terms of Service",
+                 fmt"Terms of Service for {domain}")
+      of "privacy-policy": (ppRep[], "Privacy Policy",
+                            fmt"Privacy Policy for {domain}")
+      else: (tplRep[], tpl, "")
   txt = multiReplace(txt, vars)
   let
     slug = slugify(title)
-    page = await buildPage(title = title, content = txt, lang = lang, wrap = true)
+    page = await buildPage(title = title, content = txt, lang = lang,
+                            desc = desc, topic = "", wrap = true)
   checkNil(page):
     let processed = await processPage(lang, amp, page, relpath = tpl)
     checkNil(processed, fmt"failed to process template {tpl}, {lang}, {amp}"):
@@ -274,8 +280,6 @@ proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
     trial = 0
     maxTries = cfg.HOME_ARTS * 3
     sepAds = adsGen(adsSeparator)
-    topic = curTopic()
-    topicName = await topic.topicDesc
     sepLinks = adsGen(adsSeparator)
 
   while nArts < cfg.HOME_ARTS and trial < maxTries:
@@ -290,7 +294,9 @@ proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
       let ar = arts[0]
       if ar.slug notin processed:
         content.add $(await articleEntry(ar))
-        content.add buildHtml(tdiv(class = "ads-sep"), sepLinks.filterNext(notEmpty))
+        let link = sepLinks.filterNext(notEmpty)
+        if not link.isnil:
+          content.add buildHtml(tdiv(class = "ads-sep"), link)
         processed.incl ar.slug
         nArts.inc
   let pagetree = await buildPage(title = "",
@@ -298,7 +304,7 @@ proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
                        slug = "",
                        lang = lang,
                        topic = "",
-                       desc = WEBSITE_DESCRIPTION)
+                       desc = config.websiteDescription)
   checkNil(pagetree):
     return await processPage(lang, amp, pagetree)
 
@@ -348,7 +354,7 @@ proc buildSuggestList*(topic, input: string, prefix = ""): Future[
   let p = buildHtml(ul(class = "search-suggest")):
     for sug in sgs:
       li():
-        a(href = ($(WEBSITE_URL / (if topic != "g": topic / "s" else: "s") / encodeUrl((
+        a(href = ($(config.websiteUrl / (if topic != "g": topic / "s" else: "s") / encodeUrl((
                 if prefix != "": prefix & " " else: "") &
                 sug)))): # FIXME: should `sug` be encoded?
           text sug

@@ -23,10 +23,11 @@ import os,
 
 # import translate_types
 import locktpl
-lockedStore(Table)
-lockedList(Deque)
 import locktplutils
 export nre, tables, locktplutils
+
+lockedStore(Table)
+lockedList(Deque)
 
 static: echo "loading utils..."
 
@@ -87,7 +88,6 @@ template raceAndCheck*[T](fut: Future[T], to1: timer.Duration,
 
 template lgetOrPut*[T, K](c: T, k: K, v: untyped): untyped =
   ## Lazy `mgetOrPut`
-  # mixin get, put
   try:
     c.get(k)
   except KeyError:
@@ -560,11 +560,14 @@ proc find*(node: VNode, kind: VNodeKind, attr: (string, string)): VNode =
       return n
   return node
 
-proc initStyle*(path: static[string]): VNode {.gcsafe.} =
-  let sty {.global.} = create(string)
-  if unlikely(len(sty[]) == 0):
-    sty[] = readFile(path)
-  result = tree(VNodeKind.style, verbatim(sty[]))
+let cssStyles = initLockTable[string, VNode]()
+# FIXME: this should not be needed
+proc get*(t: LockTable[string, VNode], k: string): VNode = t[k]
+proc put*(t: LockTable[string, VNode], k: string, v: VNode): VNode = (t[k] = v; v)
+proc initStyle*(path: string): VNode {.gcsafe.} =
+  cssStyles.lgetOrPut(path):
+    let sty = readFile(path)
+    tree(VNodeKind.style, verbatim(sty))
 
 proc initStyleStr*(s: sink string): VNode =
   result = tree(VNodeKind.style, verbatim(s))
@@ -782,7 +785,7 @@ proc withScheme*(url: string): string {.inline.} =
   else: "//" & url
 
 var uriVar {.threadVar.}: URI
-proc rewriteUrl*(el, rewritePath: auto, hostname = WEBSITE_DOMAIN) =
+proc rewriteUrl*(el, rewritePath: auto, hostname = config.websiteDomain) =
   let url = el.getAttr("href").string
   if url.len == 0:
     return

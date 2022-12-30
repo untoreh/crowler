@@ -13,7 +13,7 @@ export translate_db
 var statsDB*: LockDB
 
 proc initStatsDB*(): LockDB =
-  let dbpath = WEBSITE_PATH / "stats.db"
+  let dbpath = config.websitePath / "stats.db"
   debug "cache: storing stats at {dbpath}"
   result = init(LockDB, dbpath, ttl = initDuration(weeks = 1000))
 

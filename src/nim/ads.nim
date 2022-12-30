@@ -31,7 +31,7 @@ var
 var adsLinksCount, adsLinksIdx: int
 
 macro loadIfExists(basename: static[string], varname) =
-  let path = DATA_ADS_PATH / basename
+  let path = config.dataAdsPath / basename
   quote do:
     when fileExists(`path`):
       const `varname`* = readFile(`path`)
@@ -62,35 +62,35 @@ proc adsVNode(el: XmlNode): VNode {.gcsafe.} =
 
 proc readAdsConfig*() =
   withLock(adsHeadLock):
-    let adsHeadFile = DATA_ADS_PATH / "head.html"
+    let adsHeadFile = config.dataAdsPath / "head.html"
     if fileExists(adsHeadFile):
       takeOverFields(loadHtml(adsHeadFile).adsVNode, adsHead[])
   withLock(adsHeaderLock):
-    let adsHeaderFile = DATA_ADS_PATH / "header.html"
+    let adsHeaderFile = config.dataAdsPath / "header.html"
     if fileExists(adsHeaderFile):
       takeOverFields(loadHtml(adsHeaderFile).adsVNode, adsHeader[])
   withLock(adsSidebarLock):
-    let adsSidebarFile = DATA_ADS_PATH / "sidebar.html"
+    let adsSidebarFile = config.dataAdsPath / "sidebar.html"
     if fileExists(adsSidebarFile):
       takeOverFields(loadHtml(adsSidebarFile).adsVNode, adsSidebar[])
   withLock(adsFooterLock):
-    let adsFooterFile = DATA_ADS_PATH / "footer.html"
+    let adsFooterFile = config.dataAdsPath / "footer.html"
     if fileExists(adsFooterFile):
       takeOverFields(loadHtml(adsFooterFile).adsVNode, adsFooter[])
   # Links
   withLock(adsLinksLock):
-    let adsLinksFile = DATA_ADS_PATH / "links.txt"
+    let adsLinksFile = config.dataAdsPath / "links.txt"
     initLinks adsLinks, adsLinks
   withLock(adsArticlesLock):
-    let adsArticlesFile = DATA_ADS_PATH / "articles.html"
+    let adsArticlesFile = config.dataAdsPath / "articles.html"
     if fileExists(adsArticlesFile):
       takeOverFields(loadHtml(adsArticlesFile).adsVNode, adsArticles[])
   withLock(adsRelatedLock):
-    let adsRelatedFile = DATA_ADS_PATH / "related.html"
+    let adsRelatedFile = config.dataAdsPath / "related.html"
     if fileExists(adsRelatedFile):
       takeOverFields(loadHtml(adsRelatedFile).adsVNode, adsRelated[])
   withLock(adsSeparatorLock):
-    let adsSeparatorFile = DATA_ADS_PATH / "separator.html"
+    let adsSeparatorFile = config.dataAdsPath / "separator.html"
     if fileExists(adsSeparatorFile):
       takeOverFields(loadHtml(adsSeparatorFile).adsVNode, adsSeparator[])
 
@@ -210,10 +210,10 @@ var assetsFileLock: Lock
 initLock(assetsFileLock)
 let assetsFiles* = create(HashSet[string])
 proc loadAssets*() =
-  if not dirExists(DATA_ASSETS_PATH):
-    createDir(DATA_ASSETS_PATH)
+  if not dirExists(config.dataAssetsPath):
+    createDir(config.dataAssetsPath)
   assetsFiles[].clear()
-  for (kind, file) in walkDir(DATA_ASSETS_PATH):
+  for (kind, file) in walkDir(config.dataAssetsPath):
     assetsFiles[].incl file.extractFilename()
 
 proc updateAssets(event: seq[PathEvent]) {.gcsafe.} =
@@ -240,13 +240,13 @@ proc runAdsWatcher*() =
   readAdsConfig()
   adsFirstRead = true
   var thr {.global.}: Thread[(string, WatchKind)]
-  createThread(thr, pollWatcher, (DATA_ADS_PATH, WatchKind.ads))
+  createThread(thr, pollWatcher, (config.dataAdsPath, WatchKind.ads))
 
 proc runAssetsWatcher*() =
   loadAssets()
   assetsFirstRead = true
   var thr {.global.}: Thread[(string, WatchKind)]
-  createThread(thr, pollWatcher, (DATA_ASSETS_PATH, WatchKind.assets))
+  createThread(thr, pollWatcher, (config.dataAssetsPath, WatchKind.assets))
 
 when isMainModule:
   import std/strtabs {.all.}

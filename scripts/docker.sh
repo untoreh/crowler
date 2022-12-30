@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -e
 
+export WEB_DOMAINS="" # list of domains to account for
+export WEB_CUSTOM_PAGES="dmca,terms-of-service,privacy-policy" # list of slugs for pages that that have templates
+
 if [ "$1" = "-d" ]; then
     NIM=debug
     shift
@@ -31,7 +34,7 @@ fi
 
 [ -n "$docopy" ] && scripts/copy.sh $targets
 for site in $sites; do
-    tag=untoreh/sites:$site
+    tag=untoreh/sites:cli
 
     sudo docker build --target $site $nocache \
         --build-arg NIM_ARG=$NIM \

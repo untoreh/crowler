@@ -17,7 +17,7 @@ proc `=destroy`*(db: var LockDBObj) =
   deinitLock(db.lock)
 
 const ttlKey = "ldb-ttl-key"
-proc init*(_: typedesc[LockDB], path: string, ttl = initDuration(days = 100)): LockDB =
+proc init*(_: typedesc[LockDB], path: string, ttl = initDuration(days = 100), ignoreErrors= false): LockDB =
   result = create(LockDBObj)
   result.handle = leveldb.open(path)
   if result.handle.get(ttlKey).isnone:
@@ -26,14 +26,26 @@ proc init*(_: typedesc[LockDB], path: string, ttl = initDuration(days = 100)): L
     result.handle.put(ttlKey, $ttl.inSeconds)
     result.ttl = ttl
   elif ttl != default(Duration):
-    let
-      residentSecs = result.handle.get(ttlKey).get().parseInt
-      residentTtl = initDuration(seconds = residentSecs)
-    if ttl != default(Duration) and residentTtl != ttl:
-      raise newException(ValueError, "Provided ttl doesn't match database.")
-    result.ttl = residentTtl
+    template doraise() =
+      if not ignoreErrors:
+        raise newException(ValueError, "Provided ttl doesn't match database.")
+    var mismatch = false
+    try:
+      let
+        residentSecs = result.handle.get(ttlKey).get().parseInt
+        residentTtl = initDuration(seconds = residentSecs)
+      if ttl != default(Duration) and residentTtl != ttl:
+        doraise()
+      result.ttl = residentTtl
+    except ValueError:
+      warn "Corrupted ttl found in database, overwriting with {ttl}."
+      result.handle.put(ttlKey, $ttl.inSeconds)
+      result.ttl = ttl
+      logexc()
 
 proc isValid(ldb: LockDB, k: string, v: Option[string] = none[string](), nocheck: static[bool] = false): (bool, string) =
+  if k == ttlKey:
+    return (true, "")
   var v = v
   if v.isnone:
     v = ldb.handle.get(k)
@@ -76,12 +88,17 @@ proc `get`*(ldb: LockDB, k: string): string =
 
 template `[]`*(ldb: LockDB, k: string): string = ldb.get(k)
 
-proc clear*(ldb: LockDB) =
+proc clear*(ldb: LockDB, keepttl=true) =
   withLock(ldb.lock):
+    var ttlStr: string
+    if keepttl:
+      ttlStr.add ldb.handle.get(ttlKey).get()
     let batch = newBatch()
     for (k, v) in ldb.handle.iter:
       batch.delete(k)
     ldb.handle.write(batch)
+    if keepttl:
+      ldb.handle.put(ttlKey, ttlStr)
 
 proc path*(ldb: LockDB): string = ldb.handle.path
 proc delete*(ldb: LockDB, k: string) =
@@ -89,20 +106,25 @@ proc delete*(ldb: LockDB, k: string) =
     ldb.handle.delete(k)
 template del*(ldb: LockDB, k: string) = ldb.delete(k)
 
-proc compact*(ldb: LockDB) =
+proc compact*(ldb: LockDB, purgeOnError = false) =
   ## Remove expired keys
   var v: string
   var batch = newBatch()
-  withLock(ldb.lock):
-    for (k, v) in ldb.handle.iter():
-      if not isValid(ldb, k, some(v))[0]:
-        batch.delete(k)
-    ldb.handle.write(batch)
+  try:
+    withLock(ldb.lock):
+      for (k, v) in ldb.handle.iter():
+        if not isValid(ldb, k, some(v))[0]:
+          batch.delete(k)
+      ldb.handle.write(batch)
+  except ValueError:
+    logexc()
+    if purgeOnError:
+      ldb.clear()
 
 proc put*[T](ldb: LockDB, vals: T) =
   var batch = newBatch()
   for (k, v) in vals:
-    batch.put(k, v)
+    batch.put(k, $getTime().toUnix & ";" & v)
   ldb.handle.write(batch)
 
 proc toUint32*(s: string): uint32 =
@@ -116,4 +138,4 @@ proc toString*(u: uint32): string =
   result = newString(4)
   copyMem(result[0].addr, u.unsafeAddr, 4)
 
-# let db = init(LockDB, WEBSITE_PATH / "test.db")
+# let db = init(LockDB, config.websitePath / "test.db")

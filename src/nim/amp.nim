@@ -36,7 +36,7 @@ import std/sets
 var dupStyles: ptr HashSet[string] ## Don't duplicate styles that appear more than once in the html
 
 proc asLocalUrl(path: string): string {.inline.} =
-  $(WEBSITE_URL / path.replace(SITE_PATH, ""))
+  $(config.websiteUrl / path.replace(SITE_PATH, ""))
 
 proc getFile(path: string): Future[string] {.async.} =
   ## This does not actually read or save contents to storage, just holds an in memory cache
@@ -58,7 +58,7 @@ proc getFile(path: string): Future[string] {.async.} =
       # FIXME: We can't fetch local urls because cloudflare TLS and chronhttp fail to handshake
       # ...therefore read from local files
       parseUri(url, fileUri)
-      if fileUri.hostname in webDomains:
+      if fileUri.hostname in config.websiteAllDomains:
         let path = SITE_PATH / fileUri.path
         checkTrue(fileExists(path), "amp: file Not Found")
         filesCache[path] = await readfileAsync(path)
@@ -404,13 +404,13 @@ proc initAmp*() =
     qdebug "server: failed to initAmp"
 
 
-initAmp()
 
 proc ampLink*(path: string): VNode {.gcsafe.} =
   ampLinkEl.setAttr("href", pathLink(path, amp = (not path.startsWith("/amp")), rel = false))
   deepCopy(ampLinkEl)
 
 # when isMainModule:
+#   initAmp()
 #   import htmlparser, os
 #   let file = PROJECT_PATH / "index.html"
 #   let html = readFile(file).parseHtml.toVNode

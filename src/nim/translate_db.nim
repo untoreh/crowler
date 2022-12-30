@@ -15,7 +15,16 @@ proc initSlations*(comp = true) {.gcsafe.} =
   if slations.isnil:
     slations = initLockTable[string, string]()
 
-let trans* = init(LockDB, WEBSITE_PATH / "translate.db", ttl = initDuration(days = 300))
+var trans*: LockDB
+
+proc initTranslateDb*(comp = true) =
+  if trans.isnil:
+    trans = init(LockDB, config.websitePath / "translate.db",
+        ttl = initDuration(days = 300), ignoreErrors = true)
+  if comp:
+    trans.compact(purgeOnError = true)
+  else:
+    assert(false, "Translate DB already initialized.")
 
 func trKey*(pair: langPair, txt: string): string {.inline.} =
   pair.src & pair.trg & txt

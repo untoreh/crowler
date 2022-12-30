@@ -45,7 +45,7 @@ proc setLangLinks*(url: string) {.gcsafe.} =
 
 proc langLinksNodes*(path: string, rel: static bool = false): seq[VNode] {.gcsafe.} =
     let srcUrl = when rel: path
-                 else: $(WEBSITE_URL / path)
+                 else: $(config.websiteUrl / path)
     setLangLinks(srcUrl)
     langLinks
 

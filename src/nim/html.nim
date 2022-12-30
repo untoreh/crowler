@@ -47,10 +47,10 @@ proc initHtml*() =
     break_style = style(wsBreak)
     initZstd()
     initSocial()
-    if DEFAULT_IMAGE.fileExists:
-      defaultImageData = readFile(DEFAULT_IMAGE)
-      defaultImageB64 = fmt"data:{DEFAULT_IMAGE_MIME};base64,{base64.encode(defaultImageData)}"
-      defaultImageU8 = fmt"data:{DEFAULT_IMAGE_MIME};utf8,{defaultImageData}"
+    if config.defaultImage.fileExists:
+      defaultImageData = readFile(config.defaultImage)
+      defaultImageB64 = fmt"data:{config.defaultImageMime};base64,{base64.encode(defaultImageData)}"
+      defaultImageU8 = fmt"data:{config.defaultImageMime};utf8,{defaultImageData}"
   except:
     logexc()
     qdebug "Could not initialize html vars."
@@ -76,10 +76,10 @@ proc buildButton(button_class: string; custom_classes: string = ""; aria_label: 
       tdiv(class = button_class)
 
 template ldjWebsite(): VNode {.dirty.} =
-  ldj.website(url = $(WEBSITE_URL / topic),
+  ldj.website(url = $(config.websiteUrl / topic),
               author = ar.author,
               year = now().year,
-              image = LOGO_URL).asVNode
+              image = config.logoRelUrl).asVNode
 
 template ldjWebpage(): VNode {.dirty.} =
   let ldjPageProps = newJObject()
@@ -111,10 +111,14 @@ proc styleLink(url: string): VNode =
   # echo nodes
   # for n in nodes: result.add n
 
-proc buildHead*(path: string; description = ""; topic = "";
-    ar = emptyArt[]): VNode {.gcsafe.} =
-  let canon = $(WEBSITE_URL / path)
-  buildHtml(head):
+proc buildHead*(path: string; description = ""; topic = ""; title = "";
+    ar = emptyArt[]): Future[VNode] {.gcsafe, async.} =
+  let canon = $(config.websiteUrl / path)
+  let tail = block:
+               let s = path.split("/")
+               if s.len > 1: s[1..^1].join("/")
+               else: ""
+  return buildHtml(head):
     meta(charset = "UTF-8")
     meta(name = "viewport", content = "width=device-width, initial-scale=1")
     link(rel = "canonical", href = canon)
@@ -125,24 +129,34 @@ proc buildHead*(path: string; description = ""; topic = "";
     if not ar.isEmpty:
       for t in opgPage(ar): t.toVNode
     else:
-      for t in opgPage(something(topic, WEBSITE_TITLE),
-                       something(description, WEBSITE_DESCRIPTION),
+      for t in opgPage(something(topic, config.websiteTitle),
+                       something(description, config.websiteDescription),
                        path): t.toVNode
     for n in langLinksNodes(canon, rel = true): n
 
     # LDJ
     ldjWebsite()
     ldjWebPage()
-    breadcrumbs(crumbsNode(ar)).asVNode
+    breadcrumbs(asBreadcrumbs(ar, something(topic, title), tail)).asVNode
 
     # styles
-    initStyle(CSS_CRIT_PATH)
+    initStyle(config.cssCritRelUrl)
     link(rel = "preconnect", href = "https://fonts.googleapis.com")
     link(rel = "preconnect", href = "https://fonts.gstatic.com",
         crossorigin = "")
     for s in styleLink(NOTO_FONT_URL): s
-    for s in styleLink(CSS_BUN_URL): s
-    let titleText = something(ar.title, WEBSITE_TITLE)
+    for s in styleLink(config.cssBunUrl): s
+    let titleText =
+      if not isEmpty(ar):
+        ar.title
+      elif isSomething(topic):
+        let desc = await topic.topicDesc
+        if tail != "":
+          fmt"{desc} - {tail}"
+        else:
+          desc
+      else:
+        something(title, config.websiteTitle)
     title:
       text titleText
     meta(name = "title", content = titleText)
@@ -150,9 +164,9 @@ proc buildHead*(path: string; description = ""; topic = "";
     meta(name = "description", content = something(description, ar.desc))
     meta(name = "image", content = ar.imageUrl)
     meta(name = "date", content = something($ar.pubDate, $now()))
-    link(rel = "icon", href = FAVICON_PNG_URL, type = "image/x-icon")
-    link(rel = "icon", href = FAVICON_SVG_URL, type = "image/svg+xml")
-    link(rel = "apple-touch-icon", sizes = "180x180", href = APPLE_PNG180_URL)
+    link(rel = "icon", href = config.faviconPngUrl, type = "image/x-icon")
+    link(rel = "icon", href = config.faviconSvgUrl, type = "image/svg+xml")
+    link(rel = "apple-touch-icon", sizes = "180x180", href = config.applePng180Url)
     # https://stackoverflow.com/questions/21147149/flash-of-unstyled-content-fouc-in-firefox-only-is-ff-slow-renderer
     verbatim("<script>const _ = null</script>")
     for ad in adsFrom(adsHead): ad
@@ -163,8 +177,8 @@ proc buildTrending(): VNode =
     text "trending posts"
 
 proc buildSocialShare(a: Article): VNode =
-  # let url = WEBSITE_URL & "/" & a.topic & "/" & a.slug
-  let url = $(WEBSITE_URL / a.topic / a.slug)
+  # let url = config.websiteUrl & "/" & a.topic & "/" & a.slug
+  let url = $(config.websiteUrl / a.topic / a.slug)
   let twitter_q = encodeQuery(
       {"text": a.title,
         "hashtags": a.tags.join(","),
@@ -217,11 +231,11 @@ proc buildLang(path: string): VNode =
 
 proc topicPages(topic: string; count: int): VNode =
   buildHtml(ul(class = "topic-pages")):
-    a(class = "topic-link", href = ($(WEBSITE_URL / topic))):
+    a(class = "topic-link", href = ($(config.websiteUrl / topic))):
       text "Latest Articles"
     for n in countDown(count, 1): # inclusive
       li(class = "topic-pg", title = (fmt"{topic}#{n}")):
-        let url = $(WEBSITE_URL / topic / $n)
+        let url = $(config.websiteUrl / topic / $n)
         a(class = "topic-pg-link", href = url):
           text "#" & $n
 
@@ -269,7 +283,7 @@ proc topicsLinks(cls = ""; kind = VNodeKind.li): Future[seq[VNode]] {.async.} =
       (topic, name) = ($topics[i][0], $topics[i][1])
     result.add:
       buildHtml(li(class = cls)):
-        a(href = ($(WEBSITE_URL / topic)), title = name):
+        a(href = ($(config.websiteUrl / topic)), title = name):
           text name
 
 proc buildCrumbs(ar: Article; topic = ""; page = "";
@@ -284,25 +298,25 @@ proc buildCrumbs(ar: Article; topic = ""; page = "";
   result.add:
     buildHtml(ul(class = "breadcrumb-list")):
       li(class = itemCls):
-        a(href = ($WEBSITE_URL)):
+        a(href = ($config.websiteUrl)):
           span:
             text "home >> "
-          text WEBSITE_TITLE
+          text config.websiteTitle
       if len(lang) > 0:
         li(class = itemCls):
-          a(href = ($(WEBSITE_URL / lang))):
+          a(href = ($(config.websiteUrl / lang))):
             span:
               text "lang >> "
             text lang
       if len(topic) > 0:
         li(class = itemCls):
-          a(href = ($(WEBSITE_URL / lang / topic))):
+          a(href = ($(config.websiteUrl / lang / topic))):
             span:
               text "topic >> "
             text await topic.topicDesc
       if page != "-1":
         li(class = itemCls):
-          a(href = ($(WEBSITE_URL / lang / topic / page))):
+          a(href = ($(config.websiteUrl / lang / topic / page))):
             span:
               text "page >> "
             text "#" & page
@@ -344,13 +358,13 @@ proc buildMenuSmall*(currentPage: string; topicUri: Uri; ar = emptyArt[
 
 proc buildLogo(pos: string): VNode =
   buildHtml():
-    a(class = (pos & " app-bar-logo mdc-icon-button"), href = ($WEBSITE_URL),
+    a(class = (pos & " app-bar-logo mdc-icon-button"), href = ($config.websiteUrl),
             aria-label = "Website Logo"):
       tdiv(class = "mdc-icon-button__ripple")
       span(class = "logo-dark-wrap"):
-        img(src = LOGO_DARK_URL, loading = "lazy", alt = "logo-dark")
+        img(src = config.logoDarkUrl, loading = "lazy", alt = "logo-dark")
       span(class = "logo-light-wrap"):
-        img(src = LOGO_URL, loading = "lazy", alt = "logo-light")
+        img(src = config.logoRelUrl, loading = "lazy", alt = "logo-light")
 
 
 proc buildMenu*(currentPage: string; topicUri: Uri; path: string; ar = emptyArt[
@@ -468,7 +482,7 @@ proc buildFooter*(topic = ""; pagenum = ""; lang = ""; path = "";
         text "Except where otherwise noted, this website is licensed under a "
         a(rel = "license", href = "http://creativecommons.org/licenses/by/3.0/deed.en_US"):
           text "Creative Commons Attribution 3.0 Unported License."
-      script(src = JS_REL_URL, async = "")
+      script(src = config.jsRelUrl, async = "")
 
 proc postSource(icon: string): VNode =
   result =
@@ -516,7 +530,7 @@ proc postFooter(pubdate: Time): VNode =
         text format(dt, "dd MMM yyyy")
 
 
-proc buildBody(ar: Article; website_title: string = WEBSITE_TITLE;
+proc buildBody(ar: Article; website_title: string = config.websiteTitle;
     lang = ""): Future[VNode] {.async.} =
   checkNil(ar)
   let
@@ -635,7 +649,7 @@ proc processHtml*(relpath: string; slug: string; data: VNode;
   var ppage: VNode
   when cfg.YDX:
     if yandex.feedTopic != ar.topic:
-      let ydxTurboFeedpath = $(WEBSITE_URL / topic / "ydx.xml")
+      let ydxTurboFeedpath = $(config.websiteUrl / topic / "ydx.xml")
       yandex.setFeed(ar.topic, ydxTurboFeedpath, topicDesc())
   for (pagepath, page) in o:
     when cfg.AMP:
@@ -655,7 +669,7 @@ proc buildPost*(a: Article; lang = ""): Future[VNode] {.async.} =
   return buildHtml(html(lang = DEFAULT_LANG_CODE,
                  prefix = opgPrefix(@[Opg.article, Opg.website]))
   ):
-    buildHead(getArticlePath(a), a.desc, a.topic, ar = a)
+    await buildHead(getArticlePath(a), a.desc, a.topic, ar = a)
     bbody
 
 proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode = nil;
@@ -663,7 +677,7 @@ proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode =
                     ar = emptyArt[]): Future[VNode] {.gcsafe, async.} =
   var topicName, currentPage: string
   if topic.isEmptyOrWhitespace:
-    topicName = WEBSITE_TITLE.toUpper
+    topicName = config.websiteTitle.toUpper
     currentPage = "/ "
   else:
     topicName = (await topic.topicDesc).toUpper
@@ -673,7 +687,7 @@ proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode =
     path = topic / slug
   result = buildHtml(html(lang = DEFAULT_LANG_CODE,
                           prefix = opgPrefix(@[Opg.article, Opg.website]))):
-    buildHead(path, desc, topic, ar)
+    await buildHead(path, description = desc, topic = topic, ar = ar, title = title)
     # NOTE: we use the topic attr for the body such that
     # from browser JS we know which topic is the page about
     body(class = "", topic = topic, style = preline_style):
@@ -703,18 +717,22 @@ macro wrapContent(content: string; wrap: static[bool]): untyped =
 proc buildPage*(title,
                 content,
                 lang: string;
+                topic = "";
+                desc = "";
                 wrap: static[bool] = false;
                 pagefooter = emptyVNode()): Future[VNode] {.async.} =
   let slug = slugify(title)
   return await buildPage(title = title, content.wrapContent(wrap), slug,
-      pagefooter, lang = lang)
+                         pagefooter, lang = lang, desc = desc, topic = topic)
 
 proc buildPage*(content,
                 lang: string;
+                topic = "";
+                desc = "";
                 wrap: static[bool] = false;
                 pagefooter = emptyVNode()): Future[VNode] {.async.} =
   return await buildPage(title = "", content.wrapContent(wrap), slug = "",
-      pagefooter, lang = lang)
+                                 pagefooter, lang = lang, desc = desc, topic = topic)
 
 proc ldjData*(el: VNode; filepath, relpath: string; lang: langPair; a: Article) =
   ##

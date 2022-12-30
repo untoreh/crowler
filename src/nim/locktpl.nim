@@ -229,6 +229,7 @@ template lockedSet*(name: untyped): untyped {.dirty.} =
     withLock(tbl.lock):
       tbl.storage.clear()
 
+
 when isMainModule:
   import tables, lrucache
   lockedStore(LruCache)

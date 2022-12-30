@@ -90,17 +90,13 @@ FROM sitedeps2 AS sitedeps3
 RUN /usr/bin/python3 -m textblob.download_corpora
 RUN /usr/bin/python3 lib/py/main.py; true # perform modules setups on imports
 
-FROM sitedeps3 as scraper
-ENV SITES wsl,wsl
-COPY / /site/
-CMD /site/scripts/scraper.sh
-
-FROM scraper AS site
-ENV NIM_DEBUG warn
+FROM sitebase AS sitebuild
 ARG NIM_ARG release
-ENV NIM $NIM_ARG
 ARG CACHE=0
 ARG LIBPYTHON_PATH /usr/lib/x86_64-linux-gnu/libpython3.10d.so
+ENV NIM $NIM_ARG
+ENV NIM_DEBUG warn
+ENV PROJECT_DIR /site
 # nim not still supporting ssl3
 # RUN apt -y install libssl1.1
 RUN /site/scripts/switchdebug.sh /site
@@ -109,9 +105,10 @@ RUN cd /site; \
     nimble install -y https://github.com/untoreh/nimpy@#master; \
     nimble install -y https://github.com/untoreh/nim-chronos@#update; \
     cd - ;
-CMD ./cli
+RUN cd /site; nimble build cli_tasks
 
-# FROM siteBase as site
+
+# FROM sitebuild as sitebuild-debug
 # RUN apt update -y; apt install -y autotools-dev automake
 # RUN cd /tmp && \
 #     git clone --depth=1 git://sourceware.org/git/valgrind.git && \
@@ -124,17 +121,12 @@ CMD ./cli
 #     rm /tmp/valgrind -rf
 # RUN apt -y install massif-visualizer
 
-FROM site AS wsl
-ENV CONFIG_NAME wsl
-ENV SITE_PORT 5050
-HEALTHCHECK --timeout=5s CMD scripts/healthcheck.sh
-RUN cd /site; nimble build cli
-RUN [ "$NIM" = release ] && strip -s cli || exit 0
+FROM sitebuild as scraper
+ENV SITES wsl,wsl
+CMD /site/scripts/scraper.sh
 
-FROM site as wsl
-ENV CONFIG_NAME wsl
-ENV SITE_PORT 5051
-ENV NEW_TOPICS_ENABLED True
+FROM site AS server
 HEALTHCHECK --timeout=5s CMD scripts/healthcheck.sh
 RUN cd /site; nimble build cli
 RUN [ "$NIM" = release ] && strip -s cli || exit 0
+CMD ./cli startServer

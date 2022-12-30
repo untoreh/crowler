@@ -30,7 +30,7 @@ cp -a src/assets/empty.png $trg/site/assets/
 
 mkdir -p $trg/src/nim
 cp -a src/nim/*.nim $trg/src/nim/
-cp -a src/nim/{config,vendor} $trg/src/nim/
+cp -a src/nim/vendor $trg/src/nim/
 
 mkdir -p $trg/{src/py,lib}
 cp -a src/py/*.py $trg/src/py/

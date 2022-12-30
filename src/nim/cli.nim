@@ -21,7 +21,7 @@ import
 # import ./test                     #
 # static: echo "using test!"
 
-template initAll() =
+template initAll*() =
   initThread()
   initCache()
   initStats()
@@ -97,7 +97,7 @@ proc genPage(relpath: string) =
   let page = if capts.topic == "":
                let pagetree = (waitFor buildHomePage(capts.lang, capts.amp))[1]
                cast[string]($pagetree)
-             elif capts.topic in customPages:
+             elif capts.topic in config.websiteCustomPages:
                (waitFor pageFromTemplate(capts.topic, capts.lang, capts.amp))
              else:
                let topic = capts.topic
@@ -117,11 +117,12 @@ proc genPage(relpath: string) =
 
 
 proc cliCompactData(name = "translate.db") =
-  let path = WEBSITE_PATH / name
+  let path = config.websitePath / name
   if not fileExists(path):
     raise newException(OSError, "Database does not appear to exist")
   let db = init(LockDB, path, ttl = initDuration())
   db.compact()
+
 
 when isMainModule:
   dispatchMulti([startServer], [clearPage], [cliPubTopic], [cliReindexSearch], [

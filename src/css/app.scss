@@ -496,7 +496,7 @@ header .page {
     list-style: none;
     max-width: 80vw;
     width: 10rem;
-    top: -100vh;
+    display: none;
     padding: 0;
     margin: 0;
     background: var(--mdc-theme-secondary);
@@ -559,6 +559,10 @@ header .page {
       &:hover {
         filter: invert(1);
       }
+      &.topic-link {
+        font-size: 0.8rem;
+        text-transform: capitalize;
+      }
     }
     & .separator {
       height: 100%;
@@ -569,10 +573,14 @@ header .page {
       right: 0;
       border-color: var(--mdc-theme-on-secondary);
     }
-    ul.topic-pages.show {
-      top: 4rem;
-    }
     @include topic-pages;
+    ul.topic-pages {
+      margin-left: -5rem;
+      &.show {
+        top: 4rem;
+        display: unset;
+      }
+    }
   }
 }
 
@@ -637,16 +645,16 @@ section[role="toolbar"] {
       text-transform: uppercase;
       text-decoration: none;
     }
-    .topic-pages.show {
-      top: unset;
-      left: 4rem;
-    }
     @include topic-pages;
     ul.topic-pages {
       margin-top: -3.5rem;
-    }
-    .topic-link {
-      font-size: 0.8rem;
+      &.show {
+        top: unset;
+        left: 4rem;
+      }
+      & .topic-link {
+        font-size: 0.8rem;
+      }
     }
   }
 }

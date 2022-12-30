@@ -59,7 +59,7 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
       if not e.isnil:
         echo e[]
       warn "pubtask: failed!"
-    await sleepAsync(cfg.CRON_TOPIC.seconds)
+    await sleepAsync(PUB_TASK_THROTTLE.seconds)
     n -= 1
 
 proc deleteLowTrafficArts*(topic: string): Future[void] {.gcsafe, async.} =
@@ -89,10 +89,10 @@ proc deleteLowTrafficArts*(topic: string): Future[void] {.gcsafe, async.} =
         debug "tasks: resetting pubTime for page {pagenum}"
         pagesToReset.add pagenum
     # article is old enough
-    elif inSeconds(now - pubTime) > cfg.CLEANUP_AGE:
+    elif inSeconds(now - pubTime) > config.cleanupAge:
       let hits = topic.getHits(capts.art)
       # article has low hit count
-      if hits < cfg.CLEANUP_HITS:
+      if hits < config.cleanupHits:
         await deleteArt(capts)
   for n in pagesToReset:
     withPyLock:
@@ -118,44 +118,46 @@ proc memWatcherTask*() {.async.} =
     await sleepAsync(5.seconds)
 
 type
-  TaskKind = enum pub, cleanup, mem
+  TaskKind* = enum pub, cleanup, mem
   TaskProc = proc(): Future[void] {.gcsafe.}
   TaskTable = Table[TaskKind, Future[void]]
 
 proc selectTask(k: TaskKind): TaskProc =
   case k:
+    # Publishes new articles for one topic every x seconds
     of pub: pubTask
+    # cleanup task for deleting low traffic articles
     of cleanup: cleanupTask
+    # quit when max memory usage reached
     of mem: memWatcherTask
 
-proc scheduleTasks(): TaskTable =
+proc scheduleTasks*(tasks: seq[TaskKind]): TaskTable =
   template addTask(t) =
     let fut = (selectTask t)()
     result[t] = fut
-  # Publishes new articles for one topic every x seconds
-  addTask pub
-  # cleanup task for deleting low traffic articles
-  addTask cleanup
-  # quit when max memory usage reached
-  addTask mem
+  for task in tasks:
+    addTask task
 
-proc tasksMonitorImpl() {.async.} =
+proc tasksMonitorImpl(tasks: seq[TaskKind]) {.async.} =
   try:
-    var tasks = scheduleTasks()
+    var tasks = scheduleTasks(tasks)
     while true:
       for k in tasks.keys():
         let t = tasks[k]
         if t.finished:
           if t.failed and not t.error.isnil:
-            warn "task failed, restarting! {t.error[]}"
+            warn "task failed, restarting!"
           tasks[k] = (selectTask k)()
       await sleepAsync(10.seconds)
   except:
     warn "tasks: monitor crashed"
     quitl
 
-template runTasks*() =
-  let ttbl = tasksMonitorImpl()
+template runTasks*(tasks = @[pub, cleanup, mem], wait: static[bool] = false): untyped =
+  when wait:
+    tasksMonitorImpl(tasks)
+  else:
+    let ttbl = tasksMonitorImpl(tasks)
 
 when isMainModule:
   import cache

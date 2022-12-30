@@ -47,7 +47,7 @@ template translateIter(otree; vbtm: static[bool] = true) =
             translate(q.addr, el, srv)
 
 type DomTranslation = tuple[queue: QueueDom, node: VNode, fut: Future[bool]]
-proc translateDom(fc: FileContext, hostname = WEBSITE_DOMAIN): Future[DomTranslation] {.async.} =
+proc translateDom(fc: FileContext, hostname = config.websiteDomain): Future[DomTranslation] {.async.} =
   translateEnv(dom)
   for node in otree.preorder():
     case node.kind:

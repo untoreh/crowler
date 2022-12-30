@@ -39,8 +39,8 @@ macro getTforms*(kind: static[FcKind]): untyped =
 
 proc head_tform(el: VNode, basedir: string, relpath: string, pair: langPair) {.gcsafe.} =
     let
-        srcUrl = $(WEBSITE_URL / relpath)
-        trgUrl = $(WEBSITE_URL / pair.trg / relpath)
+        srcUrl = $(config.websiteUrl / relpath)
+        trgUrl = $(config.websiteUrl / pair.trg / relpath)
     var title, desc, img, date: string
     var tags: seq[string]
     var stack = 6 # how many variables do we have to set

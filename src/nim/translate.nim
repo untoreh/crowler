@@ -142,7 +142,7 @@ template translateNode*(node: VNode, q: QueueXml) =
                    withClosingHtmlTag(otree)
 
 when defined(weaveRuntime):
-    proc translateHtml(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true): auto =
+    proc translateHtml(fc: ptr FileContext, hostname = config.websiteDomain, finish = true): auto =
         translateEnv()
 
         # Set the target lang attribute at the top level
@@ -173,7 +173,7 @@ proc fetchHtml(file: string): XmlNode =
     return htmlcache[file]
 
 when defined(weaveRuntime):
-    proc translateDom(fc: ptr FileContext, hostname = WEBSITE_DOMAIN, finish = true): auto =
+    proc translateDom(fc: ptr FileContext, hostname = config.websiteDomain, finish = true): auto =
         translateEnv(dom)
         for node in otree.preorder():
             case node.kind:
@@ -307,6 +307,7 @@ when defined(weaveRuntime):
 
 proc initTranslate*() =
   try:
+    initTranslateDB()
     initPunctRgx()
     setNil(vbtmcache):
       newLRUCache[array[5, byte], XmlNode](32)
@@ -317,6 +318,7 @@ proc initTranslate*() =
       startTranslate()
     translateFuts = newLruCache[string, (VNode, Future[bool])](10000)
   except:
+    logexc()
     qdebug "Failed to init translate."
 
 proc exitThread() =
@@ -336,29 +338,6 @@ when defined(weaveRuntime):
             debug "rgx: Regexp is '(.*{dir}/)(.*$)'."
             link_src_to_dir(dir)
             fileWise(path, excluded_dirs, rx_file, langpairs, target_path = target_path)
-
-# when isMainModule:
-#     import timeit
-#     let
-#         dir = normalizePath(SITE_PATH)
-#         langpairs = collect(for lang in TLangs: (src: SLang.code, trg: lang.code))
-#         rx_file = re fmt"(.*{dir}/)(.*$)"
-#     let
-#         file = "/home/fra/dev/wsl/site/vps/1/cheap-dedicated-server-hosting-price-best-dedicated-hosting-plans.html"
-#         html = fetchHtml(file)
-#         (filepath, urlpath) = splitUrlPath(rx_file, file)
-#         pair = (src: "en", trg: "it")
-#         t_path = file_path / pair.trg / url_path
-
-#     # translateDir(SITE_PATH, target_path = "/tmp/out")
-#     #
-#     # withWeave(true):
-#         # translateFile(file, rx_file, langpairs, target_path = "/tmp/out")
-#     # translateLang()
-
-#     # withWeave:
-#     #     echo timeGo do:
-#     #         discard translateHtml(html, file_path, url_path, pair, slator)
 
 when isMainModule:
   initTranslate()

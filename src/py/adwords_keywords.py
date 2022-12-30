@@ -14,6 +14,7 @@
 # """This example generates keyword ideas from a list of seed keywords."""
 
 
+from pathlib import Path
 from google.ads.googleads.client import GoogleAdsClient
 from google.ads.googleads.errors import GoogleAdsException
 from google.api_core.exceptions import ResourceExhausted
@@ -146,10 +147,12 @@ def _map_locations_ids_to_resource_names(client, location_ids):
 
 
 class Keywords:
-    _config = cfg.PROJECT_DIR / "src" / "assets" / "google-ads.yml"
+    _config: Path = cfg.PROJECT_DIR / "config" / "google-ads.yml"
     _customer_id = "3401524317"
 
     def __init__(self) -> None:
+        if not self._config.exists():
+            raise OSError(f"google-ads.yaml not found in {self._config}")
         self.client = GoogleAdsClient.load_from_storage(self._config, version="v10")
 
     def suggest(

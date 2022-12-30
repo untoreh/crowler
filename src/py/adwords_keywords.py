@@ -148,12 +148,17 @@ def _map_locations_ids_to_resource_names(client, location_ids):
 
 class Keywords:
     _config: Path = cfg.PROJECT_DIR / "config" / "google-ads.yml"
-    _customer_id = "3401524317"
+    _customer_id_path = cfg.PROJECT_DIR / "config" / "adwords_customer_id.txt"
+    _customer_id = ""
 
     def __init__(self) -> None:
         if not self._config.exists():
-            raise OSError(f"google-ads.yaml not found in {self._config}")
+            raise OSError(f"file not found {self._config}")
+        if not self._customer_id_path.exists():
+            raise OSError(f"file not found {self._customer_id_path}")
         self.client = GoogleAdsClient.load_from_storage(self._config, version="v10")
+        with open(self._customer_id_path, "r") as f:
+            self._customer_id = f.read()
 
     def suggest(
         self,

@@ -54,6 +54,7 @@ DATA_DIR = Path(
     )
 )
 assert DATA_DIR is not None  # and isdir(Path(dirname(DATA_DIR)) / ".venv")
+CONFIG_DIR = DATA_DIR.parent / "config"
 
 PROXIES_DIR = DATA_DIR / "proxies"
 PROXIES_FILES = [ PROXIES_DIR / f"{prx}proxies.json" for prx in ("socks5", "socks4", "http")]
@@ -84,7 +85,7 @@ NEW_TOPICS_ENABLED = strtobool(
 )  # If the job server should keep adding new topics to the current website
 NEW_TOPIC_FREQ = 3600 * 8  # Delay between adding new topics
 
-SITES_CONFIG_FILE = DATA_DIR / "sites.toml"
+SITES_CONFIG_FILE = CONFIG_DIR / "sites.toml"
 SITES_DIR = DATA_DIR / "sites"
 
 SITES_CONFIG = None

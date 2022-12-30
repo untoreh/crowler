@@ -46,3 +46,6 @@ data_*/proxies/*
 /supervisord.pid
 /data/topics-blacklist.txt
 /valgrind-out.txt
+/config/*.toml
+!/config/dev.toml
+!/config/supervisord_sites_tasks.conf

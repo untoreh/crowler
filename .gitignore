@@ -47,9 +47,11 @@ data_*/proxies/*
 /data/topics-blacklist.txt
 /valgrind-out.txt
 /config/*
+!/config/sites.toml
 !/config/dev.toml
 !/config/supervisord_sites_tasks.conf
 /src/css/colors/*
 !/src/css/colors/template.scss
 /config/logo/*
 !/config/logo/.gitkeep
+replace.txt

@@ -83,11 +83,14 @@ init_detector()
 
 
 def detect(s: str):
-    l = DETECTOR.detect_language_of(s)
-    if l is None:
+    try:
+        l = DETECTOR.detect_language_of(s)
+        if l is None:
+            return SLang.code
+        code = l.iso_code_639_1.name.lower()
+        return code if code != "zh" else "zh-CN"
+    except:
         return SLang.code
-    code = l.iso_code_639_1.name.lower()
-    return code if code != "zh" else "zh-CN"
 
 
 # def try_wrapper(fn, n: int, def_val=""):

@@ -1,0 +1,18 @@
+#+TITLE: VPSG
+
+* Build
+** css:
+For $sites assume the name of the python ~Site~ object or `$CONFIG_NAME` in nim.
+- If new icons have to be added, a use the `index.test.html` and the vite server to access the unocss dashboard, and copy the css from the dashboard into `src/css/icons.scss`.
+- run the nim server `nim r src/nim/server.nim` on port `:5050`
+- `scripts/copy.sh -css $sites` (ensure that `npm run build` is working correctly by checking files in `dist/*.css` to be fresh.)
+- scripts/docker.sh -c $sites
+* Deploy
+- Ensure /mnt is a mounted storage on remove server
+- create /mnt/hosts directory
+- copy `data` directory to /mnt/hosts/data
+- ensure docker is running
+- make sure the start script includes dns option for configuring timeout (important for proxies)
+- run docker image using script in `scripts/start.sh`
+* NIM compilation
+- `panics:on` can't be enabled, the codebase does large use of indexdefects

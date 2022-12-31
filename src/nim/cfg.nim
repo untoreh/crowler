@@ -98,6 +98,9 @@ setConfig("website_contact")
 fromConfig("website_custom_pages", os.getenv("WEB_CUSTOM_PAGES"), doSplit)
 fromConfig("website_alldomains", os.getenv("WEB_DOMAINS"), doSplit)
 
+when not declared(SERVER_MODE):
+  const SERVER_MODE* = os.getenv("SERVER_MODE", "1").parseBool
+
 const
   SITE_PATH* = PROJECT_PATH / "site"
   NOTO_FONT_URL* = "https://fonts.googleapis.com/css2?family=Noto+Serif+Display:ital,wght@0,100;0,300;0,700;1,100;1,300&family=Noto+Serif:ital,wght@0,400;0,700;1,400&family=Petrona:ital,wght@0,400;0,800;1,100;1,400&display=swap"
@@ -110,7 +113,6 @@ const
   ZSTD_COMPRESSION_LEVEL* = 2
   AMP* = true
   MINIFY* = true
-  RSS_ON_PUBLISH* = false
   RSS_N_ITEMS* = 20
   RSS_N_CACHE* = 1000
   ## Don't build yandex turbopages if the site is large
@@ -131,7 +133,6 @@ const
   N_RELATED* = 3
   ## Number of articles (1 per topic) to display on the homepage
   HOME_ARTS* = 10
-  SERVER_MODE* = true
 
   # These are useless in server mode
   TRANSLATION_TO_FILE* = true

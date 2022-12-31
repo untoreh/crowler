@@ -143,20 +143,28 @@ proc prevPageNum*(topic: string, pn: int): Future[int] {.async.} =
   let last = await lastPageNum(topic)
   return await prevPageNum(topic, pn, last)
 
-proc getLastArticles*(topic: string, n = 1): Future[seq[Article]] {.async.} =
-  ## Return the latest articles, from newest to oldest (index 0 is newest)
+proc getArticlesFrom*(topic: string, n = 1, pagenum = -1): Future[(seq[Article], int)] {.async.} =
+  ## Return the latest articles, from newest to oldest starting from page `pagenum` and going downward.
   if await topic.isEmptyTopicAsync:
     return
-  var pagenum = await lastPageNum(topic)
+  var pagenum =
+    if pagenum == -1: await lastPageNum(topic)
+    else: pagenum
   while pagenum >= 0:
     let arts = await getDoneArticles(topic, pagenum, rev = false)
     var a = arts.len - 1
     while a >= 0:
-      result.add arts[a]
-      if result.len >= n:
+      result[0].add arts[a]
+      if result[0].len >= n:
+        result[1] = pagenum
         return
       a.dec
     pagenum.dec
+  result[1] = pagenum
+
+proc getLastArticles*(topic: string, n = 1): Future[seq[Article]] {.async.} =
+  ## Return the latest articles, from newest to oldest (index 0 is newest)
+  return (await getArticlesFrom(topic, n))[0]
 
 proc getArticlePy*(topic: string, page: string | int, slug: string): Future[
     PyObject] {.async.} =

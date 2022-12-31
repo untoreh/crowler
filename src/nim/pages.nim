@@ -275,6 +275,7 @@ proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
   var
     nTopics = len(topicsCache)
     batchSize = cfg.HOME_ARTS.div(nTopics) + 1
+    counters = initTable[string, int](nTopics)
     nArts = 0
     content: string
     processed: HashSet[string]
@@ -292,14 +293,19 @@ proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
       continue
     let arts = await getLastArticles(topic, batchSize)
     if len(arts) > 0:
-      let ar = arts[0]
-      if ar.slug notin processed:
-        content.add $(await articleEntry(ar))
-        let link = sepLinks.filterNext(notEmpty)
-        if not link.isnil:
-          content.add buildHtml(tdiv(class = "ads-sep"), link)
-        processed.incl ar.slug
-        nArts.inc
+      if topic notin counters:
+        counters[topic] = -1
+      counters[topic].inc
+      for n in counters[topic]..<len(arts):
+        let ar = arts[n]
+        if ar.slug notin processed:
+          content.add $(await articleEntry(ar))
+          let link = sepLinks.filterNext(notEmpty)
+          if not link.isnil:
+            content.add buildHtml(tdiv(class = "ads-sep"), link)
+          processed.incl ar.slug
+          nArts.inc
+
   let pagetree = await buildPage(title = "",
                        content = verbatim(content),
                        slug = "",

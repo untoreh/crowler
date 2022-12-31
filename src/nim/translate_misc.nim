@@ -16,6 +16,7 @@ import
     translate_types,
     ldj
 
+export SLang
 var langTmpUri {.threadvar.}: Uri
 langTmpUri.opaque = false
 

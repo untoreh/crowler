@@ -84,8 +84,16 @@ proc head_tform(el: VNode, basedir: string, relpath: string, pair: langPair) {.g
             tags, img)
     el.add ldjTrans.asVNode
 
+proc breadcrumb_tform(el: VNode, basedir: string, relpath: string, pair: langPair) =
+  let node = el.find(VNodeKind.a, "breadcrumb-lang-link")
+  if node.kind == VNodeKind.a:
+    let txt = node.find(VNodeKind.text)
+    if len(node) == 2 and node[1].kind == VNodeKind.text:
+      node[1].value = pair.trg
+
 proc initTforms*() =
     vtransforms[VNodeKind.head] = head_tform
+    vtransforms[VNodeKind.section] = breadcrumb_tform
 
 
 # when isMainModule:

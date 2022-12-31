@@ -289,6 +289,8 @@ proc topicsLinks(cls = ""; kind = VNodeKind.li): Future[seq[VNode]] {.async.} =
 
 proc buildCrumbs(ar: Article; topic = ""; page = "";
     lang = ""): Future[VNode] {.async.} =
+  # Don't use lang since it breaks caching, let translation modify the links,
+  # use a tform funciton to change the language code in the lang box
   result = buildHtml(tdiv(class = "dropdown-breadcrumbs"))
   let topic = something(topic, ar.topic)
   let page = something(page, $ar.page)
@@ -303,27 +305,26 @@ proc buildCrumbs(ar: Article; topic = ""; page = "";
           span:
             text "home >> "
           text config.websiteTitle
-      if len(lang) > 0:
-        li(class = itemCls):
-          a(href = ($(config.websiteUrl / lang))):
-            span:
-              text "lang >> "
-            text lang
+      li(class = itemCls):
+        a(class = "breadcrumb-lang-link", href = ($(config.websiteUrl))):
+          span:
+            text "lang >> "
+          text SLang.code
       if len(topic) > 0:
         li(class = itemCls):
-          a(href = ($(config.websiteUrl / lang / topic))):
+          a(href = ($(config.websiteUrl / topic))):
             span:
               text "topic >> "
             text await topic.topicDesc
       if page != "-1":
         li(class = itemCls):
-          a(href = ($(config.websiteUrl / lang / topic / page))):
+          a(href = ($(config.websiteUrl / topic / page))):
             span:
               text "page >> "
             text "#" & page
       if not ar.isEmpty():
         li(class = itemCls):
-          let url = if lang != "": getArticleUrl(ar, lang) else: getArticleUrl(ar)
+          let url = getArticleUrl(ar)
           a(href = ($url)):
             span:
               text "article >> "

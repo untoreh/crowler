@@ -559,6 +559,12 @@ proc find*(node: VNode, kind: VNodeKind, attr: (string, string)): VNode =
     n.getAttr(attr[0]) == attr[1]:
       return n
   return node
+proc find*(node: VNode, kind: VNodeKind, cls: string): VNode =
+  for n in node.vflatorder():
+    if n.kind == kind and
+    cls in n.class:
+      return n
+  return node
 
 let cssStyles = initLockTable[string, VNode]()
 # FIXME: this should not be needed

@@ -254,7 +254,8 @@ proc pyGetProxy*(st: bool = true): Future[string] {.async.} =
 proc initPy*() =
   syncPyLock:
     try:
-      PyNone = pybi[].getattr("None")
+      if PyNone.isnil:
+        PyNone = pybi[].getattr("None")
     except:
       echo "Can't initialize PyNone"
       quit()

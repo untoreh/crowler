@@ -94,8 +94,8 @@ proc initArticle*(data: PyObject, pagenum = -1): Article =
     a.desc = pyget(data, "desc")
     a.content = pyget(data, "content")
     a.author = pyget(data, "author")
-    a.pubDate = pydate(data.pyget("pubDate", PyNone), getTime())
-    a.pubTime = pydate(data.pyget("pubTime", PyNone), default(Time))
+    a.pubDate = pydate(data.pyget("pubDate", PyNone), getTime()) # date from scraping
+    a.pubTime = pydate(data.pyget("pubTime", PyNone), default(Time)) # date from local publishing
     a.icon = pyget(data, "icon")
     a.url = pyget(data, "url")
     a.slug = pyget(data, "slug")

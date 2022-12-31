@@ -50,7 +50,7 @@ proc init*(_: typedesc[LockDB], path: string, ttl = initDuration(days = 100),
     let lc_path = path / "last_compact.txt"
 
     let lc =
-      if fileExists(lc_path): readFile(path / "last_compact").parseInt.int64
+      if fileExists(lc_path): readFile(lc_path).parseInt.int64
       else: ttl.inSeconds
     if getTime().toUnix - lc > ttl.inSeconds:
       result.compact()
@@ -139,6 +139,7 @@ proc compact*(ldb: LockDB, purgeOnError = false, batchsize = 1000) =
             ldb.handle.write(batch)
             clear(batch)
             n = 0
+            GC_runOrc()
       if n > 0:
         ldb.handle.write(batch)
   except ValueError:

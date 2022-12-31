@@ -660,8 +660,8 @@ class Site:
         self.load_topics()
         assert isinstance(self.topics_arr, za.Array)
         assert isinstance(topic, str)
-        idx = self.topics_index[topic]
-        if idx in self.topics_index:
+        idx = self.get_topic_idx(topic)
+        if idx < len(self.topics_arr):
             t = self.topics_arr[idx, Topic.PubDate]
             assert isinstance(t, int)
             return t
@@ -673,7 +673,7 @@ class Site:
             self.load_topics()
             assert isinstance(self.topics_arr, za.Array)
             assert isinstance(topic, str)
-            idx = self.topics_index[topic]
+            idx = self.get_topic_idx(topic)
             self.topics_arr[idx, Topic.PubDate] = int(time.time())
             return True
         except:
@@ -692,14 +692,15 @@ class Site:
 
     def get_random_topic(self, allow_empty=False):
         assert self.topics_arr is not None
-        if len(self.random_topic_list) == 0:
-            self.random_topic_list.extend(self.topics_dict.keys())
-        while len(self.random_topic_list) > 0:
+        while True:
+            if len(self.random_topic_list) == 0:
+                self.random_topic_list.extend(self.topics_dict.keys())
+                if len(self.random_topic_list) == 0:
+                    return ""
             idx = randint(0, len(self.random_topic_list) - 1)
             topic = self.random_topic_list.pop(idx)
             if allow_empty or not self.is_empty(topic):
                 return topic
-        return ""
 
     def remove_broken_articles(self, topic):
         # valid_unpub = []
@@ -762,8 +763,8 @@ class Site:
         return t
 
     def update_article_count(self, topic=None):
-        # assert isinstance(self.topics_arr, za.Array)
-        arr = self._migrate_to_new_size()
+        assert isinstance(self.topics_arr, za.Array)
+        arr = self.topics_arr
         if topic is None:  # Update all topics
             for n, t in enumerate(arr):
                 arr[n] = self._update_topic_articles(t)

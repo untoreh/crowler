@@ -25,7 +25,7 @@ import cfg,
        lsh,
        sharedqueue
 
-when cfg.RSS_ON_PUBLISH:
+when SERVER_MODE:
   import rss
 
 let pageset = initLockTable[string, bool]()
@@ -48,19 +48,21 @@ proc curPageNumber(topic: string): Future[int] {.async.} =
 proc pubPage(topic: string, pagenum: string, nPagePosts: int, finalize = false, istop = false,
         with_arts = false) {.async.} =
   ## Writes a single page (fetching its related articles, if its not a template) to storage
-  topicPage(topic, pagenum, istop)
+  when not SERVER_MODE:
+    topicPage(topic, pagenum, istop)
 
-  info "Updating page:{pagenum} for topic:{topic} with entries:{nPagePosts}"
-  await processHTML(topic,
-              pagenum / "index",
-              pagetree)
+    info "Updating page:{pagenum} for topic:{topic} with entries:{nPagePosts}"
+    await processHTML(topic,
+                pagenum / "index",
+                pagetree)
   # if we pass a nPagePosts we mean to finalize
   if finalize:
     withPylock:
       discard site.update_page_size(topic, pagenum.parseInt, nPagePosts, final = true)
-  if with_arts:
-    for a in arts:
-      await processHtml(topic / pagenum, a.slug, (await buildPost(a)), a)
+  when not SERVER_MODE:
+    if with_arts:
+      for a in arts:
+        await processHtml(topic / pagenum, a.slug, (await buildPost(a)), a)
 
 proc finalizePages(topic: string, pn: int, newpage: bool,
     nPagePosts: ptr int) {.async.} =
@@ -107,50 +109,56 @@ proc finalizePages(topic: string, pn: int, newpage: bool,
 #             let pagedone = done[k]
 #             newdone.add()
 
+template pySaveDone() =
+  withPyLock:
+    discard site.save_done(topic, nProcessed, donePy[], pagenum)
+
 proc filterDuplicates(topic: string, lsh: PublishedArticles, pagenum: int,
                       posts: ptr seq[(VNode, Article)],
                       donePy: ptr seq[PyObject],
-                      doneArts: ptr seq[Article]): Future[bool] {.gcsafe, async.} =
+                      doneArts: ptr seq[Article],
+                      stateful: static[bool]): Future[bool] {.gcsafe, async.} =
+
   var (nProcessed, arts) = await getArticles(topic, pagenum = pagenum)
   let pubtime = getTime().toUnix
   if arts.len == 0:
+    pySaveDone()
     return false
   clear(pageset)
   for a in arts:
     if await addArticle(lsh, a.content.unsafeAddr):
       # make sure article titles/slugs are unique
-      var u = 1
-      var uslug = a.slug
-      var utitle = a.title
+      var
+        u = 1
+        uslug = a.slug
+        utitle = a.title
       while uslug in pageset:
         uslug = fmt"{a.slug}-{u}"
         utitle = fmt"{a.title} ({u})"
         u += 1
+      a.topic = topic
       a.slug = uslug
       a.title = utitle
       a.page = pagenum
-      if a.topic == "":
-        a.topic = topic
-        withPyLock:
-          a.py["topic"] = topic
-      block:
-        let post =
-          when cfg.SERVER_MODE: await buildPost(a)
-          else: nil
-        posts[].add((post, a))
+      a.pubTime = pubtime.fromUnix
       withPyLock:
+        a.py["topic"] = topic
         a.py["slug"] = uslug
         a.py["title"] = utitle
         a.py["page"] = pagenum
         a.py["pubTime"] = pubtime
+      block:
+        var post: VNode
+        when stateful:
+          post = await buildPost(a)
+        posts[].add((post, a))
   # update done articles after uniqueness checks
   withPyLock:
     for (_, a) in posts[]:
       donePy[].add a.py
       doneArts[].add a
-  await updateTopicPubdate()
-  withPyLock:
-    discard site.save_done(topic, nProcessed, donePy[], pagenum)
+  doassert await updateTopicPubdate(topic)
+  pySaveDone()
   return true
 
 proc ensureLS(topic: string): Future[PublishedArticles] {.async, raises: [].} =
@@ -173,11 +181,11 @@ macro infoPub(msg: static[string]) =
   quote do:
     info `m`
 
-proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
+proc pubTopic*(topic: string, stateful: static[bool] = false): Future[bool] {.gcsafe, async.} =
   ##  Generates html for a list of `Article` objects and writes to file.
   infopub "start"
   withPyLock:
-    doassert topic in site.load_topics()[1]
+    doassert topic in site.callMethod("load_topics")[1]
   if not (await hasUnpublishedArticles(topic)):
     infopub "no unpublished articles"
     return false
@@ -200,12 +208,12 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   while posts.len == 0 and (getTime() - startTime).inSeconds <
       cfg.PUBLISH_TIMEOUT:
     if not await filterDuplicates(topic, lsh, pagenum, posts.addr, donePy.addr,
-        doneArts.addr):
+                                  doneArts.addr, stateful):
       break
 
   # At this point articles "state" is updated on python side
   # new articles are "published" and the state (pagecache, rss, search) has to be synced
-  when not cfg.SERVER_MODE:
+  when not SERVER_MODE:
     if newpage:
       ensureDir(SITE_PATH / pagedir)
   let nNewPosts = len(posts)
@@ -219,7 +227,7 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   await saveLS(topic, lsh)
   infopub "Writing {nNewPosts} articles for topic: {topic}"
   # after writing the new page, ensure home points to the new page
-  when not cfg.SERVER_MODE:
+  when not SERVER_MODE:
     for (tree, a) in posts:
       await processHtml(pagedir, a.slug, tree, a)
     if newpage:
@@ -240,7 +248,7 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
   infopub "finalizing pages"
   await finalizePages(topic, pagenum, newpage, nPagePosts.addr)
   # update feed file
-  when cfg.RSS_ON_PUBLISH:
+  when stateful:
     infopub "updating feeds"
     let tfeed = await topic.fetchFeed
     tfeed.update(topic, doneArts, dowrite = true)
@@ -250,10 +258,11 @@ proc pubTopic*(topic: string): Future[bool] {.gcsafe, async.} =
       var relpath = topic / $pagenum / ar.slug
       await search.push(relpath)
   infopub "clearing sitemaps"
-  clearSiteMap(topic)
-  clearSiteMap(topic, pagenum)
+  when stateful:
+    clearSiteMap(topic)
+    clearSiteMap(topic, pagenum)
   # update ydx turbo items
-  when cfg.YDX:
+  when cfg.YDX and stateful:
     infopub "updating yandex"
     writeFeed()
   infopub "published {nNewPosts} new posts."
@@ -278,7 +287,7 @@ proc maybePublish*(topic: string) {.gcsafe, async.} =
   let t = getTime()
   withLock(pubLock):
     let
-      tpd = (await topicPubdate())
+      tpd = (await topicPubdate(topic))
       pastTime = inMinutes(t - tpd)
       pubInterval = await pubTimeInterval(topic)
     var published: bool
@@ -286,7 +295,7 @@ proc maybePublish*(topic: string) {.gcsafe, async.} =
       debug "pubtask: {topic} was published {pastTime} hours ago, publishing."
       lastPubTime = t
       published = await pubTopic(topic)
-      if published:
+      if published and SERVER_MODE:
         # clear homepage and topic page cache
         deletePage("")
         deletePage("/" & topic)
@@ -294,7 +303,7 @@ proc maybePublish*(topic: string) {.gcsafe, async.} =
 proc resetTopic(topic: string) =
   syncPyLock():
     discard site.reset_topic_data(topic)
-  when cfg.RSS_ON_PUBLISH:
+  when SERVER_MODE:
     pageCache.delete(topic.feedKey)
   clearSiteMap(topic, all = true)
   waitFor saveLS(topic, init(PublishedArticles))
@@ -303,7 +312,7 @@ proc pubAllPages(topic: string, clear = true) {.async.} =
   ## Starting from the homepage, rebuild all archive pages, and their articles
   let (topdir, numdone) = await topic.getState
   assert topdir == numdone, fmt"{topdir}, {numdone}"
-  when not cfg.SERVER_MODE:
+  when not SERVER_MODE:
     if clear:
       for d in walkDirs(SITE_PATH / topic / "*"):
         removeDir(d)
@@ -319,7 +328,7 @@ proc pubAllPages(topic: string, clear = true) {.async.} =
     var nPagePosts = await pageSize(topic, n)
     await pubPage(topic, $pagenum, nPagePosts, finalize = true,
         with_arts = true)
-  when not cfg.SERVER_MODE:
+  when not SERVER_MODE:
     ensureHome(topic, topdir)
 
 # proc refreshPageSizes(topic: string) =

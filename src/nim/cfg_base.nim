@@ -38,6 +38,6 @@ export logging
 
 let WEBSITE_DEBUG_PORT* =
   when releaseMode or dockerMode: ""
-  else: os.getenv("WEBSITE_DEBUG_PORT", ":5050")
+  else: ":" & os.getenv("WEBSITE_DEBUG_PORT", "5050")
 
 const BASE_URL* = Uri()

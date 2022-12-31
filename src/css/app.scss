@@ -500,6 +500,8 @@ header .page {
     padding: 0;
     margin: 0;
     background: var(--mdc-theme-secondary);
+    max-height: 75vh;
+    overflow: scroll;
     .topic-pg {
       background: var(--mdc-theme-secondary);
       filter: opacity(1);

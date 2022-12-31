@@ -55,4 +55,5 @@ cp -a lib/vendor/imageflow.dist/libimageflow.so $trg/lib
 cp -a nim.cfg $trg/nim.cfg.debug
 cp -a nim.cfg.release $trg/nim.cfg
 cp -a site.nim.cfg $trg/src/nim/cli.nim.cfg
+cp -a site.nim.cfg $trg/src/nim/cli_tasks.nim.cfg
 cp -a site.nimble $trg/

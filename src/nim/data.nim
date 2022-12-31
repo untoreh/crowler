@@ -1,4 +1,5 @@
-import std/[os, times, strformat, tables, macros, sugar, hashes, sets, sequtils, parseutils, strutils, locks]
+import std/[os, times, strformat, tables, macros, sugar, hashes, sets, sequtils,
+    parseutils, strutils, locks]
 import leveldb
 
 import utils
@@ -17,12 +18,15 @@ proc `=destroy`*(db: var LockDBObj) =
   deinitLock(db.lock)
 
 const ttlKey = "ldb-ttl-key"
-proc init*(_: typedesc[LockDB], path: string, ttl = initDuration(days = 100), ignoreErrors= false): LockDB =
+proc init*(_: typedesc[LockDB], path: string, ttl = initDuration(days = 100),
+           ignoreErrors = false, lazyCompact = true): LockDB =
   result = create(LockDBObj)
-  result.handle = leveldb.open(path)
+  result.handle = leveldb.open(path, writeBufferSize = 64 * 1024 * 1024,
+                               maxFileSize = 32 * 1024 * 1024,
+                               cacheCapacity = 8 * 1024 * 1024)
   if result.handle.get(ttlKey).isnone:
     if ttl == default(Duration):
-        raise newException(ValueError, "TTL must be provided if the database doesn't already have one.")
+      raise newException(ValueError, "TTL must be provided if the database doesn't already have one.")
     result.handle.put(ttlKey, $ttl.inSeconds)
     result.ttl = ttl
   elif ttl != default(Duration):
@@ -38,12 +42,22 @@ proc init*(_: typedesc[LockDB], path: string, ttl = initDuration(days = 100), ig
         doraise()
       result.ttl = residentTtl
     except ValueError:
+      logexc()
       warn "Corrupted ttl found in database, overwriting with {ttl}."
       result.handle.put(ttlKey, $ttl.inSeconds)
       result.ttl = ttl
-      logexc()
+  if lazyCompact:
+    let lc_path = path / "last_compact.txt"
 
-proc isValid(ldb: LockDB, k: string, v: Option[string] = none[string](), nocheck: static[bool] = false): (bool, string) =
+    let lc =
+      if fileExists(lc_path): readFile(path / "last_compact").parseInt.int64
+      else: ttl.inSeconds
+    if getTime().toUnix - lc > ttl.inSeconds:
+      result.compact()
+      writeFile(lc_path, $getTime().toUnix)
+
+proc isValid(ldb: LockDB, k: string, v: Option[string] = none[string](),
+    nocheck: static[bool] = false, doraise: static[bool] = true): (bool, string) =
   if k == ttlKey:
     return (true, "")
   var v = v
@@ -64,7 +78,10 @@ proc isValid(ldb: LockDB, k: string, v: Option[string] = none[string](), nocheck
         if getTime() - ttlTime.fromUnix <= ldb.ttl: # cache data is still valid
           result = (true, spl[1])
       else:
-        raise newException(ValueError, &"No creation date for key: {k}")
+        when doraise:
+          raise newException(ValueError, &"No creation date for key: {k}")
+        else:
+          result = (false, "")
 
 proc getUnchecked*(ldb: LockDB, k: string): string =
   let fetched = isValid(ldb, k, nocheck = true)
@@ -88,7 +105,7 @@ proc `get`*(ldb: LockDB, k: string): string =
 
 template `[]`*(ldb: LockDB, k: string): string = ldb.get(k)
 
-proc clear*(ldb: LockDB, keepttl=true) =
+proc clear*(ldb: LockDB, keepttl = true) =
   withLock(ldb.lock):
     var ttlStr: string
     if keepttl:
@@ -106,16 +123,24 @@ proc delete*(ldb: LockDB, k: string) =
     ldb.handle.delete(k)
 template del*(ldb: LockDB, k: string) = ldb.delete(k)
 
-proc compact*(ldb: LockDB, purgeOnError = false) =
+proc compact*(ldb: LockDB, purgeOnError = false, batchsize = 1000) =
   ## Remove expired keys
   var v: string
   var batch = newBatch()
+  defer: destroy(batch)
+  var n = 0
   try:
     withLock(ldb.lock):
       for (k, v) in ldb.handle.iter():
-        if not isValid(ldb, k, some(v))[0]:
+        if not isValid(ldb, k, some(v), doraise = false)[0]:
           batch.delete(k)
-      ldb.handle.write(batch)
+          n.inc
+          if n > batchsize:
+            ldb.handle.write(batch)
+            clear(batch)
+            n = 0
+      if n > 0:
+        ldb.handle.write(batch)
   except ValueError:
     logexc()
     if purgeOnError:
@@ -123,6 +148,7 @@ proc compact*(ldb: LockDB, purgeOnError = false) =
 
 proc put*[T](ldb: LockDB, vals: T) =
   var batch = newBatch()
+  defer: destroy(batch)
   for (k, v) in vals:
     batch.put(k, $getTime().toUnix & ";" & v)
   ldb.handle.write(batch)

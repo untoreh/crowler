@@ -17,12 +17,11 @@ proc initSlations*(comp = true) {.gcsafe.} =
 
 var trans*: LockDB
 
-proc initTranslateDb*(comp = true) =
+proc initTranslateDb*(comp = false) =
   if trans.isnil:
     trans = init(LockDB, config.websitePath / "translate.db",
         ttl = initDuration(days = 300), ignoreErrors = true)
-  if comp:
-    trans.compact(purgeOnError = true)
+    if comp: trans.compact(purgeOnError = true)
   else:
     assert(false, "Translate DB already initialized.")
 

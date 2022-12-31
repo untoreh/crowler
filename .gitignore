@@ -55,3 +55,4 @@ data_*/proxies/*
 /config/logo/*
 !/config/logo/.gitkeep
 replace.txt
+README_local.org

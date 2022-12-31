@@ -274,7 +274,8 @@ proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
     a = default(Article)
   var
     nTopics = len(topicsCache)
-    narts = 0
+    batchSize = cfg.HOME_ARTS.div(nTopics) + 1
+    nArts = 0
     content: string
     processed: HashSet[string]
     trial = 0
@@ -289,7 +290,7 @@ proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
       topic = site.get_random_topic().to(string)
     if topic == "": # this can happen if we ran out of topics
       continue
-    let arts = await getLastArticles(topic, 1)
+    let arts = await getLastArticles(topic, batchSize)
     if len(arts) > 0:
       let ar = arts[0]
       if ar.slug notin processed:

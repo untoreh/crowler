@@ -805,7 +805,6 @@ proc rewriteUrl*(el, rewritePath: auto, hostname = config.websiteDomain) =
   # debug "old: {prev} new: {$uriVar}, {rewritePath}"
 
 
-# import faststreams/[inputs, outputs]
 import faststreams
 proc readFileImpl(handle: InputStream): seq[byte] {.fsMultiSync.} =
   defer: handle.close()

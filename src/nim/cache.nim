@@ -15,7 +15,7 @@ let searchCache* = initLockLruCache[string, string](32)
 var pageCache*: LockDB
 var imgCache*: LockDB
 
-proc initCache*(doclear=false, comp=true) =
+proc initCache*(doclear=false, comp=false) =
   try:
     setNil(pageCache):
       init(LockDB, config.websitePath / "page", initDuration(days = 1))

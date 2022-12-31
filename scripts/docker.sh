@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 set -e
 
-export WEB_DOMAINS="" # list of domains to account for
-export WEB_CUSTOM_PAGES="dmca,terms-of-service,privacy-policy" # list of slugs for pages that that have templates
-
 if [ "$1" = "-d" ]; then
     NIM=debug
     shift
@@ -21,8 +18,7 @@ fi
     shift
 }
 
-targets=${1:-wsl}
-[ -n "$1" ] && sites="$(echo "$targets" | tr "," "\n")" || sites=wsl
+[ -n "$1" ] && sites="$(echo "$1" | tr "," "\n")" || sites="dev"
 
 ## python dyn library path
 pyprefix=/usr/lib/x86_64-linux-gnu/libpython3.10
@@ -32,11 +28,10 @@ else
     py="${pyprefix}.so"
 fi
 
-[ -n "$docopy" ] && scripts/copy.sh $targets
-for site in $sites; do
-    tag=untoreh/sites:cli
-
-    sudo docker build --target $site $nocache \
+[ -n "$docopy" ] && scripts/copy.sh $sites
+for target in "scraper" "server"; do
+    tag=untoreh/sites:$target
+    sudo docker build --target $target $nocache \
         --build-arg NIM_ARG=$NIM \
         --build-arg LIBPYTHON_PATH=$py \
         -t $tag \

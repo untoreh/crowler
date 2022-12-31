@@ -87,10 +87,11 @@ RUN /usr/bin/pip3 install -r requirements2.txt
 RUN /usr/bin/pip3 install --upgrade --pre html5lib
 
 FROM sitedeps2 AS sitedeps3
+COPY / /site/
 RUN /usr/bin/python3 -m textblob.download_corpora
 RUN /usr/bin/python3 lib/py/main.py; true # perform modules setups on imports
 
-FROM sitebase AS sitebuild
+FROM sitedeps3 AS sitebuild
 ARG NIM_ARG release
 ARG CACHE=0
 ARG LIBPYTHON_PATH /usr/lib/x86_64-linux-gnu/libpython3.10d.so
@@ -102,6 +103,7 @@ ENV PROJECT_DIR /site
 RUN /site/scripts/switchdebug.sh /site
 # HACK: refresh some nim packages
 RUN cd /site; \
+    rm -rf ~/.nimbe/pkgs/chronos*; \
     nimble install -y https://github.com/untoreh/nimpy@#master; \
     nimble install -y https://github.com/untoreh/nim-chronos@#update; \
     cd - ;
@@ -122,10 +124,10 @@ RUN cd /site; nimble build cli_tasks
 # RUN apt -y install massif-visualizer
 
 FROM sitebuild as scraper
-ENV SITES wsl,wsl
+ENV SITES dev
 CMD /site/scripts/scraper.sh
 
-FROM site AS server
+FROM sitebuild AS server
 HEALTHCHECK --timeout=5s CMD scripts/healthcheck.sh
 RUN cd /site; nimble build cli
 RUN [ "$NIM" = release ] && strip -s cli || exit 0

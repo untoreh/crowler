@@ -23,7 +23,8 @@ proc init*(_: typedesc[LockDB], path: string, ttl = initDuration(days = 100),
   result = create(LockDBObj)
   result.handle = leveldb.open(path, writeBufferSize = 64 * 1024 * 1024,
                                maxFileSize = 32 * 1024 * 1024,
-                               cacheCapacity = 8 * 1024 * 1024)
+                               # cacheCapacity = 8 * 1024 * 1024
+                               )
   if result.handle.get(ttlKey).isnone:
     if ttl == default(Duration):
       raise newException(ValueError, "TTL must be provided if the database doesn't already have one.")
@@ -53,6 +54,7 @@ proc init*(_: typedesc[LockDB], path: string, ttl = initDuration(days = 100),
       if fileExists(lc_path): readFile(lc_path).parseInt.int64
       else: ttl.inSeconds
     if getTime().toUnix - lc > ttl.inSeconds:
+      warn "Compacting database at {path}"
       result.compact()
       writeFile(lc_path, $getTime().toUnix)
 

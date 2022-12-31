@@ -252,8 +252,9 @@ proc topicsList*(ucls: string; icls: string; small: static[
     withPyLock:
       (topic, name) = ($topics[i][0], $topics[i][1])
       isEmpty = isEmptyTopic(topic)
-      donePagesCount = if isEmpty: 0 else: len(await topicDonePages(topic,
-          locked = false))
+      donePagesCount =
+          if isEmpty: 0
+          else: len(await topicDonePages(topic, locked = false)) - 1
     if isEmpty:
       continue
     let liNode = buildHtml(li(class = fmt"{icls}")):

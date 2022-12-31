@@ -99,7 +99,7 @@ fromConfig("website_custom_pages", os.getenv("WEB_CUSTOM_PAGES"), doSplit)
 fromConfig("website_alldomains", os.getenv("WEB_DOMAINS"), doSplit)
 
 when not declared(SERVER_MODE):
-  const SERVER_MODE* = os.getenv("SERVER_MODE", "1").parseBool
+  const SERVER_MODE* {.booldefine.} = os.getenv("SERVER_MODE", "1").parseBool
 
 const
   SITE_PATH* = PROJECT_PATH / "site"

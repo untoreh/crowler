@@ -1,7 +1,7 @@
 import chronos
 import cligen
 
-const SERVER_MODE* = true
+const SERVER_MODE* {.booldefine.} = true
 
 import server_tasks
 import pyutils, search, lsh, nativehttp, topics, shorturls

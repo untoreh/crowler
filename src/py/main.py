@@ -7,6 +7,7 @@ import shutil
 import time
 import traceback as tb
 from typing import List, Union
+import gc
 
 import zarr as za
 from numpy import ndarray
@@ -202,6 +203,7 @@ def run_parse_job(site, topic):
     log_parsed(
         f"Found {len(arts)} articles and {len(feeds)} feeds for topic {topic}.\n"
     )
+    gc.collect()
     return
 
 
@@ -238,6 +240,7 @@ def run_feed_job(site: Site, topic):
         site.update_article_count(topic)
     else:
         log.info("%s@%s: No articles were found queued.", topic, site.name)
+    gc.collect()
     return articles
 
 
@@ -273,6 +276,7 @@ def topics_worker(site: Site):
         sched.apply(parse_worker, site, topic)
         sched.apply(feed_worker, site, topic)
         log.info("topics: added new topic %s", topic)
+        gc.collect()
 
 
 def site_scheduling(site: Site, throttle=60):

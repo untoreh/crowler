@@ -110,8 +110,16 @@ proc cleanupTask*(): Future[void] {.async.} =
       warn "cleanuptask: failed with error."
     await sleepAsync(cleanupInterval)
 
+# gc
+pygil.globalAcquire()
+pyObjPtr (pyGC, pyImport("gc"))
+doassert not isnil(pyGC)
+pygil.release()
 proc memWatcherTask*() {.async.} =
+  initPy()
   while true:
+    withPylock:
+      discard pyGC[].collect()
     if memLimitReached():
       warn "memwatcher: mem limit ({memLimit}MB) reached!"
       quitl()

@@ -753,7 +753,7 @@ proc startServer*(doclear = false, port = 0, loglevel = "info") =
   readAdsConfig()
 
   initTopics()
-  runTasks(@[mem])
+  runTasks(@[mem, cleanup])
   runAdsWatcher()
   runAssetsWatcher()
 

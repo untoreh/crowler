@@ -254,7 +254,7 @@ proc topicsList*(ucls: string; icls: string; small: static[
       isEmpty = isEmptyTopic(topic)
       donePagesCount =
           if isEmpty: 0
-          else: len(await topicDonePages(topic, locked = false)) - 1
+          else: len(await topicDonePages(topic, locked = false)) - 2
     if isEmpty:
       continue
     let liNode = buildHtml(li(class = fmt"{icls}")):

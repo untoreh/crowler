@@ -143,22 +143,27 @@ proc prevPageNum*(topic: string, pn: int): Future[int] {.async.} =
   let last = await lastPageNum(topic)
   return await prevPageNum(topic, pn, last)
 
-proc getArticlesFrom*(topic: string, n = 1, pagenum = -1): Future[(seq[Article], int)] {.async.} =
+proc getArticlesFrom*(topic: string, n = 1, pagenum = -1, skip = 0): Future[(seq[Article], int)] {.async.} =
   ## Return the latest articles, from newest to oldest starting from page `pagenum` and going downward.
+  ## `skip` controls how many articles to exclude from the head.
   if await topic.isEmptyTopicAsync:
     return
   var pagenum =
     if pagenum == -1: await lastPageNum(topic)
     else: pagenum
+  var skip = skip
   while pagenum >= 0:
     let arts = await getDoneArticles(topic, pagenum, rev = false)
-    var a = arts.len - 1
-    while a >= 0:
-      result[0].add arts[a]
+    var nArts = arts.len - 1
+    while nArts >= 0:
+      if skip > 0:
+        skip.dec
+        continue
+      result[0].add arts[nArts]
       if result[0].len >= n:
         result[1] = pagenum
         return
-      a.dec
+      nArts.dec
     pagenum.dec
   result[1] = pagenum
 

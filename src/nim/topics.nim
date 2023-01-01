@@ -72,15 +72,19 @@ proc isEmptyTopic*(topic: string): bool {.inline.} =
 
 type TopicTuple* = tuple[slug, name: string, timestamp: int64, pubcount, unpubcount: int]
 proc toTopicTuple(py: PyObject): TopicTuple  =
-  result.slug = py[0].to(string)
-  result.name = py[1].to(string)
-  let ts = py[2]
-  result.timestamp =
-    if ts.pyisint: ts.to(int64)
-    elif ts.pyisstr: ts.to(string).parseInt
-    else: 0
-  result.pubcount = py[3].to(int)
-  result.unpubcount = py[4].to(int)
+  try:
+    result.slug = py[0].to(string)
+    result.name = py[1].to(string)
+    let ts = py[2]
+    result.timestamp =
+      if ts.pyisint: ts.to(int64)
+      elif ts.pyisstr: ts.to(string).parseInt
+      else: 0
+    result.pubcount = py[3].to(int)
+    result.unpubcount = py[4].to(int)
+  except:
+    logexc()
+    echo py
 proc loadTopics*(force = false): Future[PySequence[TopicTuple]] {.async.} =
   withPyLock:
     return initPySequence[TopicTuple](site.load_topics(force)[0])

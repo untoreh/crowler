@@ -43,7 +43,7 @@ proc pathLink*(path: string, code = "", rel = true,
 
 proc buildImgUrl*(ar: Article; cls = "image-link", defsrc = ""): VNode =
   var srcsetstr, bsrc: string
-  let defaultImgOnError = fmt"this.onerror=null; this.src='{defsrc}'"
+  let defaultImgOnError = fmt"this.onerror=null; this.style['filter'] = 'opacity(0.1);'; this.src='{defsrc}'"
   if ar.imageUrl != "":
     # add `?` because chromium doesn't treat it as a string otherwise
     let burl = "?u=" & ar.imageUrl.toBString(true)
@@ -51,7 +51,14 @@ proc buildImgUrl*(ar: Article; cls = "image-link", defsrc = ""): VNode =
     for (view, size) in zip(IMG_VIEWPORT, IMG_SIZES):
       srcsetstr.add "//" & $(config.websiteUrl_IMG / size / burl)
       srcsetstr.add " " & view & ","
-  let i = buildHtml(img(class = "", src = something(bsrc, defsrc), srcset = srcsetstr, loading = "lazy"))
+
+  let i = buildHtml(img(class = "", srcset = srcsetstr, loading = "lazy"))
+  if bsrc.len > 0:
+    i.setAttr("src", bsrc)
+  else:
+    i.setAttr("src", defsrc)
+    i.setAttr("style", "filter: opacity(0.1);")
+
   i.setAttr("onerror", defaultImgOnError)
   let link =
     buildHtml(a(class = cls, href = ar.imageOrigin, target = "_blank", alt = "Post image source."))

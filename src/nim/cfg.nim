@@ -30,6 +30,7 @@ type ConfigObj {.partial.} = object
   dataAdsPath*: string
   assetsPath*: string
   defaultImage*: string
+  defaultImageUrl*: Uri
   defaultImageMime*: string
   cssBunUrl*: string
   cssCritRelUrl*: string
@@ -149,6 +150,7 @@ config.dataAssetsPath = config.dataPath / "assets" / config.websiteName
 config.dataAdsPath = config.dataPath / "ads" / config.websiteName
 config.assetsPath = PROJECT_PATH / "src" / "assets"
 config.defaultImage = config.assetsPath / "image.svg"
+config.defaultImageUrl = BASE_URL / "assets" / "image.svg"
 config.defaultImageMime = "image/svg+xml"
 config.cssBunUrl = $(config.siteAssetsPath / "bundle.css")
 config.cssCritRelUrl = $(config.siteAssetsDir / "bundle-crit.css")

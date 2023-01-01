@@ -439,7 +439,7 @@ proc buildRelated*(a: Article): Future[VNode] {.async.} =
       let
         entry = newVNode(li)
         link = newVNode(VNodeKind.a)
-        img = buildImgUrl(relart, "related-img", defaultImageU8)
+        img = buildImgUrl(relart, "related-img", $config.defaultImageUrl)
       link.setAttr("href", getArticleUrl(relart))
       link.value = relart.title
       link.add newVNode(VNodeKind.text)
@@ -510,7 +510,7 @@ proc postTitle(a: Article): Future[VNode] {.async.} =
             text a.getAuthor
         adLink tags, AdLinkStyle.ico
 
-    buildImgUrl(a, defsrc = defaultImageU8)
+    buildImgUrl(a, defsrc = $config.defaultImageUrl)
 
 proc postContent(txt: string; ar: ptr Article = emptyArt; topic = ""; lang = "";
     withlinks = true): Future[VNode] {.async.} =

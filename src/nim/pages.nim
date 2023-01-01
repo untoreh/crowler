@@ -108,7 +108,7 @@ proc articleEntry(ar: Article, topic = ""): Future[VNode] {.async.} =
   let relpath = getArticlePath(ar)
   try:
     return buildHtml(article(class = "entry")):
-      buildImgUrl(ar, defsrc = defaultImageU8)
+      buildImgUrl(ar, defsrc = $config.defaultImageUrl)
       h2(class = "entry-title", id = ar.slug):
         a(href = relpath):
           text ar.title
@@ -162,7 +162,9 @@ template topicPage*(name: string, pn: string, istop = false,
     lng = "") {.dirty.} =
   ## Writes a single page (fetching its related articles, if its not a template) to storage
   let pnInt = pn.parseInt
-  let arts = await getDoneArticles(name, pagenum = pnInt)
+  let arts =
+    if istop: await getLastArticles(name, cfg.HOME_ARTS)
+    else: await getDoneArticles(name, pagenum = pnInt)
   debug "topics: name page for page {pnInt} ({len(arts)})"
   let content = await buildShortPosts(arts, name, lng)
   # if the page is not finalized, it is the homepage

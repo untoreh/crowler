@@ -187,7 +187,9 @@ template checkSitemapSize(sm): untyped = doassert sizeof(sm) * sm.len < maxSize;
 
 proc fetchSiteMap*(): Future[string] {.async.} =
   return pageCache.lgetOrPut(sitemapKey("")):
+    echo "sitemap.nim:190"
     let sm = (await buildSiteSitemap()).toXmlString
+    echo "sitemap.nim:192"
     checkSitemapSize sm
 
 proc fetchSiteMap*(topic: string): Future[string] {.async.} =

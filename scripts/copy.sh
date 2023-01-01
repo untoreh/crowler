@@ -27,6 +27,7 @@ cp -a src/{assets,css,js} $trg/src/ &>/dev/null
 
 # misc
 cp -a src/assets/empty.png $trg/site/assets/
+cp -a src/assets/image.svg $trg/site/assets/
 
 mkdir -p $trg/src/nim
 cp -a src/nim/*.nim $trg/src/nim/

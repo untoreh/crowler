@@ -459,26 +459,25 @@ template handleCacheClear() =
         reqCtx.norm_capts = uriTuple(reqCtx.url.path)
         try:
           if reqCtx.norm_capts.art != "" and
-            not (reqCtx.norm_capts.topic in notTopics) and
-            not (reqCtx.norm_capts.page in notTopics):
+            (reqCtx.norm_capts.topic notin notTopics) and
+            (reqCtx.norm_capts.page notin notTopics):
             debug "cache: deleting article cache {reqCtx.norm_capts.art:.40}"
             await deleteArt(reqCtx.norm_capts, cacheOnly = true)
           elif reqCtx.norm_capts.topic == "i":
             imgCache.del(reqCtx.imgKey)
-          elif reqCtx.norm_capts.topic in notTopics:
-            debug "cache: deleting key {reqCtx.key}"
-            pageCache.del(reqCtx.key)
           elif reqCtx.norm_capts.topic == "assets":
             assetsCache.del(reqCtx.key)
           elif "sitemap.xml" in reqCtx.norm_capts or "index.xml" in
               reqCtx.norm_capts:
             let capts = reqCtx.norm_capts
-            if capts.topic == "":
+            if capts.topic == "sitemap.xml":
               clearSiteMap()
-            elif capts.page == "":
+            elif capts.page == "sitemap.xml":
               clearSiteMap(capts.topic)
-            else:
+            elif capts.art == "sitemap.xml":
               clearSiteMap(capts.topic, capts.page)
+            elif capts.art == "index.ml":
+              clearSiteMap(capts.topic, true)
           elif "feed.xml" in reqCtx.norm_capts:
             let capts = reqCtx.norm_capts
             if capts.topic == "feed.xml":
@@ -488,7 +487,8 @@ template handleCacheClear() =
           else:
             debug "cache: deleting page {reqCtx.url.path}"
             pageCache.del(reqCtx.key)
-            deletePage(reqCtx.norm_capts)
+            if reqCtx.norm_capts.topic notin notTopics:
+              deletePage(reqCtx.norm_capts)
         except:
           warn "cache: deletion failed for {reqCtx.norm_capts:.120}"
       of '1':

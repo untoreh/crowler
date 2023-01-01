@@ -21,8 +21,9 @@ const ttlKey = "ldb-ttl-key"
 proc init*(_: typedesc[LockDB], path: string, ttl = initDuration(days = 100),
            ignoreErrors = false, lazyCompact = true): LockDB =
   result = create(LockDBObj)
-  result.handle = leveldb.open(path, writeBufferSize = 64 * 1024 * 1024,
-                               maxFileSize = 32 * 1024 * 1024,
+  result.handle = leveldb.open(path,
+                               # writeBufferSize = 64 * 1024 * 1024,
+                               # maxFileSize = 32 * 1024 * 1024,
                                # cacheCapacity = 8 * 1024 * 1024
                                )
   if result.handle.get(ttlKey).isnone:
@@ -91,7 +92,7 @@ proc getUnchecked*(ldb: LockDB, k: string): string =
 
 proc contains*[T](ldb: LockDB, k: T): bool =
   withLock(ldb.lock):
-    ldb.isValid(k)[0]
+    return ldb.isValid(k)[0]
 
 proc `[]=`*(ldb: LockDB, k: string, v: string) =
   withLock(ldb.lock):

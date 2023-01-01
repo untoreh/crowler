@@ -208,6 +208,8 @@ proc fetchFeed*(): Future[Feed] {.async.} =
     except KeyError:
       topicFeeds.put(config.websiteTitle, parseXml(feedStr))
 
+proc clearFeed*() = pageCache.delete(config.websiteTitle.feedKey)
+proc clearFeed*(topic: string) = pageCache.delete(topic.feedKey)
 
 when isMainModule:
     syncTopics()

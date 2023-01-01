@@ -41,7 +41,8 @@ import
 import translate except get
 from nativehttp import initHttp
 
-const requestSoftTimeout = chronos.timer.seconds(100) # Timeout of a request after which a 503 is sent
+const requestSoftTimeout = chronos.timer.seconds(
+    100) # Timeout of a request after which a 503 is sent
 const requestHardTimeout = chronos.timer.minutes(5) # Max processing time for a request
 
 type
@@ -469,6 +470,21 @@ template handleCacheClear() =
             pageCache.del(reqCtx.key)
           elif reqCtx.norm_capts.topic == "assets":
             assetsCache.del(reqCtx.key)
+          elif "sitemap.xml" in reqCtx.norm_capts or "index.xml" in
+              reqCtx.norm_capts:
+            let capts = reqCtx.norm_capts
+            if capts.topic == "":
+              clearSiteMap()
+            elif capts.page == "":
+              clearSiteMap(capts.topic)
+            else:
+              clearSiteMap(capts.topic, capts.page)
+          elif "feed.xml" in reqCtx.norm_capts:
+            let capts = reqCtx.norm_capts
+            if capts.topic == "feed.xml":
+              clearFeed()
+            else:
+              clearFeed(capts.topic)
           else:
             debug "cache: deleting page {reqCtx.url.path}"
             pageCache.del(reqCtx.key)
@@ -782,4 +798,4 @@ when isMainModule:
   # echo buildRelated(argt[0])
   # imgCache.clear()
   # pageCache.clear()
-  startServer(doclear=true)
+  startServer(doclear = true)

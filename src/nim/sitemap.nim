@@ -220,7 +220,7 @@ proc clearSiteMap*(topic: string, all = false) =
     for p in 0..<(waitfor lastPageNum(topic)):
       pageCache.delete(sitemapKey(topic, $p))
 
-proc clearSiteMap*(topic: string, pagenum: int) =
+proc clearSiteMap*[T](topic: string, pagenum: T) =
   pageCache.delete(sitemapKey(topic, $pagenum))
 
 import karax/[vdom, karaxdsl]

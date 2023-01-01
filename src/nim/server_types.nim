@@ -25,6 +25,8 @@ proc uriTuple*(match: seq[Option[string]]): UriCaptures =
     v.removePrefix("/")
     i += 1
 
+proc contains*(capts: UriCaptures, k: string): bool = k in cast[array[5, string]](capts)
+
 proc uriTuple*(relpath: string): UriCaptures =
   let m = relpath.match(sre rxPath).get
   result = m.captures.toSeq.uriTuple

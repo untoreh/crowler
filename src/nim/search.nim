@@ -29,6 +29,10 @@ pygil.release()
 const defaultLimit = 10
 const bufsize = 20000 - 256 # FIXME: ingestClient.bufsize returns 0...
 
+when not defined(release):
+  import std/locks
+  var pushLock: ptr AsyncLock
+
 proc isopen(): bool {.withLocks: [pyGil].} =
   try: pySonic[].isopen().to(bool)
   except: false
@@ -50,8 +54,6 @@ proc addToBackLog(capts: UriCaptures) =
     let l = join([capts.topic, capts.page, capts.art, capts.lang], ",")
     writeLine(f, l)
 
-var pushLock: ptr AsyncLock
-import std/locks
 proc push*(capts: UriCaptures, content: string) {.async.} =
   ## Push the contents of an article page to the search database
   ## NOTE: NOT thread safe
@@ -281,8 +283,9 @@ template restartSonic(what: string) {.dirty.} =
     connectSonic(reconnect=true)
 
 proc initSonic*() {.gcsafe.} =
-  pushLock = create(AsyncLock)
-  pushLock[] = newAsyncLock()
+  when not defined(release):
+    pushLock = create(AsyncLock)
+    pushLock[] = newAsyncLock()
   connectSonic()
   syncPyLock:
     discard pysched[].initPool()

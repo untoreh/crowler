@@ -34,7 +34,7 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
     # Only publish one topic every `CRON_TOPIC`
     prevSize = len(topicsCache)
     n = prevSize
-  except Exception as e:
+  except:
     logexc()
     warn "pubtask: init failed with error."
     quitl()

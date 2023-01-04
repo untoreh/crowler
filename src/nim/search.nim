@@ -3,7 +3,8 @@ import std/[exitprocs, monotimes, os, htmlparser, xmltree, parseutils, strutils,
        chronos
 
 from unicode import runeSubStr, validateUtf8
-from libsonic as sonic import nil
+from vendor/libsonic as sonic import nil
+
 
 import
   types,
@@ -30,7 +31,7 @@ let
   host = hostStr[0].unsafeAddr
   passStr = cstring(SONIC_PASS)
   pass = passStr[0].unsafeAddr
-var conn: ptr sonic.Connection
+var conn: sonic.Connection
 
 
 template cptr(s: string): ptr[char] =
@@ -166,7 +167,7 @@ proc querySonic(msg: SonicMessage): Future[seq[string]] {.async.} =
   if not res.isnil:
     defer: sonic.destroy_response(res)
     for s in cast[cstringArray](res).cstringArrayToSeq():
-      result.add s
+      result.add deepcopy(s)
 
 proc suggestSonic(msg: SonicMessage): Future[seq[string]] {.async.} =
   # Partial inputs language can't be handled if we

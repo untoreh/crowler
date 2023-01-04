@@ -1,6 +1,6 @@
 import karax / vdom
 
-import cfg
+import ../cfg
 
 static: echo "loading minify_html_c..."
 

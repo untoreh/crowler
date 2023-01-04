@@ -53,6 +53,10 @@ libminify=src/rust/minify-html/target/release/libminify_html_c.a
 mkdir -p "$trg/$(dirname $libminify)"
 cp -a $libminify "${trg}/${libminify}"
 cp -a lib/vendor/imageflow.dist/libimageflow.so $trg/lib
+libsonic=src/rust/sonic-bindings/target/release/libsonic_channel.so
+mkdir -p "$trg/$(dirname $libsonic)"
+cp -a $libsonic "${trg}/${libsonic}"
+
 cp -a nim.cfg $trg/nim.cfg.debug
 cp -a nim.cfg.release $trg/nim.cfg
 cp -a site.nim.cfg $trg/src/nim/cli.nim.cfg

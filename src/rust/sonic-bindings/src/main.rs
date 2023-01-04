@@ -36,7 +36,9 @@ pub unsafe extern "C" fn destroy_response(arr: *mut *const c_char) {
     }
     let v: Vec<*const c_char> = Vec::from_raw_parts(arr, len, len);
     for p in v {
-        let _ = CString::from_raw(p as *mut c_char);
+        if !p.is_null() {
+            let _ = CString::from_raw(p as *mut c_char);
+        }
     }
 }
 

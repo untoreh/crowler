@@ -11,6 +11,7 @@ sonic-channel = {version = "1.1.0", features = ["ingest", "control"]}
 
 
 [lib]
-crate-type = ["staticlib"]
+# crate-type = ["staticlib"]
+crate-type = ["cdylib"]
 name = "sonic_channel"
 path = "src/main.rs"

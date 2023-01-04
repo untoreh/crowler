@@ -276,7 +276,7 @@ template ensureOneTopic(force = false): (int, PySequence[TopicTuple]) =
   (nTopics, pyTopics)
 
 var topicsCount = -1 # Used to check if topics are in sync, but it is not perfect (in case topics deletions happen)
-proc syncTopicsImpl(force = false) {.gcsafe, async.} =
+proc syncTopics*(force = false) {.gcsafe, async.} =
   # NOTE: the [0] is required because quirky zarray `getitem`
   withPyLock:
     assert not site.isnil
@@ -305,19 +305,10 @@ proc syncTopicsImpl(force = false) {.gcsafe, async.} =
     logexc()
     debug "could not sync topics."
 
-var lastTopicSync = default(Time)
-const topicSyncInterval = initDuration(minutes = 15)
-export `<=`
-template syncTopics*(force = false) =
-  let pastTime = getTime() - lastTopicSync
-  if force or pastTime >= topicSyncInterval:
-    lastTopicSync = getTime()
-    await syncTopicsImpl(force)
 template initTopics*(force = false) =
-    waitFor syncTopicsImpl(true)
+  waitFor syncTopics(true)
 
 proc nextTopic*(): Future[string] {.async.} =
-  syncTopics()
   lastTopic = nextKey(topicsIter[])
   return lastTopic
 proc curTopic*(): string =
@@ -325,20 +316,10 @@ proc curTopic*(): string =
   lastTopic
 
 
-when isMainModule:
-  initPy()
-  initTopics()
-  initTopics()
-  initTopics()
-  # let topics = waitFor loadTopics()
-  # syncPyLock:
-  #   echo topics[0].toTopicTuple
-  echo waitFor nextTopic()
-  # echo topicsCache.storage.[0]
-  # quit()
-  # syncpylock:
-  #   echo tp[1]
-  # let v = waitFor topicPage("mini")
-  # syncPyLock:
-    # echo v[0]
-  # echo typeof(topicsCache.fetch("vps"))
+# when isMainModule:
+#   initPy()
+#   initTopics()
+#   let topics = waitFor loadTopics()
+#   syncPyLock:
+#     echo topics[0].toTopicTuple
+#   echo waitFor nextTopic()

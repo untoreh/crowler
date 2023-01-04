@@ -12,7 +12,7 @@ proc cliRunTasks() =
   initHttp()
   initTopics()
   initZstd()
-  waitFor runTasks(@[pub, cleanup, mem], wait=true)
+  waitFor runTasks(@[pub, cleanup, tpc, mem], wait=true)
 
 when isMainModule:
   dispatchMulti([cliRunTasks])

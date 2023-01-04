@@ -1,7 +1,7 @@
 import os
-import re
 import json
-import time
+from re import compile, sub
+from time import time, sleep
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -17,10 +17,6 @@ from typing import (
     Tuple,
     Union,
 )
-import json
-import os
-import re
-import time
 from collections import deque
 from datetime import datetime
 from enum import IntEnum
@@ -31,15 +27,17 @@ from typing import Any, Callable, Dict, Iterator, List, MutableSequence, Optiona
 import numpy as np
 import tomli
 import zarr as za
-from bloom_filter2 import BloomFilter
-from facepy import GraphAPI as FBApi
 
-# social
-from praw import Reddit
-from praw.models.reddit.subreddit import Subreddit
-from twitter.api import Api as TwitterApi
+def load_publishing_deps():
+    from bloom_filter2 import BloomFilter
+    from facepy import GraphAPI as FBApi
+    # social
+    from praw import Reddit
+    from praw.models.reddit.subreddit import Subreddit
+    from twitter.api import Api as TwitterApi
 
-import blacklist
+    import blacklist
+
 import config as cfg
 import log
 import proxies_pb as pb
@@ -129,20 +127,22 @@ class Site:
     _last_reddit: float = 0
     _fb_use_source_url = False
 
-    def __init__(self, sitename=""):
+    def __init__(self, sitename="", publishing = False):
         if not cfg.SITES_CONFIG_FILE.exists():
             return
         self._name = sitename
         self._config = read_sites_config(sitename)
         self.site_dir = cfg.DATA_DIR / "sites" / sitename
         self.req_cache_dir = self.site_dir / "cache"
-        self.img_bloom = BloomFilter(
-            max_elements=10**8,
-            error_rate=0.01,
-            filename=(self.site_dir / "bloom_images.bin", -1),
-        )
-        self.blacklist_path = self.site_dir / "blacklist.txt"
-        self.blacklist = blacklist.load_blacklist(self)
+        if publishing:
+            load_publishing_deps()
+            self.img_bloom = BloomFilter(
+                max_elements=10**8,
+                error_rate=0.01,
+                filename=(self.site_dir / "bloom_images.bin", -1),
+            )
+            self.blacklist_path = self.site_dir / "blacklist.txt"
+            self.blacklist = blacklist.load_blacklist(self)
 
         self.topics_dir = self.site_dir / "topics"
         self.topics_idx = self.topics_dir / "index"
@@ -152,7 +152,7 @@ class Site:
         self.created = self._config.get("created", "1970-01-01")
         self.created_dt = datetime.fromisoformat(self.created)
         self.domain: str = self._config.get("domain", "")
-        self.domain_rgx = re.compile(f"(?:https?:)?//{self.domain}")
+        self.domain_rgx = compile(f"(?:https?:)?//{self.domain}")
         self.url = "https://" + self.domain
         self._title = None
         assert (
@@ -165,7 +165,7 @@ class Site:
         self._init_data()
         SITES[sitename] = self
 
-        if sitename != "dev":
+        if sitename != "dev" and publishing:
             self._init_reddit()
             self._init_twitter()
             self._init_facebook()
@@ -210,7 +210,7 @@ class Site:
         if self._fb_use_source_url:
             url = art.get("url", "")
             # article_url = self.article_url(art, topic)
-            # article_url = re.sub(self.domain_rgx, "", article_url)
+            # article_url = sub(self.domain_rgx, "", article_url)
             # article_url = self.domain.split(".")[0] + " " + url
             message = f"{message}\n\nFind more news at,\n{self.title}"
         else:

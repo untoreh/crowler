@@ -100,7 +100,6 @@ proc buildSiteSitemap*(topics: seq[string]): Future[XmlNode] {.async.} =
         break
 
 proc buildSiteSitemap*(): Future[XmlNode] {.async.} =
-  syncTopics()
   let topics = collect(for (k, _) in topicsCache: k)
   return await buildSiteSitemap(topics)
 
@@ -127,7 +126,6 @@ template addUrlToFeed(getLoc, getLocLang) =
 
 proc buildTopicPagesSitemap*(topic: string): Future[XmlNode] {.async.} =
   initSitemapIndex()
-  syncTopics()
   var nEntries = 0
   let done = await topicDonePages(topic)
   template langUrl(lang): untyped {.dirty.} = $(config.websiteUrl / lang / topic /
@@ -153,7 +151,6 @@ template addArticleToFeed() =
 
 proc buildTopicSitemap(topic: string): Future[XmlNode] {.async.} =
   initUrlSet()
-  syncTopics()
   let done = await topicDonePages(topic)
   var nEntries = 0
   withPyLock:
@@ -167,7 +164,6 @@ proc buildTopicSitemap(topic: string): Future[XmlNode] {.async.} =
         addArticleToFeed()
 
 proc buildPageSitemap(topic: string, page: int): Future[XmlNode] {.async.} =
-  syncTopics()
   result = newElement("urlset")
   result.attrs = {"xmlns": xmlNamespace,
       "xmlns:xhtml": xhtmlNamespace}.toXmlAttributes

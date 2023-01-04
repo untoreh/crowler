@@ -1,0 +1,16 @@
+[package]
+name = "sonic-bindings"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+once_cell = "1.17.0"
+sonic-channel = {version = "1.1.0", features = ["ingest", "control"]}
+
+
+[lib]
+crate-type = ["staticlib"]
+name = "sonic_channel"
+path = "src/main.rs"

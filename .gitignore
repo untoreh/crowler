@@ -2,7 +2,7 @@
 **/node_modules/
 .venv/
 **/queue.txt
-**/rust/target/
+**/rust/**/target/
 **/site*.html
 **/data_*/*.db/
 logs/*

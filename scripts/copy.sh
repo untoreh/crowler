@@ -49,7 +49,7 @@ for site in $sites; do
 done
 
 
-libminify=src/rust/target/release/libminify_html_c.a
+libminify=src/rust/minify-html/target/release/libminify_html_c.a
 mkdir -p "$trg/$(dirname $libminify)"
 cp -a $libminify "${trg}/${libminify}"
 cp -a lib/vendor/imageflow.dist/libimageflow.so $trg/lib

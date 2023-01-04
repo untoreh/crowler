@@ -15,7 +15,6 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
       warn "PUBLISHING DISABLED"
       await sleepAsync(100.seconds)
   try:
-    syncTopics()
     # Give some time to services to warm up
     # await sleepAsync(10.seconds)
     let t = getTime()
@@ -29,7 +28,6 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
     while len(topicsCache) == 0:
       debug "pubtask: waiting for topics to be created..."
       await sleepAsync(backoff.seconds)
-      syncTopics()
       backoff += 1
     # Only publish one topic every `CRON_TOPIC`
     prevSize = len(topicsCache)
@@ -41,7 +39,6 @@ proc pubTask*(): Future[void] {.gcsafe, async.} =
   while true:
     try:
       if n <= 0:
-        syncTopics()
         n = len(topicsCache)
         # if new topics have been added clear homepage/sitemap
         if n != prevSize:
@@ -102,7 +99,6 @@ const cleanupInterval = (60 * 3600 * 2).seconds
 proc cleanupTask*(): Future[void] {.async.} =
   while true:
     try:
-      syncTopics()
       for topic in topicsCache.keys():
         await deleteLowTrafficArts(topic)
     except Exception:
@@ -125,8 +121,24 @@ proc memWatcherTask*() {.async.} =
       quitl()
     await sleepAsync(5.seconds)
 
+proc topicsTask*() {.async.} =
+  await syncTopics()
+  try:
+    var topic_file: string
+    withPyLock:
+      topic_file = $site.getAttr("last_topic_file")
+    var lastModTime = getLastModificationTime(topic_file)
+    while true:
+      let modtime = getLastModificationTime(topic_file)
+      if modtime != lastModTime:
+        await syncTopics(true)
+        lastModTime = modtime
+      await sleepAsync(1.minutes)
+  except:
+    logexc()
+
 type
-  TaskKind* = enum pub, cleanup, mem
+  TaskKind* = enum pub, cleanup, mem, tpc
   TaskProc = proc(): Future[void] {.gcsafe.}
   TaskTable = Table[TaskKind, Future[void]]
 
@@ -138,6 +150,8 @@ proc selectTask(k: TaskKind): TaskProc =
     of cleanup: cleanupTask
     # quit when max memory usage reached
     of mem: memWatcherTask
+    # syncs topics
+    of tpc: topicsTask
 
 proc scheduleTasks*(tasks: seq[TaskKind]): TaskTable =
   template addTask(t) =

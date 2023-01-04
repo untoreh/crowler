@@ -60,3 +60,4 @@ tomli
 
 # debug
 # guppy3
+# memray

@@ -283,7 +283,6 @@ def site_scheduling(site: Site, throttle=60):
     site.load_topics()
     try:
         topics = site.sorted_topics(key=Topic.UnpubCount)
-        # print(h.heap())
         for topic in topics:
             sched.apply(parse_worker, site, topic)
             sched.apply(feed_worker, site, topic)
@@ -303,17 +302,18 @@ def site_scheduling(site: Site, throttle=60):
 
 
 def run_server(sites):
-    # from guppy import hpy
-    # h = hpy()
     if len(sites) == 0:
         log.warn("no sites provided.")
         return
+    # from guppy import hpy
+    # h = hpy()
+    # print(h.heap())
     initialize()
     jobs = {}
 
     def dispatch(name):
         try:
-            site = Site(name)
+            site = Site(name, publishing = True)
             jobs[site] = sched.apply(site_scheduling, site)
         except:
             time.sleep(1)
@@ -355,7 +355,7 @@ if __name__ == "__main__":
         assert (
             len(sites) == 1
         ), "Can only execute jobs on a single site:topic combination."
-        st = Site(sites[0])
+        st = Site(sites[0], publishing = True)
         if args.topic != "":
             JOBS_MAP[args.job](st, args.topic)
         else:

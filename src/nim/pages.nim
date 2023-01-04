@@ -270,7 +270,6 @@ template divWrap(class = "", cnt: string): string =
   res
 
 proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
-  syncTopics()
   var a: Article
   withPyLock:
     a = default(Article)

@@ -69,17 +69,12 @@ template fPyLocked*(code) =
     code
 
 # in release mode cwd is not src/nim
-pygil.globalAcquire()
 let
   prefixPy =
     if dirExists "py": "py"
     elif dirExists "lib/py": "lib/py"
     elif dirExists "../py": "../py"
     else: raise newException(Defect, "could not find python library path. in {getAppFileName.parentDir}")
-  machinery = pyImport("importlib.machinery")
-  pyimutil = pyImport("importlib.util")
-  pysys = pyImport("sys")
-pygil.release()
 
 proc relpyImport*(relpath: string; prefix = prefixPy): PyObject =
   ## All relative python imports inside the relatively imported module (from .. import $mod)
@@ -88,6 +83,8 @@ proc relpyImport*(relpath: string; prefix = prefixPy): PyObject =
   let abspath = os.expandFilename(prefix) / relpath & ".py"
   try:
     let
+      pysys = pyImport("sys")
+      pyimutil = pyImport("importlib.util")
       name = abspath.splitFile[1]
       spec = pyimutil.spec_from_file_location(name, abspath)
       pymodule = pyimutil.module_from_spec(spec)
@@ -138,6 +135,7 @@ macro pyObjPtrExp*(defs: varargs[untyped]): untyped =
       let `name`* {.guard: pyGil.} = create(PyObject)
       `name`[] = `def`
 
+
 # https://github.com/yglukhov/nimpy/issues/164
 pyObjPtrExp(
     (pybi, pyBuiltinsModule()),
@@ -152,6 +150,24 @@ pyObjPtr(
     (PyDictClass, pybi[].getattr("dict")),
     (PyZArray, pyza[].getAttr("Array"))
 )
+when os.getEnv("PYTHON_PROFILING", "").len > 0:
+  pyObjPtr((pyTracker,
+            block:
+              let
+                mr = pyimport("memray")
+                out_path = os.getEnv("PYTHON_PROFILING", "")
+                out_split = splitfile(out_path)
+              doassert out_split.dir.dirExists and out_split.name.len > 0
+              discard tryRemoveFile(out_path)
+              mr.Tracker(out_path, native_traces=true)
+              ))
+  discard pyTracker[].callMethod("__enter__")
+  import std/exitprocs
+  proc stopPyTracker() =
+    syncPyLock():
+      let none = pybi[].getAttr("None")
+      discard pyTracker[].callMethod("__exit__", [none, none, none])
+  addExitProc(stopPyTracker)
 # let
   # pybi* = pyBuiltinsModule()
   # pyza* = pyimport("zarr")
@@ -167,8 +183,8 @@ pygil.release()
 var PyNone* {.threadvar.}: PyObject
 
 from utils import withLocks
-proc pyhasAttr*(o: PyObject; a: string): bool {.withLocks: [pyGil].} = pybi[].hasattr(
-    o, a).to(bool)
+proc pyhasAttr*(o: PyObject; a: string): bool {.withLocks: [pyGil].} = pybi[
+  ].hasattr(o, a).to(bool)
 
 proc pyclass(py: PyObject): PyObject {.inline, withLocks: [pyGil].} =
   pybi[].type(py)
@@ -224,12 +240,14 @@ proc pydate*(py: PyObject; default = getTime()): Time =
     return default
 
 pygil.globalAcquire()
-let pycfg* = pyImport("config")
-doassert not pyisnone(pycfg)
-discard pyImport("log")
+when false:
+  let pycfg* = pyImport("config")
+  doassert not pyisnone(pycfg)
+  discard pyImport("log")
+  discard pyImport("blacklist")
+
 pyObjExp((ut, pyImport("utils")))
 doassert not pyisnone(ut)
-discard pyImport("blacklist")
 pyObjExp((site, pyImport("sites").Site(config.websiteName)))
 doassert not pyisnone(site)
 pyObjPtrExp(
@@ -238,18 +256,18 @@ pyObjPtrExp(
 )
 doassert not pyisnone(pySched[])
 # Proxies
-pyObjPtr(
-  (pyProxies, pyImport("proxies_pb"))
-)
+when false:
+  pyObjPtr(
+    (pyProxies, pyImport("proxies_pb"))
+  )
+  proc pyGetProxy*(st: bool = true): Future[string] {.async.} =
+    withPyLock():
+      let prx = callMethod(pyProxies[], "get_proxy", st)
+      if not pyisnone(prx):
+        return prx.to(string)
 pygil.release()
 
 echo "pyutils initialized." # Should eval inside try/catch but pyobj macros are not compatible (they export definitions)
-
-proc pyGetProxy*(st: bool = true): Future[string] {.async.} =
-  withPyLock():
-    let prx = callMethod(pyProxies[], "get_proxy", st)
-    if not pyisnone(prx):
-      return prx.to(string)
 
 proc initPy*() =
   syncPyLock:

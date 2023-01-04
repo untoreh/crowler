@@ -3,7 +3,6 @@ import std/[exitprocs, monotimes, os, htmlparser, xmltree, parseutils, strutils,
        chronos
 
 from unicode import runeSubStr, validateUtf8
-from libsonic as sonic import nil
 
 import
   types,
@@ -19,31 +18,29 @@ import
   articles,
   json
 
+pygil.globalAcquire()
+pyObjPtr(
+  (Language, pyImport("langcodes").Language),
+  (pySonic, pyImport("sonicsearch")),
+  )
+# pyObjPtr((DetectLang, pyImport("translator").detect))
+pygil.release()
+
 const defaultLimit = 10
 const bufsize = 20000 - 256 # FIXME: ingestClient.bufsize returns 0...
-let
-  defaultBucketStr = cstring("default")
-  defaultBucket = defaultBucketStr[0].unsafeAddr
-  emptyCStrObj = cstring("ok")
-  emptyCStr = emptyCStrObj[0].unsafeAddr
-  hostStr = cstring(SONIC_ADDR & ":" & $SONIC_PORT)
-  host = hostStr[0].unsafeAddr
-  passStr = cstring(SONIC_PASS)
-  pass = passStr[0].unsafeAddr
-var conn: ptr sonic.Connection
-
-
-template cptr(s: string): ptr[char] =
-  if likely(s.len > 0): s[0].unsafeAddr
-  else: emptyCStr
 
 when not defined(release):
   import std/locks
   var pushLock: ptr AsyncLock
 
-proc isopen(): bool =
-  try: sonic.is_open(conn)
+proc isopen(): bool {.withLocks: [pyGil].} =
+  try: pySonic[].isopen().to(bool)
   except: false
+
+proc toISO3(lang: string): Future[string] {.async.} =
+  withPyLock:
+    result = Language[].get(if lang == "": SLang.code
+                      else: lang).to_alpha3().to(string)
 
 proc sanitize*(s: string): string =
   ## Replace new lines for search queries and ingestion
@@ -69,19 +66,26 @@ proc push*(capts: UriCaptures, content: string) {.async.} =
     if cnt.len == 0:
       break
     try:
-      let pushed = sonic.pushx(
-        conn,
-        config.websiteDomain.cptr,
-        defaultBucket, # TODO: Should we restrict search to `capts.topic`?
-        key = key.cptr,
-        cnt = cnt.cptr,
-        lang = capts.lang.cptr
-        )
+      let lang = await capts.lang.toISO3
+      var pushed: bool
+      var j: PyObject
+      withPyLock:
+        j = pySched[].apply(
+          pySonic[].push,
+          config.websiteDomain,
+          "default", # TODO: Should we restrict search to `capts.topic`?
+          key,
+          cnt,
+          lang = if capts.lang != "en": lang else: ""
+          )
+      j = await j.pywait()
+      withPyLock:
+        pushed = not pyisnone(j) and j.to(bool)
       when not defined(release):
         if not pushed:
           capts.addToBackLog()
           break
-    except:
+    except Exception:
       logexc()
       debug "sonic: couldn't push content, \n {capts} \n {key} \n {cnt}"
       when not defined(release):
@@ -122,7 +126,8 @@ proc push*(relpath: string) {.async.} =
 when not defined(release):
   proc resumeSonic() {.async.} =
     ## Push all backlogged articles to search database
-    assert isopen()
+    withPyLock:
+      assert isopen()
     for l in lines(config.sonicBacklog):
       let
         s = l.split(",")
@@ -151,7 +156,6 @@ when false:
       something tkw, kws
     else: kws
 
-
 proc querySonic(msg: SonicMessage): Future[seq[string]] {.async.} =
   ## translate the query to source language, because we only index
   ## content in source language
@@ -161,31 +165,29 @@ proc querySonic(msg: SonicMessage): Future[seq[string]] {.async.} =
   # let kws = await translateKws(keywords, lang)
   # logall "sonic: kws -- {kws}, query -- {keywords}"
   logall "sonic: query -- {keywords}"
-  let res = sonic.query(conn, config.websiteDomain.cptr, defaultBucket,
-                        keywords.cptr, lang = lang.cptr, limit = limit.csize_t)
-  if not res.isnil:
-    defer: sonic.destroy_response(res)
-    for s in cast[cstringArray](res).cstringArrayToSeq():
-      result.add s
+  let lang3 = await SLang.code.toISO3
+  withPyLock:
+    let res = pySonic[].query(config.websiteDomain, "default", keywords, lang = lang3, limit = limit)
+    if not pyisnone(res):
+      let s = res.pyToSeqStr()
+      return s
 
 proc suggestSonic(msg: SonicMessage): Future[seq[string]] {.async.} =
   # Partial inputs language can't be handled if we
   # only ingestClient the source language into sonic
   let (topic, input, lang, limit) = msg.args
   logall "suggest: topic: {topic}, input: {input}"
-  let kw = input.split[^1]
-  let sug = sonic.suggest(conn, config.websiteDomain.cptr, defaultBucket,
-                          kw.cptr, limit = limit.csize_t)
-  if not sug.isnil:
-    defer: sonic.destroy_response(sug)
-    for s in cast[cstringArray](sug).cstringArrayToSeq():
-      result.add s
+  withPyLock:
+    let sug = pySonic[].suggest(config.websiteDomain, "default", input.split[^1], limit = limit)
+    if not pyisnone(sug):
+      let s = sug.pyToSeqStr()
+      return s
 
 proc deleteFromSonic*(capts: UriCaptures): int =
   ## Delete an article from sonic db
   let key = join([capts.topic, capts.page, capts.art], "/")
-  sonic.flush(conn, col = config.websiteDomain.cptr, buc = defaultBucket,
-      obj = key.cptr)
+  syncPyLock:
+    discard pySonic[].flush(config.websiteDomain, object_name = key)
 
 const pushLogFile = "/tmp/sonic_push_log.json"
 proc readPushLog(): Future[JsonNode] {.async.} =
@@ -202,13 +204,16 @@ proc pushAllSonic*() {.async.} =
   var total, c, pagenum: int
   let pushLog = await readPushLog()
   if pushLog.len == 0:
-    sonic.flush(conn, buc = defaultBucket,
-                col = config.websiteDomain.cptr, obj = emptyCStr)
+    withPyLock:
+      discard pySonic[].flush(config.websiteDomain)
   defer:
-    sonic.consolidate(conn)
+    withPyLock:
+      discard pySonic[].consolidate()
   for (topic, state) in topicsCache:
     if topic notin pushLog:
       pushLog[topic] = %0
+    await pygil.acquire
+    defer: pygil.release
     let done = state.group["done"]
     for page in done:
       pagenum = ($page).parseint
@@ -227,9 +232,11 @@ proc pushAllSonic*() {.async.} =
           echo "pushing ", relpath
           futs.add push(capts, content)
           total.inc
+      pygil.release
       await allFutures(futs)
       pushLog[topic] = %pagenum
       await writePushLog(pushLog)
+      await pygil.acquire
   info "Indexed search for {config.websiteDomain} with {total} objects."
 
 from chronos/timer import seconds, Duration
@@ -242,14 +249,13 @@ proc query*(topic: string, keywords: string, lang: string = SLang.code,
   var msg: SonicMessageTuple
   msg.args.topic = topic
   msg.args.keywords = keywords
-  msg.args.lang = lang
+  msg.args.lang=  lang
   msg.args.limit = limit
   msg.id = getMonoTime()
   return await querySonic(msg.addr)
 
 # import quirks # required by py DetectLang
-proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[
-    string]] {.async.} =
+proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[string]] {.async.} =
   if unlikely(input.len == 0):
     return
   var msg: SonicMessageTuple
@@ -263,28 +269,35 @@ proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[
   msg.id = getMonoTime()
   return await suggestSonic(msg.addr)
 
-proc connectSonic(reconnect = false) =
+proc connectSonic(reconnect=false) =
   var notConnected: bool
-  conn = sonic.sonic_connect(host = host, pass = pass)
-  doassert not conn.isnil and sonic.isopen(conn), "Is Sonic running?"
+  syncPyLock:
+    discard pySonic[].connect(SONIC_ADDR, SONIC_PORT, SONIC_PASS, reconnect=reconnect)
+  syncPyLock:
+    doassert pySonic[].is_connected.to(bool), "Is Sonic running?"
 
 template restartSonic(what: string) {.dirty.} =
   logexc()
   if e is OSError:
-    connectSonic(reconnect = true)
+    connectSonic(reconnect=true)
 
 proc initSonic*() {.gcsafe.} =
   when not defined(release):
     pushLock = create(AsyncLock)
     pushLock[] = newAsyncLock()
   connectSonic()
+  syncPyLock:
+    discard pysched[].initPool()
 
 when isMainModule:
+  initPy()
+  syncPyLock:
+    discard pysched[].initPool()
   initSonic()
   # waitFor syncTopics(true)
   # waitFor pushAllSonic()
   debug "nice"
-  let q = waitFor query("mini", "mini", "hello")
+  let q = waitFor query("mini", "mini", "")
   echo q
   # let qq = waitFor query("mini", "mini", "es")
   # echo qq

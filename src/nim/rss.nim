@@ -211,8 +211,8 @@ proc fetchFeed*(): Future[Feed] {.async.} =
 proc clearFeed*() = pageCache.delete(config.websiteTitle.feedKey)
 proc clearFeed*(topic: string) = pageCache.delete(topic.feedKey)
 
-when isMainModule:
-    syncTopics()
-    let topic = "dedi"
-    # pageCache[].del(topic)
-    # pageCache[].del(config.websiteTitle)
+# when isMainModule:
+#     initTopics()
+#     let topic = "dedi"
+#     pageCache[].del(topic)
+#     pageCache[].del(config.websiteTitle)

@@ -407,7 +407,7 @@ header .page {
   height: calc(100% - 1rem);
   min-width: 2rem;
   text-align: center;
-  text-tecoration: none;
+  text-decoration: none;
 }
 
 .material-icons {
@@ -426,7 +426,6 @@ header .page {
     text-overflow: ellipsis;
     display: -webkit-box;
     -webkit-line-clamp: 2;
-    line-clamp: 2;
     -webkit-box-orient: vertical;
     width: 100%;
   }
@@ -645,7 +644,7 @@ section[role="toolbar"] {
       // position: relative; // for tooltips positioning
       width: 100%;
       display: inline-block;
-      pdding: 0.5rem 0;
+      padding: 0.5rem 0;
       font-weight: bold;
       text-transform: uppercase;
       text-decoration: none;
@@ -873,7 +872,10 @@ form.search {
           filter: opacity(0.8) invert(0.1);
           margin-right: 0.25rem;
           width: 4rem;
+          min-width: 4rem;
           text-align: center;
+          text-overflow: ellipsis;
+          overflow: hidden;
         }
       }
     }

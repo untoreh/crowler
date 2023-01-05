@@ -44,7 +44,7 @@ proc pathLink*(path: string, code = "", rel = true,
 proc buildImgUrl*(ar: Article; cls = "image-link", defsrc = ""): VNode =
   var srcsetstr, bsrc: string
   let defaultImgOnError = fmt"this.onerror=null; this.style['filter'] = 'opacity(0.1);'; this.src='{defsrc}'"
-  if ar.imageUrl != "":
+  if ar.imageUrl != "" and not ar.imageUrl.endswith(".ico"):
     # add `?` because chromium doesn't treat it as a string otherwise
     let burl = "?u=" & ar.imageUrl.toBString(true)
     bsrc = "//" & $(config.websiteUrl_IMG / IMG_SIZES[1] / burl)

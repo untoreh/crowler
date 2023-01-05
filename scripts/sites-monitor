@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-NAMES=scraper,wsl,wsl
+NAMES=scraper,$SITES
 IFS=,
 DUPLOCKFILE=/tmp/.duplicacy_sites_lock
 DUPBIN=dup

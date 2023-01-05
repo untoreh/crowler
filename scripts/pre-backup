@@ -1,4 +1,4 @@
 #!/bin/sh
 
 touch /tmp/.duplicacy_sites_lock
-docker pause scraper wsl wsl
+docker pause scraper $SITES

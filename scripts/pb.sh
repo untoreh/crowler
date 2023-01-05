@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
-BASEDIR="$(basename $PWD)"
-if [ "$BASEDIR" != "wsl" ]; then
+BASEDIR="$(realpath $PWD)"
+if [ "$BASEDIR" != "$PROJECT_DIR" ]; then
     {
         echo "not in project path"
         exit 1

@@ -3,7 +3,7 @@
 DIR=$(realpath "$1")
 shift
 
-[ "$(basename $DIR)" != wsl ] && { echo script directory "($DIR)" is not wsl.; exit 1; }
+[ "$(realpath $DIR)" != "$PROJECT_DIR" ] && { echo script directory "($DIR)" is not "$PROJECT_DIR".; exit 1; }
 
 cd $DIR
 

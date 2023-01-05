@@ -19,7 +19,7 @@ if [ -e $tmpdir -a $COPY_ONLY = 0 ]; then
     exit
 fi
 
-if [ "$(basename $PWD)" != "wsl" ]; then
+if [ "$(realpath $PWD)" != "$PROJECT_DIR" ]; then
     {
         echo "not in project path"
         exit 1

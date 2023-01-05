@@ -107,8 +107,9 @@ proc opgPage*(a: Article): seq[XmlNode] =
   result.add metaTag("article:section", a.desc)
   # result.add metaTag("article:modified_time", a.pubTime)
   # result.add metaTag("article:expiration_time", a.pubTime)
-  result.add twitterMeta("card", "summary")
-  result.add twitterMeta("creator", twitterUrl[])
+  if not twitterUrl.isnil and twitterUrl[].len > 0:
+    result.add twitterMeta("card", "summary")
+    result.add twitterMeta("creator", twitterUrl[])
 
 proc opgPage*(title: string, description: string,
     path: string): seq[XmlNode] {.gcsafe.} =

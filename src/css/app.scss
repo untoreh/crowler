@@ -655,6 +655,7 @@ section[role="toolbar"] {
       &.show {
         top: unset;
         left: 4rem;
+        display: unset;
       }
       & .topic-link {
         font-size: 0.8rem;

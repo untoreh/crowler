@@ -19,9 +19,9 @@ if [ -e $tmpdir -a $COPY_ONLY = 0 ]; then
     exit
 fi
 
-if [ "$(realpath $PWD)" != "$PROJECT_DIR" ]; then
+if [ "$(realpath $PWD)" != "$(realpath $PROJECT_DIR)" ]; then
     {
-        echo "not in project path"
+        echo "not in project path, $PWD, $PROJECT_DIR"
         exit 1
     }
 fi

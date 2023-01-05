@@ -98,7 +98,7 @@ function closeMenus(e) {
     let crumbs = $$(".breadcrumb-list");
     crumbs.forEach((l) => toggleShow(l, true));
   }
-  if (!pcls.contains("topic-menu") && !pcls.contains("menu-topic-menu")) {
+  if (!pcls.contains("topic-menu") && !pcls.contains("menu-topic-item")) {
     let topics = $$(".topic-pages");
     topics.forEach((l) => toggleShow(l, true));
   }

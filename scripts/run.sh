@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-if [ "$(realpath $PWD)" != "$PROJECT_DIR" ]; then
+if [ "$(realpath $PWD)" != "$(realpath $PROJECT_DIR)" ]; then
     {
         echo "not in project path"
         exit 1

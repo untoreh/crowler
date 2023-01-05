@@ -18,8 +18,6 @@ type ConfigObj {.partial.} = object
   websiteDescription*: string
   websiteContact*: string
   websiteCustomPages*: seq[string]
-  ## Used by AMP to check if an asset file belongs to a "local" site
-  websiteAllDomains*: seq[string]
   sitePath*: string
   siteAssetsPath*: Uri
   siteAssetsDir*: Uri
@@ -97,7 +95,6 @@ setConfig("website_title")
 setConfig("website_description")
 setConfig("website_contact")
 fromConfig("website_custom_pages", os.getenv("WEB_CUSTOM_PAGES"), doSplit)
-fromConfig("website_alldomains", os.getenv("WEB_DOMAINS"), doSplit)
 
 when not declared(SERVER_MODE):
   const SERVER_MODE* {.booldefine.} = os.getenv("SERVER_MODE", "1").parseBool

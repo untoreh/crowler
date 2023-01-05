@@ -58,14 +58,17 @@ proc getFile(path: string): Future[string] {.async.} =
       # FIXME: We can't fetch local urls because cloudflare TLS and chronhttp fail to handshake
       # ...therefore read from local files
       parseUri(url, fileUri)
-      if fileUri.hostname in config.websiteAllDomains:
-        let path = SITE_PATH / fileUri.path
-        checkTrue(fileExists(path), "amp: file Not Found")
-        filesCache[path] = await readfileAsync(path)
-      else:
-        let resp = (await get(url, proxied = false))
-        checkTrue(resp.body.len > 0, "amp: body empty")
-        filesCache[path] = resp.body
+      let path = SITE_PATH / fileUri.path
+      try:
+        if fileExists(path):
+          filesCache[path] = await readfileAsync(path)
+        else:
+          let resp = (await get(url, proxied = false))
+          checkTrue(resp.body.len > 0, "amp: body empty")
+          filesCache[path] = resp.body
+      except:
+        debug "Couldn't fetch file during amp conversion. {path}"
+        return ""
     result = filesCache[path]
 
 

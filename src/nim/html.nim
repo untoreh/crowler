@@ -492,7 +492,9 @@ proc postSource(icon: string): VNode =
                   loading = "lazy",
                   alt = "web",
                   class = "material-icons"))
-  result.setAttr("onerror", defaultImageU8)
+
+  let defaultSrc = $config.defaultImageUrl;
+  result.setAttr("onerror", fmt"this.onerror=null; this.src='{defaultSrc}'")
 
 proc postTitle(a: Article): Future[VNode] {.async.} =
   return buildHtml(tdiv(class = "title-wrap")):

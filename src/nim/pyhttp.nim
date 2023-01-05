@@ -5,7 +5,7 @@ import chronos/timer
 
 import types, pyutils, utils, httptypes
 
-
+doassert declared(pySched)
 pygil.globalAcquire()
 pyObjPtr((fetchData, ut.getAttr("fetch_data")))
 pygil.release()

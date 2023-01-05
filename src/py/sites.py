@@ -674,7 +674,7 @@ class Site:
             assert isinstance(self.topics_arr, za.Array)
             assert isinstance(topic, str)
             idx = self.get_topic_idx(topic)
-            self.topics_arr[idx, Topic.PubDate] = int(time.time())
+            self.topics_arr[idx, Topic.PubDate] = int(time())
             return True
         except:
             return False

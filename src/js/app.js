@@ -142,7 +142,9 @@ export function main() {
   const menuBtn = $(".menu-btn");
 
   topAppBar.setScrollTarget(mainContentEl);
-  ensureTranslation();
+  if (typeof(already_translated) === "undefined") {
+    ensureTranslation();
+  }
   setupSuggest();
 }
 

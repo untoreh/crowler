@@ -290,15 +290,18 @@ proc maybePublish*(topic: string) {.gcsafe, async.} =
       tpd = (await topicPubdate(topic))
       pastTime = inMinutes(t - tpd)
       pubInterval = await pubTimeInterval(topic)
-    var published: bool
     if pastTime > pubInterval:
       debug "pubtask: {topic} was published {pastTime} hours ago, publishing."
       lastPubTime = t
-      published = await pubTopic(topic)
+      let published = await pubTopic(topic)
       if published and SERVER_MODE:
         # clear homepage and topic page cache
         deletePage("")
         deletePage("/" & topic)
+    else:
+      let remaining = pubInterval - pastTime
+      debug "pubtasks: time until next {topic} publishing: {remaining} minutes."
+
 
 proc resetTopic(topic: string) =
   syncPyLock():

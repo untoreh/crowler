@@ -38,6 +38,7 @@ trBox.appendChild(srcLangIcon)
 trBox.appendChild(trIcon)
 trBox.appendChild(trgLangIcon)
 trBox.appendChild(trBar)
+var already_translated = false;
 
 
 function sleep(time) {
@@ -61,6 +62,7 @@ Http.onreadystatechange = (e) => {
           document.open()
           document.write(resp)
           document.close()
+          already_translated = true;
           main()
         })
       }

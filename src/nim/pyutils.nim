@@ -250,11 +250,12 @@ pyObjExp((ut, pyImport("utils")))
 doassert not pyisnone(ut)
 pyObjExp((site, pyImport("sites").Site(config.websiteName)))
 doassert not pyisnone(site)
-pyObjPtrExp(
-    (pySched, pyImport("scheduler")),
-    (pySchedApply, pySched[].getAttr("apply"))
-)
-doassert not pyisnone(pySched[])
+when not SERVER_MODE:
+  pyObjPtrExp(
+      (pySched, pyImport("scheduler")),
+      (pySchedApply, pySched[].getAttr("apply"))
+  )
+  doassert not pyisnone(pySched[])
 # Proxies
 when false:
   pyObjPtr(

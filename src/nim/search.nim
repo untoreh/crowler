@@ -20,12 +20,13 @@ import
   articles,
   json
 
+
 const defaultLimit = 10
 const bufsize = 20000 - 256 # FIXME: ingestClient.bufsize returns 0...
 let
   defaultBucketStr = cstring("default")
   defaultBucket = defaultBucketStr[0].unsafeAddr
-  emptyCStrObj = cstring("ok")
+  emptyCStrObj = cstring("")
   emptyCStr = emptyCStrObj[0].unsafeAddr
   hostStr = cstring(SONIC_ADDR & ":" & $SONIC_PORT)
   host = hostStr[0].unsafeAddr
@@ -137,9 +138,16 @@ when not defined(release):
 
 
 type
+  SonicMessageKind = enum query, sugg
   SonicQueryArgsTuple = tuple[topic: string, keywords: string, lang: string, limit: int]
-  SonicMessageTuple = tuple[args: SonicQueryArgsTuple, id: MonoTime]
+  SonicMessageTuple = tuple[args: SonicQueryArgsTuple, kind: SonicMessageKind,
+      o: ptr[seq[string]], id: MonoTime]
   SonicMessage = ptr SonicMessageTuple
+
+var sonicThread: Thread[void]
+var sonicIn: AsyncPColl[SonicMessage]
+var sonicOut: AsyncTable[SonicMessage, bool]
+var futs {.threadvar.}: seq[Future[void]]
 
 when false:
   proc translateKws(kws: string, lang: string): Future[string] {.async.} =
@@ -152,8 +160,7 @@ when false:
       something tkw, kws
     else: kws
 
-
-proc querySonic(msg: SonicMessage): Future[seq[string]] {.async.} =
+proc querySonic(msg: SonicMessage) {.async.} =
   ## translate the query to source language, because we only index
   ## content in source language
   ## the resulting entries are in the form {page}/{slug}
@@ -167,9 +174,10 @@ proc querySonic(msg: SonicMessage): Future[seq[string]] {.async.} =
   if not res.isnil:
     defer: sonic.destroy_response(res)
     for s in cast[cstringArray](res).cstringArrayToSeq():
-      result.add deepcopy(s)
+      msg.o[].add s
+  sonicOut[msg] = true
 
-proc suggestSonic(msg: SonicMessage): Future[seq[string]] {.async.} =
+proc suggestSonic(msg: SonicMessage) {.async.} =
   # Partial inputs language can't be handled if we
   # only ingestClient the source language into sonic
   let (topic, input, lang, limit) = msg.args
@@ -180,7 +188,8 @@ proc suggestSonic(msg: SonicMessage): Future[seq[string]] {.async.} =
   if not sug.isnil:
     defer: sonic.destroy_response(sug)
     for s in cast[cstringArray](sug).cstringArrayToSeq():
-      result.add s
+      msg.o[].add s
+  sonicOut[msg] = true
 
 proc deleteFromSonic*(capts: UriCaptures): int =
   ## Delete an article from sonic db
@@ -245,8 +254,10 @@ proc query*(topic: string, keywords: string, lang: string = SLang.code,
   msg.args.keywords = keywords
   msg.args.lang = lang
   msg.args.limit = limit
+  msg.kind = query
+  msg.o = result.addr
   msg.id = getMonoTime()
-  return await querySonic(msg.addr)
+  await querySonic(msg.addr)
 
 # import quirks # required by py DetectLang
 proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[
@@ -256,13 +267,15 @@ proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[
   var msg: SonicMessageTuple
   msg.args.topic = topic
   msg.args.keywords = input
+  msg.kind = sugg
   # var dlang: string
   # withPyLock:
   #   dlang = DetectLang[](input).to(string)
   # msg.args.lang = await toISO3(dlang)
   msg.args.limit = limit
+  msg.o = result.addr
   msg.id = getMonoTime()
-  return await suggestSonic(msg.addr)
+  await suggestSonic(msg.addr)
 
 proc connectSonic(reconnect = false) =
   var notConnected: bool
@@ -274,11 +287,36 @@ template restartSonic(what: string) {.dirty.} =
   if e is OSError:
     connectSonic(reconnect = true)
 
+proc asyncSonicHandler() {.async.} =
+  try:
+    var q: SonicMessage
+    while true:
+      sonicIn.pop(q)
+      clearFuts(futs)
+      checkNil(q):
+        futs.add case q.kind:
+          of query: querySonic(move q)
+          of sugg: suggestSonic(move q)
+  except Exception as e: # If we quit we can catch defects too.
+    logexc()
+    warn "lsh: lsh handler crashed."
+
+proc sonicHandler() =
+  while true:
+    waitFor asyncSonicHandler()
+    sleep(1000)
+    warn "Restarting sonic..."
+
 proc initSonic*() {.gcsafe.} =
   when not defined(release):
     pushLock = create(AsyncLock)
     pushLock[] = newAsyncLock()
   connectSonic()
+  setNil(sonicIn):
+    newAsyncPColl[SonicMessage]()
+  setNil(sonicOut):
+    newAsyncTable[SonicMessage, bool]()
+  createThread(sonicThread, sonicHandler)
 
 when isMainModule:
   initSonic()

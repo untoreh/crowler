@@ -321,6 +321,7 @@ proc buildSearchPage*(topic: string, kws: string, lang: string,
   ## Builds a search page with 10 entries
   debug "search: lang:{lang}, topic:{topic}, kws:{kws}"
   var content, keywords: string
+  var sepAds = adsGen(adsSeparator)
   if kws != "":
     keywords = kws.decodeUrl.sanitize
     var pslugs = await query(topic, keywords, lang)
@@ -334,7 +335,12 @@ proc buildSearchPage*(topic: string, kws: string, lang: string,
       for pslug in pslugs:
         let ar = await fromSearchResult(pslug)
         if not ar.isEmpty:
+          let ads = buildHtml(tdiv(class = "sep-ads"))
+          let sep1 = filterNext(sepAds, notEmpty)
+          if not sep1.isnil:
+            ads.add sep1
           content.add $(await articleEntry(ar))
+          content.add $ads
       if content.len == 0:
         let r = buildHtml(tdiv(class = "search-results")):
           text "No results found."
@@ -343,6 +349,8 @@ proc buildSearchPage*(topic: string, kws: string, lang: string,
     let r = buildHtml(tdiv(class = "search-results")):
       text "Search query is empty."
     content.add $r
+  when defined(adsense):
+    content.add ADSENSE_SEARCH[]
   let
     footer = await pageFooter(topic, "s", home = false)
   let fromcat = if topic != "": fmt" (from category: {topic})" else: ""

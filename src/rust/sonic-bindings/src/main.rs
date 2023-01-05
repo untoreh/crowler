@@ -28,16 +28,23 @@ fn to_c_array(v: Vec<String>) -> *const *const c_char {
 
 // use std::ptr;
 #[no_mangle]
-pub unsafe extern "C" fn destroy_response(arr: *mut *const c_char) {
+pub unsafe extern "C" fn destroy_response(arr: *mut *mut c_char) {
+    if arr.is_null() {
+        return;
+    }
     let mut len = 1;
-    let pos = arr;
-    while !(*pos.add(len)).is_null() {
+    while !(*arr.add(len)).is_null() {
         len += 1;
     }
-    let v: Vec<*const c_char> = Vec::from_raw_parts(arr, len, len);
+    let v: Vec<*mut c_char> = Vec::from_raw_parts(arr, len, len);
+    // v.iter().map(|p| {
+    //     if !p.is_null() {
+    //         let _ = CString::from_raw(*p);
+    //     }
+    // }).for_each(|_| ());
     for p in v {
         if !p.is_null() {
-            let _ = CString::from_raw(p as *mut c_char);
+            let _ = CString::from_raw(p);
         }
     }
 }

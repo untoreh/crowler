@@ -91,8 +91,8 @@ proc ampTemplate(): (VNode, VNode, VNode) =
     add styleEl2Wrapper
   ## ads
   when declared(ADSENSE_AMP_HEAD):
-    ampHead.add verbatim(ADSENSE_AMP_HEAD)
-    ampBody.add verbatim(ADSENSE_AMP_BODY)
+    ampHead.add verbatim(ADSENSE_AMP_HEAD[])
+    ampBody.add verbatim(ADSENSE_AMP_BODY[])
   (tree, ampHead, ampBody)
 
 proc maybeStyle(data: string) =

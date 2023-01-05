@@ -87,11 +87,19 @@ RUN /usr/bin/pip3 install -r requirements2.txt
 RUN /usr/bin/pip3 install --upgrade --pre html5lib
 
 FROM sitedeps2 AS sitedeps3
-COPY / /site/
+# HACK: refresh some nim packages
+RUN cd /site; \
+    rm -rf ~/.nimbe/pkgs/chronos*; \
+    nimble install -y https://github.com/untoreh/nimpy@#master; \
+    nimble install -y https://github.com/untoreh/nim-chronos@#update; \
+    cd - ;
+
+FROM sitedeps3 AS sitedeps4
 RUN /usr/bin/python3 -m textblob.download_corpora
+COPY / /site/
 RUN /usr/bin/python3 lib/py/main.py; true # perform modules setups on imports
 
-FROM sitedeps3 AS sitebuild
+FROM sitedeps4 AS sitebuild
 ARG NIM_ARG release
 ARG CACHE=0
 ARG LIBPYTHON_PATH /usr/lib/x86_64-linux-gnu/libpython3.10d.so
@@ -101,13 +109,7 @@ ENV PROJECT_DIR /site
 # nim not still supporting ssl3
 # RUN apt -y install libssl1.1
 RUN /site/scripts/switchdebug.sh /site
-# HACK: refresh some nim packages
-RUN cd /site; \
-    rm -rf ~/.nimbe/pkgs/chronos*; \
-    nimble install -y https://github.com/untoreh/nimpy@#master; \
-    nimble install -y https://github.com/untoreh/nim-chronos@#update; \
-    cd - ;
-RUN cd /site; nimble build cli_tasks
+RUN cd /site; nimble build cli_tasks -d:SERVER_MODE=0
 
 
 # FROM sitebuild as sitebuild-debug
@@ -129,6 +131,6 @@ CMD /site/scripts/scraper.sh
 
 FROM sitebuild AS server
 HEALTHCHECK --timeout=5s CMD scripts/healthcheck.sh
-RUN cd /site; nimble build cli
+RUN cd /site; nimble build cli -d:adsense=1
 RUN [ "$NIM" = release ] && strip -s cli || exit 0
 CMD ./cli startServer

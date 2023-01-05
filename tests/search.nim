@@ -20,7 +20,8 @@ proc test() =
       block:
         let sq = arr.cstringArrayToSeq()
         for s in sq:
-          echo s
+          discard
+          # echo s
 
 
 for i in 0..1000000:

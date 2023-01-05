@@ -31,13 +31,17 @@ var
 var adsLinksCount, adsLinksIdx: int
 
 macro loadIfExists(basename: static[string], varname) =
-  let path = config.dataAdsPath / basename
   quote do:
-    when fileExists(`path`):
-      const `varname`* = readFile(`path`)
+    let `varname`* = create(string)
+    let path = config.dataAdsPath / `basename`
+    if fileExists(path):
+      `varname`[] = readFile(path)
+    else:
+      `varname`[] = ""
 
 when defined(adsense):
   loadIfExists("adsense.html", ADSENSE_SRC)
+  loadIfExists("adsense-search.html", ADSENSE_SEARCH)
   loadIfExists("amphead.html", ADSENSE_AMP_HEAD)
   loadIfExists("ampbody.html", ADSENSE_AMP_BODY)
 

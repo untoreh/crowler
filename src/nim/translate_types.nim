@@ -36,7 +36,7 @@ type
     provider*: string      # must belong in `apis`
     name*: service
     lock*: Lock            # NOTE: Lock is currently unused
-  Translator* = ref TranslatorObj
+  Translator* = ptr TranslatorObj
   Queue* = object of RootObj ## An instance of a translation run
     pair*: langPair
     bufsize*: int

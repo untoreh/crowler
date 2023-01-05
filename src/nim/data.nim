@@ -157,6 +157,10 @@ proc put*[T](ldb: LockDB, vals: T) =
     batch.put(k, $getTime().toUnix & ";" & v)
   ldb.handle.write(batch)
 
+proc len*(ldb: LockDB): int =
+  for _ in ldb.handle.iter():
+    result += 1
+
 proc toUint32*(s: string): uint32 =
   case s.len:
     of 4: copyMem(result.addr, s[0].unsafeAddr, 4)

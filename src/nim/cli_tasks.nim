@@ -1,10 +1,10 @@
 import chronos
-import cligen
+import os, times, cligen
 
 const SERVER_MODE* {.booldefine.} = false
 
 import server_tasks
-import pyutils, search, lsh, nativehttp, topics, shorturls, stats
+import cfg, utils, pyutils, search, lsh, nativehttp, topics, shorturls, stats, cache
 
 proc init() =
   initTopics()
@@ -24,7 +24,26 @@ proc cleanupImpl() {.async.} =
     futs.add deleteLowTrafficArts(topic)
   await allFutures(futs)
 
+## Deletes low traffic articles
 proc purge*() = waitFor cleanupImpl()
 
+## Empties to page cache
+proc clearcache*(force = false) =
+  # Clear page cache database
+  try:
+    initCache(comp=true)
+    pageCache.clear()
+    let n = pageCache.len
+    warn "cache reduced to {n} keys."
+  except:
+    logexc()
+
+proc compactdata*(name = "translate.db") =
+  let path = config.websitePath / name
+  if not fileExists(path):
+    raise newException(OSError, "Database does not appear to exist")
+  let db = init(LockDB, path, ttl = initDuration())
+  db.compact()
+
 when isMainModule:
-  dispatchMulti([run], [purge])
+  dispatchMulti([run], [purge], [clearcache], [compactdata])

@@ -36,13 +36,6 @@ proc clearPage*(url: string) =
   else:
     deletePage(relpath)
 
-proc clearPageCache(force = false) =
-  # Clear page cache database
-  if force or os.getenv("DO_SERVER_CLEAR", "") == "1":
-    echo fmt"Clearing pageCache at {pageCache.path}"
-    pageCache.clear()
-  else:
-    echo "Ignoring doclear flag because 'DO_SERVER_CLEAR' env var is not set to '1'."
 
 import topics, uri
 proc clearSource(domain: string) =
@@ -116,17 +109,9 @@ proc genPage(relpath: string) =
   writeFile(SITE_PATH / "index.html", page)
 
 
-proc cliCompactData(name = "translate.db") =
-  let path = config.websitePath / name
-  if not fileExists(path):
-    raise newException(OSError, "Database does not appear to exist")
-  let db = init(LockDB, path, ttl = initDuration())
-  db.compact()
-
-
 when isMainModule:
   dispatchMulti([startServer], [clearPage], [cliPubTopic], [cliReindexSearch], [
-      clearSource], [clearPageCache], [versionInfo], [cliShowStats], [removeArt], [cliCompactData])
+      clearSource], [versionInfo], [cliShowStats], [removeArt])
 
   # initThread()
   # genPage("/")

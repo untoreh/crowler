@@ -43,9 +43,9 @@ proc opgBasic(title, tp, url, image: string, prefix = ""): seq[XmlNode] =
     result.add metaTag(fmt"{prefix}:url", url)
     result.add metaTag(fmt"{prefix}:image", image)
   else:
-    result.add metaTag("title", image)
-    result.add metaTag("type", image)
-    result.add metaTag("url", image)
+    result.add metaTag("title", title)
+    result.add metaTag("type", tp)
+    result.add metaTag("url", url)
     result.add metaTag("image", image)
 
 proc opgOptional(description, siteName, locale, audio, video,

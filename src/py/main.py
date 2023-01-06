@@ -21,13 +21,16 @@ import scheduler as sched
 import sources  # NOTE: searx has some namespace conflicts with google.ads, initialize after the `adwords_keywords` module
 import topics as tpm
 import utils as ut
-from sites import Job, Site, Topic
+from sites import Job, Site, Topic, TopicState, load_sites
 
 
 def get_kw_batch(site: Site, topic):
     """Get a batch of keywords to search and update lists accordingly."""
     subdir = site.topic_dir(topic)
     kwlist = subdir / "list.txt"
+    if not kwlist.exists():
+        ts = tpm.from_slug(topic)
+        tpm.gen_topic(site, check_sentiment=False, topic=ts)
     assert kwlist.exists(), f"kwbatch: {kwlist} was not found on storage"
 
     queue = subdir / "queue"
@@ -303,17 +306,18 @@ def site_scheduling(site: Site, throttle=60):
 
 def run_server(sites):
     if len(sites) == 0:
-        log.warn("no sites provided.")
-        return
-    # from guppy import hpy
-    # h = hpy()
-    # print(h.heap())
+        sites = load_sites()
+        assert isinstance(sites, dict)
+        if len(sites) == 0:
+            log.warn("no sites provided.")
+            return
+        sites = list(sites.keys())
     initialize()
     jobs = {}
 
     def dispatch(name):
         try:
-            site = Site(name, publishing = True)
+            site = Site(name, publishing=True)
             jobs[site] = sched.apply(site_scheduling, site)
         except:
             time.sleep(1)
@@ -355,7 +359,7 @@ if __name__ == "__main__":
         assert (
             len(sites) == 1
         ), "Can only execute jobs on a single site:topic combination."
-        st = Site(sites[0], publishing = True)
+        st = Site(sites[0], publishing=True)
         if args.topic != "":
             JOBS_MAP[args.job](st, args.topic)
         else:

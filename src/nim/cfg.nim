@@ -54,7 +54,7 @@ type ConfigObj {.partial.} = object
   ## Minimum number of hits an article has to have to avoid cleanup
   cleanupHits*: uint
 
-let configPath = PROJECT_PATH / "config" / os.getenv("CONFIG_NAME") & ".toml"
+let configPath = PROJECT_PATH / "config" / "sites" / os.getenv("CONFIG_NAME") & ".toml"
 let tomlConfig = parseFile(configPath)
 var configState = ConfigObj()
 let config* = configState.addr

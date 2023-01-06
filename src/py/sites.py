@@ -24,7 +24,6 @@ from enum import IntEnum
 from pathlib import Path
 from random import choice, randint
 from typing import Any, Callable, Dict, Iterator, List, MutableSequence, Optional, Tuple
-from newsite import load_domains
 
 import numpy as np
 import tomli
@@ -119,6 +118,9 @@ class Job(Enum):
     twitter = 60 * 60 * 2
     facebook = 60 * 60 * 4
 
+def load_sites(strict=False):
+    with open(cfg.CONFIG_DIR / "sites.json") as f:
+        return json.load(f)
 
 class Site:
     _config: dict
@@ -303,7 +305,7 @@ class Site:
         self.has_reddit = True
 
     def choose_subsite(self):
-        domains = load_domains().copy()
+        domains = load_sites().copy()
         while True:
             n_domains = len(domains)
             if not n_domains:

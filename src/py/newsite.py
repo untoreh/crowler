@@ -8,7 +8,6 @@ from pathlib import Path
 from shutil import copyfile
 from typing import NamedTuple
 from traceback import print_exc
-from pprint import pprint
 
 from praw.models.listing.mixins import base
 import tomli_w
@@ -41,7 +40,7 @@ base_config = {
     ConfigKeys.pages: "dmca,terms-of-service,privacy-policy",
     ConfigKeys.created: "",
     ConfigKeys.topics: "",
-    "new_topics": False,
+    "new_topics": True,
     "twitter_consumer_key": "",
     "twitter_consumer_secret": "",
     "twitter_access_token_key": "",
@@ -51,32 +50,28 @@ base_config = {
     "facebook_page_id": "",
 }
 
-
-def load_domains():
-    """domains.json is a mapping of `domain` => `port`
-    where the port is the local port that is serving the website."""
-    global domains, domains_path
-    domains_path = cfg.CONFIG_DIR / "domains.json"
-    if not domains_path.exists():
-        raise OSError(f"Path not found: {domains_path}, create it manually.")
-    with open(domains_path, "r") as f:
-        domains = json.load(f)
-    return domains
+# `sites.json` is a mapping of `domain` => `port`
+# where the port is the local port that is serving the website
+sites_path = cfg.CONFIG_DIR / "sites.json"
+if not sites_path.exists():
+    raise OSError(f"Path not found: {sites_path}, create it manually.")
+with open(sites_path, "r") as f:
+    SITES = json.load(f)
 
 
 def add_domain(domain, port):
-    assert isinstance(domains, dict)
+    assert isinstance(SITES, dict)
     assert isinstance(port, int)
-    domains[domain] = port
-    bak_file = str(domains_path) + ".bak"
-    copyfile(domains_path, bak_file)
-    with open(domains_path, "w") as f:
-        json.dump(domains, f)
+    SITES[domain] = port
+    bak_file = str(sites_path) + ".bak"
+    copyfile(sites_path, bak_file)
+    with open(sites_path, "w") as f:
+        json.dump(SITES, f)
 
 
 def unused_port():
-    assert isinstance(domains, dict)
-    ports = sorted(domains.values())
+    assert isinstance(SITES, dict)
+    ports = sorted(SITES.values())
     return ports[-1] + 1
 
 
@@ -113,8 +108,8 @@ def symlink(base: Path, tld, slug):
 
 
 def gen_site(domain, cat):
-    if domain in domains:
-        raise ValueError("Domain already present in domains list.")
+    if domain in SITES:
+        raise ValueError("Domain already present in SITES list.")
     topics = tpm.from_cat(cat)
     slug = slugify(cat)
     assert isinstance(topics, list)
@@ -136,21 +131,19 @@ def gen_site(domain, cat):
     if tld != slug:
         symlink(cfg.DATA_DIR, tld, slug)
         symlink(cfg.DATA_DIR / "ads", tld, slug)
-        symlink(cfg.CONFIG_DIR / "logo", tld, slug)
 
     print("Type website title:")
-    site_config[ConfigKeys.title] = stdin.readline().strip()
+    site_config[ConfigKeys.title] = stdin.readline()
     print("Type website description:")
-    site_config[ConfigKeys.desc] = stdin.readline().strip()
-    pprint(site_config)
-    print(f"Write this config? y/n")
+    site_config[ConfigKeys.desc] = stdin.readline()
+    print(f"Write this config? y/n\n{site_config}")
     while True:
-        ans = stdin.read(1)
+        ans = stdin.read()
         if ans == "y":
             try:
                 write_config(site_config)
             finally:
-                return
+                break
         elif ans == "n":
             print("Aborting")
             exit()

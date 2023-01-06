@@ -3,6 +3,7 @@ import json
 from re import compile, sub
 from time import time, sleep
 from collections import deque
+from cachetools import LRUCache
 from datetime import datetime
 from pathlib import Path
 from random import choice, randint
@@ -23,14 +24,18 @@ from enum import IntEnum
 from pathlib import Path
 from random import choice, randint
 from typing import Any, Callable, Dict, Iterator, List, MutableSequence, Optional, Tuple
+from newsite import load_domains
 
 import numpy as np
 import tomli
 import zarr as za
 
+
 def load_publishing_deps():
+    global BloomFilter, FBApi, Reddit, Subreddit, TwitterApi, blacklist
     from bloom_filter2 import BloomFilter
     from facepy import GraphAPI as FBApi
+
     # social
     from praw import Reddit
     from praw.models.reddit.subreddit import Subreddit
@@ -38,14 +43,17 @@ def load_publishing_deps():
 
     import blacklist
 
+
 import config as cfg
+
+SITES_CONFIG = cfg.SITES_CONFIG
 import log
 import proxies_pb as pb
 import utils as ut
 import scheduler as sched
 from utils import ZarrKey, load_zarr, save_zarr
 
-SITES = {}
+SITES = LRUCache(10)
 
 
 class Topic(IntEnum):
@@ -82,18 +90,22 @@ class TopicState:
 
 def read_sites_config(sitename: str, ensure=False, force=False):
     global SITES_CONFIG
-    if force or cfg.SITES_CONFIG is None:
+    if SITES_CONFIG is None:
+        SITES_CONFIG = {}
+    if force or not SITES_CONFIG.get(sitename):
+        config_path = cfg.SITES_CONFIG_DIR / (sitename + ".toml")
         try:
-            with open(cfg.SITES_CONFIG_FILE, "rb") as f:
-                SITES_CONFIG = tomli.load(f)
+            if not config_path.exists():
+                raise OSError(f"Config file not found at path {config_path}.")
+            with open(config_path, "rb") as f:
+                SITES_CONFIG[sitename] = tomli.load(f)
         except Exception as e:
             print(e)
-            cfg.SITES_CONFIG_FILE.touch()
-            SITES_CONFIG = {}
+            config_path.touch()
+            SITES_CONFIG[sitename] = {}
     if ensure:
-        assert (
-            sitename in SITES_CONFIG
-        ), f"Site name provided not found in main config file, {cfg.SITES_CONFIG_FILE}"
+        assert isinstance(SITES_CONFIG, dict)
+        assert sitename in SITES_CONFIG, f"Site name config is empty."
     return SITES_CONFIG.get(sitename, {})
 
 
@@ -110,12 +122,14 @@ class Job(Enum):
 
 class Site:
     _config: dict
+    _tl_config: dict
     _name: str
 
     topics_arr: Optional[za.Array] = None
     topics_dict: Dict[str, str] = {}
     topics_index: Dict[str, int] = {}
     new_topics_enabled: bool = False
+    is_subsite: bool = False
     topics_sync_freq = 3600
     has_reddit = False
     has_twitter = False
@@ -127,11 +141,11 @@ class Site:
     _last_reddit: float = 0
     _fb_use_source_url = False
 
-    def __init__(self, sitename="", publishing = False):
-        if not cfg.SITES_CONFIG_FILE.exists():
-            return
+    def __init__(self, sitename="", publishing=False):
         self._name = sitename
         self._config = read_sites_config(sitename)
+        if not self._config:
+            raise ValueError(f"Config not found for site {sitename}.")
         self.site_dir = cfg.DATA_DIR / "sites" / sitename
         self.req_cache_dir = self.site_dir / "cache"
         if publishing:
@@ -146,18 +160,18 @@ class Site:
 
         self.topics_dir = self.site_dir / "topics"
         self.topics_idx = self.topics_dir / "index"
-        self._topics = self._config.get("topics", [])
-        self.new_topics_enabled = self._config.get("new_topics", False)
+        self._topics = self.get_setting("topics", [])
+        self.new_topics_enabled = self.get_setting("new_topics", False)
 
-        self.created = self._config.get("created", "1970-01-01")
+        self.created = self.get_setting("created", "1970-01-01")
         self.created_dt = datetime.fromisoformat(self.created)
-        self.domain: str = self._config.get("domain", "")
+        self.domain: str = self.get_setting("website_domain", "")
         self.domain_rgx = compile(f"(?:https?:)?//{self.domain}")
         self.url = "https://" + self.domain
-        self._title = None
+        self._domain_title = None
         assert (
             self.domain != ""
-        ), f"domain not found in site configuration for {self._name} read from {cfg.SITES_CONFIG_FILE}"
+        ), f"domain not found in site configuration for {self._name}."
 
         self.last_topic_file = self.topics_dir / "last_topic.json"
         if self.topics_dir.exists():
@@ -165,10 +179,29 @@ class Site:
         self._init_data()
         SITES[sitename] = self
 
+        # if its a subdomain, load top level config
+        self.is_subsite = len(self.domain.split(".")) > 2
+        if self.is_subsite:
+            tld = self.domain.split(".")
+            self._tl_config = read_sites_config()
         if sitename != "dev" and publishing:
             self._init_reddit()
             self._init_twitter()
             self._init_facebook()
+
+    @staticmethod
+    def get_tld(domain) -> str:
+        return "".join(domain.split(".")[-2:])
+
+    def get_setting(self, k: str, default=None):
+        v = self._config.get(k)
+        if v is None:
+            if self.is_subsite:
+                return self._tl_config.get(k, default)
+            else:
+                return default
+        else:
+            return v
 
     def _save_post_time(self, name, val):
         with open(self.site_dir / f"last_{name}.json", "w") as f:
@@ -182,10 +215,10 @@ class Site:
             return 0
 
     def _init_facebook(self):
-        self._fb_page_id = self._config.get("facebook_page_id", "")
+        self._fb_page_id = self.get_setting("facebook_page_id", "")
         if not self._fb_page_id:
             log.warn("Facebook page id not set.")
-        self._fb_page_token = self._config.get("facebook_page_token", "")
+        self._fb_page_token = self.get_setting("facebook_page_token", "")
         if self._fb_page_id:
             assert (
                 self._fb_page_token
@@ -246,13 +279,13 @@ class Site:
     def _init_reddit(self):
         import base64
 
-        reddit_sub = self._config.get("reddit_subreddit", "")
+        reddit_sub = self.get_setting("reddit_subreddit", "")
         if not reddit_sub:
             return
-        reddit_id = self._config.get("reddit_client_id")
-        reddit_secret = self._config.get("reddit_client_secret")
-        reddit_user = self._config.get("reddit_user")
-        reddit_psw = self._config.get("reddit_pass", "")
+        reddit_id = self.get_setting("reddit_client_id")
+        reddit_secret = self.get_setting("reddit_client_secret")
+        reddit_user = self.get_setting("reddit_user")
+        reddit_psw = self.get_setting("reddit_pass", "")
         try:
             reddit_psw = base64.b64decode(reddit_psw).decode("utf-8")
         except:
@@ -268,6 +301,17 @@ class Site:
         ).subreddit(reddit_sub)
         self._last_reddit = self._load_post_time("reddit")
         self.has_reddit = True
+
+    def choose_subsite(self):
+        domains = load_domains().copy()
+        while True:
+            n_domains = len(domains)
+            if not n_domains:
+                return
+            idx = randint(0, len(domains))
+            (dom, _) = domains.pop(idx)
+            if self.domain == Site.get_tld(dom):
+                return dom
 
     def choose_article(self):
         self.load_topics()
@@ -302,17 +346,17 @@ class Site:
 
     def _init_twitter(self):
 
-        consumer_key = self._config.get("twitter_consumer_key")
-        consumer_secret = self._config.get("twitter_consumer_secret")
-        access_key = self._config.get("twitter_access_token_key")
-        access_secret = self._config.get("twitter_access_token_secret")
+        consumer_key = self.get_setting("twitter_consumer_key")
+        consumer_secret = self.get_setting("twitter_consumer_secret")
+        access_key = self.get_setting("twitter_access_token_key")
+        access_secret = self.get_setting("twitter_access_token_secret")
         self._twitter_api = TwitterApi(
             consumer_key, consumer_secret, access_key, access_secret
         )
         self.has_twitter = True
         self._last_twitter = self._load_post_time("twitter")
-        self.twitter_url = "https://twitter.com/" + self._config.get(
-            "twitter_handle", ""
+        self.twitter_url = "https://twitter.com/" + (
+            self.get_setting("twitter_handle", "") or ""
         )
 
     def tweet(self):
@@ -396,11 +440,21 @@ class Site:
                 feeds = self.load_feeds(topic)
                 return self._sources_time(feeds)
             case Job.reddit:
-                return self._social_time(self._last_reddit, kind) if self.has_reddit else 1
+                return (
+                    self._social_time(self._last_reddit, kind) if self.has_reddit else 1
+                )
             case Job.facebook:
-                return self._social_time(self._last_facebook, kind) if self.has_facebook else 1
+                return (
+                    self._social_time(self._last_facebook, kind)
+                    if self.has_facebook
+                    else 1
+                )
             case Job.twitter:
-                return self._social_time(self._last_twitter, kind) if self.has_twitter else 1
+                return (
+                    self._social_time(self._last_twitter, kind)
+                    if self.has_twitter
+                    else 1
+                )
         return 1
 
     def topic_feed_interval(self, topic: str):
@@ -420,11 +474,11 @@ class Site:
 
     @property
     def title(self):
-        if self._title is None:
+        if self._domain_title is None:
             assert self.domain.count(".") == 1
             toplevel, domain = self.domain.split(".")
-            self._title = f"{toplevel.title()} dot {domain}"
-        return self._title
+            self._domain_title = f"{toplevel.title()} dot {domain}"
+        return self._domain_title
 
     def load_articles(self, topic: str, k=ZarrKey.articles, subk: int | str = ""):
         return load_zarr(k=k, subk=subk, root=self.topic_dir(topic))

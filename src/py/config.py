@@ -85,7 +85,7 @@ NEW_TOPICS_ENABLED = strtobool(
 )  # If the job server should keep adding new topics to the current website
 NEW_TOPIC_FREQ = 3600 * 8  # Delay between adding new topics
 
-SITES_CONFIG_FILE = CONFIG_DIR / "sites.toml"
+SITES_CONFIG_DIR = CONFIG_DIR / "sites"
 SITES_DIR = DATA_DIR / "sites"
 
 SITES_CONFIG = None

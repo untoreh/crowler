@@ -1,5 +1,5 @@
 import { $, $$ } from "./lib.js";
-import { main } from "./app.js"
+import { mainTr, mainContentEl } from "./app.js"
 
 const Http = new XMLHttpRequest();
 Http.timeout = 60000; // 60 secs
@@ -56,15 +56,16 @@ Http.onreadystatechange = (e) => {
   try {
     if (isTrReq(e)) {
       let resp = Http.responseText
-      if (resp.startsWith("<!doctype")) {
-        trBox.classList.remove("waiting")
-        sleep(100).then(() => {
-          document.open()
-          document.write(resp)
-          document.close()
-          already_translated = true;
-          main()
-        })
+      if (resp.startsWith("<!doctype") || resp.startsWith("<!DOCTYPE")) {
+        let domTr = (new DOMParser()).parseFromString(resp, "text/html")
+        let mainTr = $("main", domTr)
+        if (mainTr) {
+          trBox.classList.remove("waiting")
+          sleep(100).then(() => {
+            mainContentEl.replaceWith(mainTr)
+            already_translated = true;
+          })
+        }
       }
     }
   } catch {}

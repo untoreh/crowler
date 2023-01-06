@@ -55,6 +55,7 @@ python-twitter
 facepy
 
 tomli
+tomli-w
 # not needed...
 # textacy
 

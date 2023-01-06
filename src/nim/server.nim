@@ -536,13 +536,16 @@ template handleTranslation(): bool =
       pageCache[reqCtx.key] = page
       await reqCtx.doReply(page, rqid)
       reqCtx.cached = true
+      true
     except:
       logexc()
       if reqCtx.respBody[].len > 0:
         await reqCtx.doReply(rqid)
+        true
       else:
-        handle503()
-    true
+        cacheParam = '0'
+        handleCacheClear()
+        false
   else:
     false
 
@@ -796,5 +799,4 @@ when isMainModule:
   # let argt = getLastArticles(topic)
   # echo buildRelated(argt[0])
   # imgCache.clear()
-  # pageCache.clear()
   startServer(doclear = true)

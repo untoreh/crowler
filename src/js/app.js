@@ -114,6 +114,8 @@ function closeMenus(e) {
   }
 }
 
+export var mainContentEl;
+
 export function main() {
   // dark light
   $$(".dk-toggle").forEach((el) => (el.onclick = toggleTheme));
@@ -138,7 +140,7 @@ export function main() {
   const surface = $(".mdc-ripple-surface");
   const ripple = new MDCRipple(surface);
 
-  const mainContentEl = $("main");
+  mainContentEl = $("main");
   const menuBtn = $(".menu-btn");
 
   topAppBar.setScrollTarget(mainContentEl);

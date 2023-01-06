@@ -1,4 +1,5 @@
 import json
+from typing import List
 import os
 import random
 import time
@@ -14,7 +15,8 @@ import proxies_pb as pb
 import utils as ut
 from sites import Site, TopicState
 
-CATEGORIES = None
+CATEGORIES: List | None = None
+_ALL_CAT_FILE = cfg.DATA_DIR / "google" / "all_categories.json"
 _CAT_FILE = cfg.DATA_DIR / "google" / "categories.json"
 _KEYWORDS = None
 if os.path.exists(cfg.TOPICS_BLACKLIST):
@@ -25,12 +27,16 @@ else:
 MIN_SENTIMENT = 0.17
 
 
-def load_categories(reset=False):
+def load_categories(reset=False, allcats=False):
     global CATEGORIES, DONE
-    if CATEGORIES == None:
-        if not reset and os.path.exists(_CAT_FILE):
+    if CATEGORIES == None and not reset:
+        if not allcats and not reset and os.path.exists(_CAT_FILE):
             with open(_CAT_FILE, "r") as f:
                 CATEGORIES = json.load(f)
+                return CATEGORIES
+        elif allcats and not reset and os.path.exists(_ALL_CAT_FILE):
+            with open(_ALL_CAT_FILE, "r") as f:
+                return json.load(f)
         else:
             with pb.http_opts():
                 pytrends = TrendReq(
@@ -42,13 +48,22 @@ def load_categories(reset=False):
                     timeout=20,
                 )
             cats = pytrends.categories()
-            os.makedirs(os.path.dirname(_CAT_FILE))
-            CATEGORIES = flatten_categories(cats=cats)
-            with open(_CAT_FILE, "w") as f:
-                json.dump(CATEGORIES, f)
+            os.makedirs(os.path.dirname(_CAT_FILE), exist_ok=True)
+            if allcats:
+                if not os.path.exists(_ALL_CAT_FILE):
+                    with open(_ALL_CAT_FILE, "w") as f:
+                        json.dump(cats, f)
+            if reset:
+                CATEGORIES = flatten_categories(cats=cats)
+                with open(_CAT_FILE, "w") as f:
+                    json.dump(CATEGORIES, f)
+                return CATEGORIES
+            else:
+                return cats
 
 
-def flatten_categories(flat=[], cats=CATEGORIES):
+def flatten_categories(flat: List = [], cats=CATEGORIES):
+    assert isinstance(cats, dict)
     for c in cats["children"]:
         if "children" in c:
             flatten_categories(flat, c)
@@ -88,16 +103,20 @@ def get_category(site: Site, force=False):
     return v
 
 
-def gen_topic(site: Site, check_sentiment=True, max_cat_tries=3):
+def gen_topic(
+    site: Site, check_sentiment=True, max_cat_tries=3, topic: TopicState | None = None
+):
     global _KEYWORDS
     cat_tries = 0
-    topic = TopicState()
-    while cat_tries < max_cat_tries:
-        topic.name = get_category(site)
-        if topic.name not in BLACKLIST:
-            break
-        cat_tries += 1
-    topic.slug = ut.slugify(topic.name)
+    if topic is None:
+        topic = TopicState()
+        while cat_tries < max_cat_tries:
+            topic.name = get_category(site)
+            if topic.name not in BLACKLIST:
+                break
+            cat_tries += 1
+        topic.slug = ut.slugify(topic.name)
+
     topic_dir = site.topic_dir(topic.slug)
     try:
         os.makedirs(topic_dir)
@@ -106,19 +125,25 @@ def gen_topic(site: Site, check_sentiment=True, max_cat_tries=3):
     suggestions = suggest(topic.name)
     assert suggestions is not None
     sugstr = "\n".join(suggestions)
-    sentiment = TextBlob(sugstr).sentiment.polarity
-    if (not check_sentiment) or (sentiment >= MIN_SENTIMENT):
+
+    def finalize():
         with open(topic_dir / "list.txt", "w") as f:
             f.write(sugstr)
         site.add_topic(topic)
-        # clear last topic since we saved
         return topic.slug
+
+    if not check_sentiment:
+        return finalize()
     else:
-        log.warn(
-            f"topic: generation skipped for {topic.name}, sentiment low {sentiment} < {MIN_SENTIMENT}"
-        )
-        set_last_topic(site, {"name": "", "time": 0})
-        return None
+        sentiment = TextBlob(sugstr).sentiment.polarity
+        if sentiment >= MIN_SENTIMENT:
+            return finalize()
+        else:
+            log.warn(
+                f"topic: generation skipped for {topic.name}, sentiment low {sentiment} < {MIN_SENTIMENT}"
+            )
+            set_last_topic(site, {"name": "", "time": 0})
+            return None
 
 
 def new_topic(site: Site, max_tries=3):
@@ -131,6 +156,8 @@ def new_topic(site: Site, max_tries=3):
 
 
 years_rgx = re.compile("\d{4}")
+
+
 def suggest(topic: str):
     assert topic
     global _KEYWORDS
@@ -143,7 +170,7 @@ def suggest(topic: str):
             s = _KEYWORDS.suggest(kws[:20], langloc=None)
             if len(s) == 0:
                 break
-            for n in range(len(s)): # remove years
+            for n in range(len(s)):  # remove years
                 s[n] = re.sub(years_rgx, "", s[n])
             sugs.extend(s)
             kws = s
@@ -157,3 +184,39 @@ def save_kws(site: Site, topic: str, kws: list):
     with open(topic_dir / "list.txt", "w") as f:
         f.seek(0)
         f.write("\n".join(kws))
+
+
+def from_slug(slug: str, cats=None):
+    """Return the full name of a topic, from its slug."""
+    if cats is None:
+        cats = load_categories(allcats=True)
+    assert isinstance(cats, dict)
+    name = cats.get("name", "")
+    if ut.slugify(name) == slug:
+        return TopicState(name=name, slug=slug)
+    else:
+        for c in cats.get("children", []):
+            name = from_slug(slug, c)
+            if name:
+                return TopicState(name=name, slug=slug)
+    return TopicState()
+
+
+def from_cat(cat: str, cats=None):
+    """Return the list of children categories given a main one, or the main one if it has no children."""
+    if cats is None:
+        cats = load_categories(allcats=True)
+        cat = ut.slugify(cat)
+    assert isinstance(cats, dict)
+    name = cats.get("name", "")
+    if ut.slugify(name) == cat:
+        cdr = cats.get("children", [])
+        if len(cdr) == 0:
+            return [name]
+        else:
+            return [c.get("name", "") for c in cdr]
+    else:
+        for c in cats.get("children", []):
+            val = from_cat(cat, c)
+            if val:
+                return val

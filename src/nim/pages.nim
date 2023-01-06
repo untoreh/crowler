@@ -270,42 +270,46 @@ template divWrap(class = "", cnt: string): string =
   res
 
 proc buildHomePage*(lang, amp: string): Future[VNode] {.async.} =
-  var a: Article
+  var
+    a: Article
+    content: string
   withPyLock:
     a = default(Article)
-  var
-    nTopics = len(topicsCache)
-    batchSize = cfg.HOME_ARTS.div(nTopics) + 1
-    counters = initTable[string, int](nTopics)
-    nArts = 0
-    content: string
-    processed: HashSet[string]
-    trial = 0
-    maxTries = cfg.HOME_ARTS * 3
-    sepAds = adsGen(adsSeparator)
-    sepLinks = adsGen(adsSeparator)
+  try:
+    var
+      nTopics = len(topicsCache)
+      batchSize = cfg.HOME_ARTS.div(nTopics) + 1
+      counters = initTable[string, int](nTopics)
+      nArts = 0
+      processed: HashSet[string]
+      trial = 0
+      maxTries = cfg.HOME_ARTS * 3
+      sepAds = adsGen(adsSeparator)
+      sepLinks = adsGen(adsSeparator)
 
-  while nArts < cfg.HOME_ARTS and trial < maxTries:
-    trial.inc
-    var topic: string
-    withPyLock:
-      topic = site.get_random_topic().to(string)
-    if topic == "": # this can happen if we ran out of topics
-      continue
-    let arts = await getLastArticles(topic, batchSize)
-    if len(arts) > 0:
-      if topic notin counters:
-        counters[topic] = -1
-      counters[topic].inc
-      for n in counters[topic]..<len(arts):
-        let ar = arts[n]
-        if ar.slug notin processed:
-          content.add $(await articleEntry(ar))
-          let link = sepLinks.filterNext(notEmpty)
-          if not link.isnil:
-            content.add buildHtml(tdiv(class = "ads-sep"), link)
-          processed.incl ar.slug
-          nArts.inc
+    while nArts < cfg.HOME_ARTS and trial < maxTries:
+      trial.inc
+      var topic: string
+      withPyLock:
+        topic = site.get_random_topic().to(string)
+      if topic == "": # this can happen if we ran out of topics
+        continue
+      let arts = await getLastArticles(topic, batchSize)
+      if len(arts) > 0:
+        if topic notin counters:
+          counters[topic] = -1
+        counters[topic].inc
+        for n in counters[topic]..<len(arts):
+          let ar = arts[n]
+          if ar.slug notin processed:
+            content.add $(await articleEntry(ar))
+            let link = sepLinks.filterNext(notEmpty)
+            if not link.isnil:
+              content.add buildHtml(tdiv(class = "ads-sep"), link)
+            processed.incl ar.slug
+            nArts.inc
+  except:
+    logexc()
 
   let pagetree = await buildPage(title = "",
                        content = verbatim(content),

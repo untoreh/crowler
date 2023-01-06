@@ -18,7 +18,7 @@ var imgCache*: LockDB
 proc initCache*(doclear=false, comp=false) =
   try:
     setNil(pageCache):
-      init(LockDB, config.websitePath / "page", initDuration(days = 1))
+      init(LockDB, config.websitePath / "page", initDuration(hours = 8))
     setNil(imgCache):
       init(LockDB, config.websitePath / "image", initDuration(days = 50))
     if doclear:

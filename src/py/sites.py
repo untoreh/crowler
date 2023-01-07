@@ -40,12 +40,12 @@ def load_publishing_deps():
     from praw.models.reddit.subreddit import Subreddit
     from twitter.api import Api as TwitterApi
 
-    import blacklist
 
-
+import blacklist
 import config as cfg
 
 SITES_CONFIG = cfg.SITES_CONFIG
+SITES_DOMAINS = {}
 import log
 import proxies_pb as pb
 import utils as ut
@@ -87,6 +87,15 @@ class TopicState:
         """
 
 
+def name_from_domain(domain):
+    try:
+        if not SITES_DOMAINS:
+            SITES_DOMAINS.update(load_sites())
+        return SITES_DOMAINS.get(domain, [""])[0]
+    except:
+        return ""
+
+
 def read_sites_config(sitename: str, ensure=False, force=False):
     global SITES_CONFIG
     if SITES_CONFIG is None:
@@ -118,9 +127,18 @@ class Job(Enum):
     twitter = 60 * 60 * 2
     facebook = 60 * 60 * 4
 
+
+SITES_PATH = cfg.CONFIG_DIR / "sites.json"
+
+
 def load_sites(strict=False):
-    with open(cfg.CONFIG_DIR / "sites.json") as f:
+    """SITES.json is a mapping of `domain` => `port`
+    where the port is the local port that is serving the website."""
+    if not SITES_PATH.exists():
+        raise OSError(f"Path not found: {SITES_PATH}, create it manually.")
+    with open(SITES_PATH, "r") as f:
         return json.load(f)
+
 
 class Site:
     _config: dict
@@ -143,6 +161,9 @@ class Site:
     _last_reddit: float = 0
     _fb_use_source_url = False
 
+    _topics = None
+    _slugs = None
+
     def __init__(self, sitename="", publishing=False):
         self._name = sitename
         self._config = read_sites_config(sitename)
@@ -157,8 +178,9 @@ class Site:
                 error_rate=0.01,
                 filename=(self.site_dir / "bloom_images.bin", -1),
             )
-            self.blacklist_path = self.site_dir / "blacklist.txt"
-            self.blacklist = blacklist.load_blacklist(self)
+
+        self.blacklist_path = self.site_dir / "blacklist.txt"
+        self.blacklist = blacklist.load_blacklist(self)
 
         self.topics_dir = self.site_dir / "topics"
         self.topics_idx = self.topics_dir / "index"
@@ -171,8 +193,8 @@ class Site:
         self.domain_rgx = compile(f"(?:https?:)?//{self.domain}")
         self.url = "https://" + self.domain
         self._domain_title = None
-        assert (
-            self.domain != ""
+        assert self.domain != "" and isinstance(
+            self.domain, str
         ), f"domain not found in site configuration for {self._name}."
 
         self.last_topic_file = self.topics_dir / "last_topic.json"
@@ -184,8 +206,10 @@ class Site:
         # if its a subdomain, load top level config
         self.is_subsite = len(self.domain.split(".")) > 2
         if self.is_subsite:
-            tld = self.domain.split(".")
-            self._tl_config = read_sites_config()
+            tld = Site.get_tld(self.domain)
+            name = name_from_domain(tld)
+            if name:
+                self._tl_config = read_sites_config(name)
         if sitename != "dev" and publishing:
             self._init_reddit()
             self._init_twitter()
@@ -193,7 +217,7 @@ class Site:
 
     @staticmethod
     def get_tld(domain) -> str:
-        return "".join(domain.split(".")[-2:])
+        return ".".join(domain.split(".")[-2:])
 
     def get_setting(self, k: str, default=None):
         v = self._config.get(k)
@@ -613,9 +637,19 @@ class Site:
                 self.topics_index = dict(
                     zip(self.topics_arr[:, 0], range(0, len(self.topics_arr)))
                 )
-            else:
-                self.topics_dict = {}
         return (self.topics_arr, self.topics_dict)
+
+    @property
+    def topics(self):
+        if self._topics is None:
+            self._topics = self._config.get("topics", [])
+        return self._topics
+
+    @property
+    def slugs(self):
+        if self._slugs is None:
+            self._slugs = [ut.slugify(s) for s in self.topics]
+        return self._slugs
 
     def get_topic_count(self):
         return len(self.topics_dict)
@@ -655,13 +689,14 @@ class Site:
         assert isinstance(tp, TopicState), "ati: not a topic state"
         (topics, tpset) = self.load_topics()
         if topics.shape == (0, 0):
-            topics.resize(0, 3)
+            topics.resize(0, 5)
         assert ut.slugify(tp.slug) == tp.slug, "ati: slugs should be equal"
         if tp.slug in tpset:
             return
         d = np.asarray([tp.slug, tp.name, tp.pub_date, tp.pub_count, tp.unpub_count])
         topics.append([d])
         tpset[tp.slug] = tp.name
+        self.load_topics(force=True) # update topics_index and topics_dict
         self.reset_topic_data(tp.slug)
 
     def reset_topics_idx(self, topics):
@@ -834,12 +869,20 @@ class Site:
 
     def sorted_topics(self, key=Topic.UnpubCount, force=False, full=False, rev=False):
         """Returns topics index sorted by the number of unpublished articles of each topics."""
-        arr = self.load_topics(force)[0][:]
-        # NOTE: can't sort without coercion
-        idx = arr[:, key].astype(np.int64).argsort()
-        if rev:  # descending order
-            idx = idx[::-1]
-        return arr[idx] if full else arr[idx, Topic.Slug]
+        try:
+            arr = self.load_topics(force)[0][:]
+            if len(arr) == 0:
+                raise ValueError()
+            # NOTE: can't sort without coercion
+            idx = arr[:, key].astype(np.int64).argsort()
+            if rev:  # descending order
+                idx = idx[::-1]
+            return arr[idx] if full else arr[idx, Topic.Slug]
+        except:
+            if full:
+                return [TopicState(slug=s) for s in self.slugs]
+            else:
+                return self.slugs
 
 
 # def init_topic(topic: str):

@@ -18,11 +18,14 @@ import html_misc,
        ads,
        server_types
 
-let tplRepObj = @{"config.websiteDomain": config.websiteDomain}
-let tplRep* = tplRepObj.unsafeAddr
-let ppRepObj = @{"config.websiteUrl": $config.websiteUrl.combine(),
-                 "config.websiteDomain": config.websiteDomain}
-let ppRep* = ppRepObj.unsafeAddr
+var
+  tplRep {.threadvar.}: seq[(string, string)]
+  ppRep {.threadvar.}: seq[(string, string)]
+
+proc initPages*() =
+  tplRep = @{"WEBSITE_DOMAIN": config.websiteDomain}
+  ppRep = @{"WEBSITE_URL": $config.websiteUrl.combine(),
+                 "WEBSITE_DOMAIN": config.websiteDomain}
 
 proc getSubDirs(path: string): seq[int] =
   var dirs = collect((for f in walkDirs(path / "*"):
@@ -190,7 +193,7 @@ proc processPage*(lang, amp: string, tree: VNode not nil,
       filedir = SITE_PATH
       tpath = filedir / lang / relpath
     var fc = init(FileContext, tree, filedir, relpath,
-          (src: SLang.code, trg: lang), tpath)
+          (src: SLang.code, trg: lang), tpath, config)
     debug "page: translating page to {lang}"
     let jobId = transId(lang, relpath)
     result = await translateLang(move fc,
@@ -224,12 +227,12 @@ proc pageFromTemplate*(tpl, lang, amp: string): Future[string] {.async.} =
   let domain = config.websiteDomain
   let (vars, title, desc) =
     case tpl:
-      of "dmca": (tplRep[], "DMCA", fmt"dmca compliance for {domain}")
-      of "tos": (ppRep[], "Terms of Service",
+      of "dmca": (tplRep, "DMCA", fmt"dmca compliance for {domain}")
+      of "tos": (ppRep, "Terms of Service",
                  fmt"Terms of Service for {domain}")
-      of "privacy-policy": (ppRep[], "Privacy Policy",
+      of "privacy-policy": (ppRep, "Privacy Policy",
                             fmt"Privacy Policy for {domain}")
-      else: (tplRep[], tpl, "")
+      else: (tplRep, tpl, "")
   txt = multiReplace(txt, vars)
   let
     slug = slugify(title)
@@ -386,6 +389,3 @@ proc buildSuggestList*(topic, input: string, prefix = ""): Future[
 {.pop.}
 {.pop.}
 
-when isMainModule:
-  import cfg
-  # echo buildHomePage("en", "")

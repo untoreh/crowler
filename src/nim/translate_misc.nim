@@ -18,10 +18,10 @@ import
 
 export SLang
 var langTmpUri {.threadvar.}: Uri
-langTmpUri.opaque = false
 
 proc langUrl(code, url: string, prefix = "/"): string {.gcsafe.} =
     parseUri(url, langTmpUri)
+    langTmpUri.opaque = false
     langTmpUri.path = prefix & code & langTmpUri.path
     $langTmpUri
 

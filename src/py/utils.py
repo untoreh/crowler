@@ -209,7 +209,8 @@ def save_zarr(
             "dtype": object,
         }
         if len(data) == 0:
-            kwargs["shape"] = (0, 3) if k == ZarrKey.topics else (0,)
+            # NOTE: 5 is the number of fields in TopicState
+            kwargs["shape"] = (0, 5) if k == ZarrKey.topics else (0,)
             zfun = za.empty
         else:
             kwargs["arr"] = data

@@ -32,8 +32,21 @@ let
   host = hostStr[0].unsafeAddr
   passStr = cstring(SONIC_PASS)
   pass = passStr[0].unsafeAddr
+
 var conn: sonic.Connection
 
+type
+  SonicMessageKind = enum query, sugg
+  SonicQueryArgsTuple = tuple[topic: string, keywords: string, lang: string, limit: int]
+  SonicMessageTuple = tuple[args: SonicQueryArgsTuple, kind: SonicMessageKind,
+      o: ptr[seq[string]], id: MonoTime]
+  SonicMessage = ptr SonicMessageTuple
+
+var
+  sonicThread: Thread[void]
+  sonicIn: AsyncPColl[SonicMessage]
+  sonicOut: AsyncTable[SonicMessage, bool]
+  futs {.threadvar.}: seq[Future[void]]
 
 template cptr(s: string): ptr[char] =
   if likely(s.len > 0): s[0].unsafeAddr
@@ -137,17 +150,6 @@ when not defined(release):
     await writeFileAsync(config.sonicBacklog, "")
 
 
-type
-  SonicMessageKind = enum query, sugg
-  SonicQueryArgsTuple = tuple[topic: string, keywords: string, lang: string, limit: int]
-  SonicMessageTuple = tuple[args: SonicQueryArgsTuple, kind: SonicMessageKind,
-      o: ptr[seq[string]], id: MonoTime]
-  SonicMessage = ptr SonicMessageTuple
-
-var sonicThread: Thread[void]
-var sonicIn: AsyncPColl[SonicMessage]
-var sonicOut: AsyncTable[SonicMessage, bool]
-var futs {.threadvar.}: seq[Future[void]]
 
 when false:
   proc translateKws(kws: string, lang: string): Future[string] {.async.} =
@@ -191,8 +193,11 @@ proc suggestSonic(msg: SonicMessage) {.async.} =
       msg.o[].add s
   sonicOut[msg] = true
 
-proc deleteFromSonic*(capts: UriCaptures): int =
+template notForServer() = warn "Don't use from server."
+
+proc deleteFromSonic*(capts: UriCaptures, col = config.websiteDomain): int =
   ## Delete an article from sonic db
+  notForServer()
   let key = join([capts.topic, capts.page, capts.art], "/")
   sonic.flush(conn, col = config.websiteDomain.cptr, buc = defaultBucket,
       obj = key.cptr)
@@ -209,6 +214,7 @@ proc writePushLog(log: JsonNode) {.async.} =
   await writeFileAsync(pushLogFile, $log)
 
 proc pushAllSonic*() {.async.} =
+  notForServer()
   var total, c, pagenum: int
   let pushLog = await readPushLog()
   if pushLog.len == 0:
@@ -257,7 +263,9 @@ proc query*(topic: string, keywords: string, lang: string = SLang.code,
   msg.kind = query
   msg.o = result.addr
   msg.id = getMonoTime()
-  await querySonic(msg.addr)
+  # await querySonic(msg.addr)
+  sonicIn.add(msg.addr)
+  discard await sonicOut.pop(msg.addr)
 
 # import quirks # required by py DetectLang
 proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[
@@ -275,7 +283,9 @@ proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[
   msg.args.limit = limit
   msg.o = result.addr
   msg.id = getMonoTime()
-  await suggestSonic(msg.addr)
+  # await suggestSonic(msg.addr)
+  sonicIn.add(msg.addr)
+  discard await sonicOut.pop(msg.addr)
 
 proc connectSonic(reconnect = false) =
   var notConnected: bool
@@ -287,7 +297,7 @@ template restartSonic(what: string) {.dirty.} =
   if e is OSError:
     connectSonic(reconnect = true)
 
-proc asyncSonicHandler() {.async.} =
+proc asyncSonicHandler() {.async, gcsafe.} =
   try:
     var q: SonicMessage
     while true:
@@ -299,7 +309,7 @@ proc asyncSonicHandler() {.async.} =
           of sugg: suggestSonic(move q)
   except Exception as e: # If we quit we can catch defects too.
     logexc()
-    warn "lsh: lsh handler crashed."
+    warn "sonic: sonic handler crashed."
 
 proc sonicHandler() =
   while true:

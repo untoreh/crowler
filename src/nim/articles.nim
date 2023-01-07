@@ -239,9 +239,9 @@ proc deleteArt*(capts: UriCaptures, cacheOnly = false) {.async, gcsafe.} =
       for n in toRemove:
         pageArts[n] = PyNone
 
-when isMainModule:
-  discard
-  # echo waitFor getLastArticles("mini", 3)
-  # for cnt in allDoneContent("mini"):
-  #   continue
-  # echo waitFor nextPageNum("mini", 2)
+# when isMainModule:
+#   discard
+#   echo waitFor getLastArticles("mini", 3)
+#   for cnt in allDoneContent("mini"):
+#     continue
+#   echo waitFor nextPageNum("mini", 2)

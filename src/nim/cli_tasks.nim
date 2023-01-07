@@ -6,13 +6,19 @@ const SERVER_MODE* {.booldefine.} = false
 import server_tasks
 import cfg, utils, pyutils, search, lsh, nativehttp, topics, shorturls, stats, cache
 
-proc init() =
-  initTopics()
-  initZstd()
+proc initThreadBase() =
+  initConfig(os.getenv("CONFIG_NAME", ""))
+  initPy()
+  initTypes()
+  initCompressor()
+  initLogging()
+  registerChronosCleanup()
 
 proc run() =
-  init()
+  initThreadBase()
+  initTopics()
   initSonic()
+  initZstd()
   initHttp()
   startLSH()
   waitFor runTasks(@[pub, tpc, mem], wait=true)
@@ -25,10 +31,10 @@ proc cleanupImpl() {.async.} =
   await allFutures(futs)
 
 ## Deletes low traffic articles
-proc purge*() = waitFor cleanupImpl()
+proc purge() = waitFor cleanupImpl()
 
 ## Empties to page cache
-proc clearcache*(force = false) =
+proc clearcache(force = false) =
   # Clear page cache database
   try:
     initCache(comp=true)
@@ -38,7 +44,7 @@ proc clearcache*(force = false) =
   except:
     logexc()
 
-proc compactdata*(name = "translate.db") =
+proc compactdata(name = "translate.db") =
   let path = config.websitePath / name
   if not fileExists(path):
     raise newException(OSError, "Database does not appear to exist")

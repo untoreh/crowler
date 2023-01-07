@@ -12,15 +12,11 @@ import
   cfg,
   utils,
   lazyjson,
-  # pyhttp
   nativehttp
 
 const
   IF_VERSION_MAJOR: uint32 = 3
   IF_VERSION_MINOR: uint32 = 0
-  BUFFER_SIZE = 10 * 1024 * 1024
-  RES_BUFFER_SIZE = 1 * 1024 * 1024
-  MAX_BUFFERS = 16
 
 type
   IFLContext = object
@@ -41,13 +37,17 @@ when defined(gcDestructors):
 const
   outputIoId = 0
   inputIoId = 1
-var
-  ctx: IFLContext
-  outputBuffer: ptr ptr uint8
-  outputBufferLen: ptr csize_t
-var
-  resPtr: ptr ptr uint8
-  resLen: ptr csize_t
+
+threadVars(
+  (ctx, IFLContext),
+  (cmd, cmdSteps, cmdStr, JsonNode),
+  (cmdKind, cmdValue, string),
+  (status, int64),
+)
+
+when false:
+  const buildMethod = "v1/build"
+const execMethod = "v1/execute"
 
 proc check(c: IFLContext): bool =
   let msg = case imageflow_context_error_as_exit_code(c.p):
@@ -72,17 +72,6 @@ proc check(c: IFLContext): bool =
       raise newException(ValueError, msg)
   return true
 
-threadVars(
-    (cmd, cmdSteps, cmdStr, JsonNode),
-    (cmdKind, cmdValue, string),
-    (status, int64),
-    (resBuffer, seq[uint8]),
-    (resBufferLen, csize_t)
-)
-
-when false:
-  const buildMethod = "v1/build"
-const execMethod = "v1/execute"
 
 proc initCmd() =
   if not cmd.isnil:
@@ -124,16 +113,7 @@ proc setCmd(v: string) {.inline.} =
   cmdStr["value"] = %v
 
 proc initImageFlow*() =
-  if not outputBuffer.isnil:
-    return
-  outputBuffer = create(ptr uint8)
-  outputBufferLen = create(csize_t)
-  resPtr = create(ptr uint8)
-  resLen = create(csize_t)
-
   initCmd()
-  resBuffer = newSeq[uint8](RES_BUFFER_SIZE)
-  resBufferLen = RES_BUFFER_SIZE
   if not imageflow_abi_compatible(IF_VERSION_MAJOR, IF_VERSION_MINOR):
     let
       mj = imageflow_abi_version_major()
@@ -179,10 +159,8 @@ proc getImg*(src: string, kind: Source): Future[string] {.async.} =
     else:
       ""
 
-proc getMime(): string =
-  ($resPtr[].toOA(resLen[].int).getJsonVal(
-      "data.job_result.encodes[0].preferred_mime_type")).strip(
-          chars = {'"'})
+proc getMime(s: openarray[byte]): string =
+  ($s.getJsonVal("data.job_result.encodes[0].preferred_mime_type")).strip(chars = {'"'})
 
 proc doProcessImg(input: string, mtd = execMethod): (string, string) =
   setCmd(input)
@@ -194,45 +172,36 @@ proc doProcessImg(input: string, mtd = execMethod): (string, string) =
       cast[ptr uint8](c[0].unsafeAddr),
       c.len.csize_t
     )
+  var
+    resp: ptr uint8
+    respLen: csize_t
+
   discard imageflow_json_response_read(ctx.p, json_res,
                                        status.addr,
-                                       resPtr,
-                                       resLen)
+                                       resp.addr,
+                                       respLen.addr)
   defer: doassert imageflow_json_response_destroy(ctx.p, json_res)
+  checkNil(resp)
 
   var mime: string
   if status != 200:
-    let msg = resPtr[].toString(resLen[].int)
+    let msg = resp.toString(respLen.int)
     debug "imageflow: conversion failed {msg}"
     doassert ctx.check
   else:
-    mime = getMime()
+    mime = getMime(resp.toOA(respLen.int))
+  var
+    outputBuffer: ptr uint8
+    outputBufferLen: csize_t
   discard imageflow_context_get_output_buffer_by_id(
       ctx.p,
       outputIoId,
-      outputBuffer,
-      outputBufferLen)
+      outputBuffer.addr,
+      outputBufferLen.addr)
   doassert ctx.check
-  result = (outputBuffer[].toString(outputBufferLen[].int), mime)
+  checkNil(outputBuffer)
+  result = (outputBuffer.toString(outputBufferLen.int), mime)
 
 proc processImg*(input: string, mtd = execMethod): (string, string) =
   initCmd()
   return doProcessImg(input, mtd)
-
-when isMainModule:
-  # initPyHttp()
-  initHttp()
-  initImageFlow()
-  let img = "https://picjumbo.com/wp-content/uploads/maltese-dog-puppy-1570x1047.jpg"
-  # let img = PROJECT_PATH / "vendor" / "imageflow.dist" / "data" / "cat.jpg"
-  # let data = waitFor getImg(img, kind = urlsrc)
-  let data = readFile("/tmp/wat")
-  # echo data.len
-  echo "imageflow.nim:230"
-  doassert data.addImg
-  echo "imageflow.nim:232"
-  let query = "width=100&height=100&mode=max"
-  echo "imageflow.nim:234"
-  let (i, mime) = processImg(query)
-  echo "imageflow.nim:236"
-  echo mime

@@ -1,4 +1,4 @@
-import std/[os, locks, uri, strutils, strformat, sequtils, hashes, tables, xmltree, htmlparser, with],
+import std/[os, locks, sets, uri, strutils, strformat, sequtils, hashes, tables, xmltree, htmlparser, with],
        karax / [karaxdsl, vdom, vstyles],
        lrucache,
        chronos,
@@ -27,13 +27,12 @@ threadVars(
 threadVars(
     (styleStr, string),
     (filesCache, Table[string, string]),
-    (ampLinkEl, VNode)
+    # Don't duplicate styles that appear more than once in the html
+    (dupStyles, HashSet[string]),
+    (ampLock, AsyncLock)
 )
 
-var ampLock: ptr AsyncLock
 const skipFiles = ["bundle.css"]
-import std/sets
-var dupStyles: ptr HashSet[string] ## Don't duplicate styles that appear more than once in the html
 
 proc asLocalUrl(path: string): string {.inline.} =
   $(config.websiteUrl / path.replace(SITE_PATH, ""))
@@ -99,9 +98,9 @@ proc ampTemplate(): (VNode, VNode, VNode) =
   (tree, ampHead, ampBody)
 
 proc maybeStyle(data: string) =
-  if not (data in dupStyles[]):
+  if not (data in dupStyles):
     if data.len + styleStr.len < CSS_MAX_SIZE:
-      dupStyles[].incl data
+      dupStyles.incl data
       styleStr.add data
     else:
       warn "amp: skipping style {data.len:.10}..."
@@ -318,10 +317,10 @@ proc ampPage*(tree: VNode): Future[VNode] {.gcsafe, async.} =
   debug "amp: start"
   checkNil tree
   # since using globals we have to lock throughout the page generation
-  await ampLock[].acquire()
+  await ampLock.acquire()
   styleStr = ""
-  dupStyles[].clear()
-  defer: ampLock[].release()
+  dupStyles.clear()
+  defer: ampLock.release()
   let
     inBody = tree.find(VNodeKind.body).deepcopy
     inHead = tree.find(VNodeKind.head).deepcopy
@@ -358,11 +357,9 @@ proc ampDir(target: string) {.error: "not implemented".} =
 
 
 proc initAmpImpl() =
-  ampLock = create(AsyncLock)
-  ampLock[] = newAsyncLock()
+  ampLock = newAsyncLock()
   vbtmcache = newLruCache[array[5, byte], XmlNode](32)
-  dupStyles = create(HashSet[string])
-  dupStyles[] = initHashSet[string]()
+  dupStyles = initHashSet[string]()
   rootDir = SITE_PATH
 
   ampDoc = newVNode(VNodeKind.html)
@@ -377,9 +374,6 @@ proc initAmpImpl() =
   styleElCustom = newVNode(VNodeKind.style)
 
   filesCache = initTable[string, string]()
-
-  ampLinkEl = newVNode(VNodeKind.link)
-  ampLinkEl.setAttr("rel", "amphtml")
 
   ampjs.setAttr("async", "")
   ampjs.setAttr("src", "https://cdn.ampproject.org/v0.js")
@@ -406,11 +400,10 @@ proc initAmp*() =
     logexc()
     qdebug "server: failed to initAmp"
 
-
-
 proc ampLink*(path: string): VNode {.gcsafe.} =
-  ampLinkEl.setAttr("href", pathLink(path, amp = (not path.startsWith("/amp")), rel = false))
-  deepCopy(ampLinkEl)
+  result = newVNode(VNodeKind.link)
+  result.setAttr("rel", "amphtml")
+  result.setAttr("href", pathLink(path, amp = (not path.startsWith("/amp")), rel = false))
 
 # when isMainModule:
 #   initAmp()

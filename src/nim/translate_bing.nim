@@ -37,7 +37,6 @@ const
   TRANSLATE_API = TRANSLATE_API_ROOT & "/ttranslatev3"
   TRANSLATE_SPELL_CHECK_API = TRANSLATE_API_ROOT & "/tspellcheckv3"
 
-var bt*: BingTranslatePtr
 
 proc isTokenExpired(self: BingTranslateObj): bool =
   if self.config.isnil:
@@ -197,14 +196,3 @@ proc init*(_: typedesc[BingTranslateObj]): BingTranslateObj =
   srv.config = new(BingConfig)
   srv.config.lock = newAsyncLock()
   return srv
-
-when isMainModule:
-  initHttp()
-  bt = create(BingTranslateObj)
-  bt[] = init(BingTranslateObj)
-  # let bc = waitFor bt[].fetchBingConfig()
-  # echo bt[].isTokenExpired()
-  # echo bc.tokenTs
-  # echo bc.tokenExpiryInterval
-  let what = "Hello, how are you?"
-  echo waitFor bt[].translate(what, "auto", "it")

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from datetime import datetime
-from os import symlink as os_symlink
+from os import symlink as os_symlink, makedirs
 from sys import stdin
 import json
 import argparse
@@ -8,12 +8,16 @@ from pathlib import Path
 from shutil import copyfile
 from typing import NamedTuple
 from traceback import print_exc
+from pprint import pprint
 
 from praw.models.listing.mixins import base
 import tomli_w
 import config as cfg
 from utils import slugify
 import topics as tpm
+from sites import load_sites, SITES_PATH
+
+SITES = {}
 
 
 class ConfigKeys(NamedTuple):
@@ -40,7 +44,7 @@ base_config = {
     ConfigKeys.pages: "dmca,terms-of-service,privacy-policy",
     ConfigKeys.created: "",
     ConfigKeys.topics: "",
-    "new_topics": True,
+    "new_topics": False,
     "twitter_consumer_key": "",
     "twitter_consumer_secret": "",
     "twitter_access_token_key": "",
@@ -50,22 +54,15 @@ base_config = {
     "facebook_page_id": "",
 }
 
-# `sites.json` is a mapping of `domain` => `port`
-# where the port is the local port that is serving the website
-sites_path = cfg.CONFIG_DIR / "sites.json"
-if not sites_path.exists():
-    raise OSError(f"Path not found: {sites_path}, create it manually.")
-with open(sites_path, "r") as f:
-    SITES = json.load(f)
 
-
-def add_domain(domain, port):
+def add_site(domain, name, port):
     assert isinstance(SITES, dict)
     assert isinstance(port, int)
-    SITES[domain] = port
-    bak_file = str(sites_path) + ".bak"
-    copyfile(sites_path, bak_file)
-    with open(sites_path, "w") as f:
+    assert isinstance(name, str)
+    SITES[domain] = [name, port]
+    bak_file = str(SITES_PATH) + ".bak"
+    copyfile(SITES_PATH, bak_file)
+    with open(SITES_PATH, "w") as f:
         json.dump(SITES, f)
 
 
@@ -86,7 +83,11 @@ def write_config(site_config):
         success = True
     finally:
         if success:
-            add_domain(site_config[ConfigKeys.domain], site_config[ConfigKeys.port])
+            add_site(
+                site_config[ConfigKeys.domain],
+                site_config[ConfigKeys.name],
+                site_config[ConfigKeys.port],
+            )
 
 
 def get_tld(domain):
@@ -106,9 +107,8 @@ def symlink(base: Path, tld, slug):
         print("Couldn't create symlink")
         return False
 
-
-def gen_site(domain, cat):
-    if domain in SITES:
+def gen_site(domain, cat, force=False):
+    if domain in SITES and not force:
         raise ValueError("Domain already present in SITES list.")
     topics = tpm.from_cat(cat)
     slug = slugify(cat)
@@ -125,25 +125,26 @@ def gen_site(domain, cat):
     tps = tpm.from_slug(slug)
     assert tps.name
     print("Generating symlinks..")
-    import os
 
     tld = get_tld(domain)
     if tld != slug:
-        symlink(cfg.DATA_DIR, tld, slug)
+        makedirs(cfg.DATA_DIR / "sites" / slug, exist_ok=True)
         symlink(cfg.DATA_DIR / "ads", tld, slug)
+        symlink(cfg.CONFIG_DIR / "logo", tld, slug)
 
     print("Type website title:")
-    site_config[ConfigKeys.title] = stdin.readline()
+    site_config[ConfigKeys.title] = stdin.readline().strip()
     print("Type website description:")
-    site_config[ConfigKeys.desc] = stdin.readline()
-    print(f"Write this config? y/n\n{site_config}")
+    site_config[ConfigKeys.desc] = stdin.readline().strip()
+    pprint(site_config)
+    print(f"Write this config? y/n")
     while True:
-        ans = stdin.read()
+        ans = stdin.read(1)
         if ans == "y":
             try:
                 write_config(site_config)
             finally:
-                break
+                return
         elif ans == "n":
             print("Aborting")
             exit()
@@ -155,9 +156,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-domain", help="The domain name of the new site.", default="")
     parser.add_argument("-cat", help="The category to pull topics from.", default="")
+    parser.add_argument("-f", help="Force generation.", default=False)
     args = parser.parse_args()
     if args.domain == "":
         raise ValueError("Domain can't be empty.")
     if args.cat == "":
         raise ValueError("Category can't be empty.")
-    gen_site(args.domain, args.cat)
+    SITES = load_sites()
+    gen_site(args.domain, args.cat, force=args.f)

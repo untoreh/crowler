@@ -20,8 +20,6 @@ const basePrefix* = "og: https://ogp.me/ns#"
 type Opg* = enum
   article, website, book, profile, video, music
 
-let prefixCache* = initTable[static seq[Opg], static string]()
-
 proc asPrefix(opgKind: Opg): string =
   fmt" {opgKind}: http://ogp.me/ns/{opgKind}#"
 
@@ -107,9 +105,9 @@ proc opgPage*(a: Article): seq[XmlNode] =
   result.add metaTag("article:section", a.desc)
   # result.add metaTag("article:modified_time", a.pubTime)
   # result.add metaTag("article:expiration_time", a.pubTime)
-  if not twitterUrl.isnil and twitterUrl[].len > 0:
+  if twitterUrl.len > 0:
     result.add twitterMeta("card", "summary")
-    result.add twitterMeta("creator", twitterUrl[])
+    result.add twitterMeta("creator", twitterUrl)
 
 proc opgPage*(title: string, description: string,
     path: string): seq[XmlNode] {.gcsafe.} =
@@ -120,4 +118,4 @@ proc opgPage*(title: string, description: string,
     url = $(config.websiteUrl / path)
   result = opgTags(title, tp, url, "", description, "", locale)
   result.add twitterMeta("card", "summary")
-  result.add twitterMeta("creator", twitterUrl[])
+  result.add twitterMeta("creator", twitterUrl)

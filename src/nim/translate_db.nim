@@ -15,7 +15,7 @@ proc initSlations*(comp = true) {.gcsafe.} =
   if slations.isnil:
     slations = initLockTable[string, string]()
 
-var trans*: LockDB
+var trans* {.threadvar.}: LockDB
 
 proc initTranslateDb*(comp = false) =
   if trans.isnil:

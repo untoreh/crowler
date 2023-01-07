@@ -9,7 +9,7 @@ import ./cfg_base
 import parsetoml
 export cfg_base
 
-type ConfigObj {.partial.} = object
+type ConfigObj* = object
   websiteName*: string
   websiteDomain*: string
   websiteScheme*: string
@@ -54,10 +54,10 @@ type ConfigObj {.partial.} = object
   ## Minimum number of hits an article has to have to avoid cleanup
   cleanupHits*: uint
 
-let configPath = PROJECT_PATH / "config" / "sites" / os.getenv("CONFIG_NAME") & ".toml"
-let tomlConfig = parseFile(configPath)
-var configState = ConfigObj()
-let config* = configState.addr
+var
+  tomlConfig {.threadvar.}: TomlValueRef
+  configState {.threadvar.}: ConfigObj
+  config* {.threadvar.}: ptr ConfigObj
 
 macro getConfig(k: static[string]): string =
   quote do:
@@ -86,15 +86,6 @@ template putConfig(k: static[string], mut) =
 proc doSplit(s: string): seq[string] = s.split(",")
 
 
-setConfig("website_name")
-setConfig("website_domain")
-setConfig("website_scheme")
-doassert $config.website_scheme in ["http://", "https://"]
-putConfig("website_port", parseInt)
-setConfig("website_title")
-setConfig("website_description")
-setConfig("website_contact")
-fromConfig("website_custom_pages", os.getenv("WEB_CUSTOM_PAGES"), doSplit)
 
 when not declared(SERVER_MODE):
   const SERVER_MODE* {.booldefine.} = os.getenv("SERVER_MODE", "1").parseBool
@@ -117,7 +108,7 @@ const
   YDX* = false
   IMG_VIEWPORT* = ["320w", "800w", "1920w"]
   IMG_SIZES* = ["122x122", "305x305", "733x733"]
-  MENU_TOPICS* = 10          # max number of topics to display in menu
+  MENU_TOPICS* = 10           # max number of topics to display in menu
   SEARCH_ENABLED* = true
   SONIC_PASS* = "dmdm"
   SONIC_PORT* = 1491
@@ -138,36 +129,55 @@ const
   # not implemented
   TRENDS* = false
 
-config.siteAssetsPath = BASE_URL / "assets" / config.websiteName
-config.siteAssetsDir = BASE_URL / SITE_PATH / "assets" / config.websiteName
-config.dataPath = PROJECT_PATH / "data"
-config.websitePath = config.dataPath / "sites" / config.websiteName
-config.websiteUrl = parseUri(config.websiteScheme & (config.websiteDomain & WEBSITE_DEBUG_PORT))
-config.dataAssetsPath = config.dataPath / "assets" / config.websiteName
-config.dataAdsPath = config.dataPath / "ads" / config.websiteName
-config.assetsPath = PROJECT_PATH / "src" / "assets"
-config.defaultImage = config.assetsPath / "image.svg"
-config.defaultImageUrl = BASE_URL / "assets" / "image.svg"
-config.defaultImageMime = "image/svg+xml"
-config.cssBunUrl = $(config.siteAssetsPath / "bundle.css")
-config.cssCritRelUrl = $(config.siteAssetsDir / "bundle-crit.css")
-config.jsRelUrl = $(config.siteAssetsPath / "bundle.js")
-config.logoRelDir = BASE_URL / "assets" / "logo" / config.websiteName
-config.logoRelUrl = $(config.logoRelDir / "logo.svg")
-config.logoSmallUrl = $(config.logoRelDir / "logo-small.svg")
-config.logoIconUrl = $(config.logoRelDir / "logo-icon.svg")
-config.logoDarkUrl = $(config.logoRelDir / "logo-dark.svg")
-config.logoDarkSmallUrl = $(config.logoRelDir / "logo-small-dark.svg")
-config.logoDarkIconUrl = $(config.logoRelDir / "logo-icon-dark.svg")
-config.faviconPngUrl = $(config.logoRelDir / "logo-icon.png")
-config.faviconSvgUrl = $(config.logoRelDir / "logo-icon.svg")
-config.applePng180Url = $(config.logoRelDir / "apple-touch-icon.png")
-config.articleExcerptSize = 300
-config.translationFlagsPath = config.assetsPath / "flags-sprite.css"
-config.translationFlagsRelUrl = config.siteAssetsPath / "flags-sprite.css"
-config.websiteUrlImg = parseUri(config.websiteDomain & WEBSITE_DEBUG_PORT) / "i"
-config.sonicBacklog = config.dataPath / "sonic" / "backlog.txt"
-config.cleanupAge = 3600 * 24 * 30 * 4
-config.cleanupHits = 2
+proc initConfig*(name: string) =
+  assert len(name) > 0, "Empty website config name."
+  let configPath = PROJECT_PATH / "config" / "sites" / name & ".toml"
+  {.cast(gcsafe)}: # grumble grumble
+    tomlConfig = parseFile(configPath)
+  configState = ConfigObj()
+  config = configState.addr
+
+  setConfig("website_name")
+  setConfig("website_domain")
+  setConfig("website_scheme")
+  doassert $config.website_scheme in ["http://", "https://"]
+  putConfig("website_port", parseInt)
+  setConfig("website_title")
+  setConfig("website_description")
+  setConfig("website_contact")
+  fromConfig("website_custom_pages", os.getenv("WEB_CUSTOM_PAGES"), doSplit)
+
+  config.siteAssetsPath = BASE_URL / "assets" / config.websiteName
+  config.siteAssetsDir = BASE_URL / SITE_PATH / "assets" / config.websiteName
+  config.dataPath = PROJECT_PATH / "data"
+  config.websitePath = config.dataPath / "sites" / config.websiteName
+  config.websiteUrl = parseUri(config.websiteScheme & (config.websiteDomain &
+      WEBSITE_DEBUG_PORT))
+  config.dataAssetsPath = config.dataPath / "assets" / config.websiteName
+  config.dataAdsPath = config.dataPath / "ads" / config.websiteName
+  config.assetsPath = PROJECT_PATH / "src" / "assets"
+  config.defaultImage = config.assetsPath / "image.svg"
+  config.defaultImageUrl = BASE_URL / "assets" / "image.svg"
+  config.defaultImageMime = "image/svg+xml"
+  config.cssBunUrl = $(config.siteAssetsPath / "bundle.css")
+  config.cssCritRelUrl = $(config.siteAssetsDir / "bundle-crit.css")
+  config.jsRelUrl = $(config.siteAssetsPath / "bundle.js")
+  config.logoRelDir = BASE_URL / "assets" / "logo" / config.websiteName
+  config.logoRelUrl = $(config.logoRelDir / "logo.svg")
+  config.logoSmallUrl = $(config.logoRelDir / "logo-small.svg")
+  config.logoIconUrl = $(config.logoRelDir / "logo-icon.svg")
+  config.logoDarkUrl = $(config.logoRelDir / "logo-dark.svg")
+  config.logoDarkSmallUrl = $(config.logoRelDir / "logo-small-dark.svg")
+  config.logoDarkIconUrl = $(config.logoRelDir / "logo-icon-dark.svg")
+  config.faviconPngUrl = $(config.logoRelDir / "logo-icon.png")
+  config.faviconSvgUrl = $(config.logoRelDir / "logo-icon.svg")
+  config.applePng180Url = $(config.logoRelDir / "apple-touch-icon.png")
+  config.articleExcerptSize = 300
+  config.translationFlagsPath = config.assetsPath / "flags-sprite.css"
+  config.translationFlagsRelUrl = config.siteAssetsPath / "flags-sprite.css"
+  config.websiteUrlImg = parseUri(config.websiteDomain & WEBSITE_DEBUG_PORT) / "i"
+  config.sonicBacklog = config.dataPath / "sonic" / "backlog.txt"
+  config.cleanupAge = 3600 * 24 * 30 * 4
+  config.cleanupHits = 2
 
 static: echo "Project Path is '" & PROJECT_PATH & "'"

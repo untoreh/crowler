@@ -14,7 +14,7 @@ def load_blacklist(site):
     except:
         blacklist_path = Path(site.blacklist_path)
         if not blacklist_path.exists():
-            os.makedirs(blacklist_path.parent)
+            os.makedirs(blacklist_path.parent, exist_ok=True)
         blacklist_path.touch()
         return set()
 

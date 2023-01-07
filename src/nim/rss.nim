@@ -22,18 +22,14 @@ type Feed = XmlNode
 template `attrs=`(node: XmlNode, code: untyped) =
   node.attrs = code.toXmlAttributes
 
-var feed* {.threadvar.}: Feed
-threadVars((rss, chann, channTitle, channLink, channDesc, XmlNode))
-var feedLock: ptr AsyncLock
+threadVars((feed, rss, chann, channTitle, channLink, channDesc, XmlNode), (feedLock, AsyncLock))
 
-var feedLinkEl {.threadvar.}: VNode
 var topicFeeds* {.threadvar.}: LockLruCache[string, Feed]
 
 proc newFeed(): Feed = newElement("xml")
 
 proc initFeed*() {.gcsafe.} =
-  feedLock = create(AsyncLock)
-  feedLock[] = newAsyncLock()
+  feedLock = newAsyncLock()
   topicFeeds = initLockLruCache[string, Feed](RSS_N_CACHE)
   initCache()
   feed = newFeed()
@@ -56,9 +52,6 @@ proc initFeed*() {.gcsafe.} =
   channDesc = newElement("description")
   channDesc.add newText("")
   chann.add channDesc
-
-  feedLinkEl = newVNode(VNodeKind.link)
-  feedLinkEl.setAttr("rel", "alternate")
 
 proc drainChannel(chann: XmlNode): seq[XmlNode] {.sideEffect.} =
   var n = 0
@@ -102,9 +95,10 @@ proc getTopicFeed*(topic: string, title: string, description: string, arts: seq[
   deepCopy(feed)
 
 proc feedLink*(title, path: string): VNode {.gcsafe.} =
-  feedLinkEl.setAttr("title", title)
-  feedLinkEl.setAttr("href", $(config.websiteUrl / path))
-  deepCopy(feedLinkEl)
+  result = newVNode(VNodeKind.link)
+  result.setAttr("rel", "alternate")
+  result.setAttr("title", title)
+  result.setAttr("href", $(config.websiteUrl / path))
 
 proc feedKey*(topic: string): string = topic & "-feed.xml"
 
@@ -143,8 +137,8 @@ template updateFeed*(a: Article) =
 
 proc fetchFeedString*(topic: string): Future[string] {.async.} =
   return pageCache.lgetOrPut(topic.feedKey):
-    await feedLock[].acquire
-    defer: feedLock[].release
+    await feedLock.acquire
+    defer: feedLock.release
     let
       topPage = await topic.lastPageNum
       prevPage = max(0, topPage - 1)
@@ -156,7 +150,6 @@ proc fetchFeedString*(topic: string): Future[string] {.async.} =
       tfeed.update(topic, arts, dowrite = false)
     topicFeeds[topic] = tfeed
     tfeed.toXmlString
-
 
 proc fetchFeed*(topic: string): Future[Feed] {.async.} =
   try:
@@ -192,8 +185,8 @@ proc fetchFeedString*(): Future[string] {.async.} =
             if fec[][0].len > 0:
               arts.add fec[][0].pop()
               fec[][2].inc
-    await feedLock[].acquire
-    defer: feedLock[].release
+    await feedLock.acquire
+    defer: feedLock.release
     let sfeed = getTopicFeed("", config.websiteTitle, config.websiteDescription, arts)
     topicFeeds[config.websiteTitle] = sfeed
     sfeed.toXmlString

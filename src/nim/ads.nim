@@ -202,7 +202,6 @@ import fsnotify
 type WatchKind = enum
   ads, assets
 
-
 proc updateAds(event: seq[PathEvent]) =
   for e in event:
     if e.action == Modify:

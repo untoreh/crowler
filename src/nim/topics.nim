@@ -12,18 +12,15 @@ type
   TopicState* = tuple[topdir: int, group: PyObject, name: string]
   Topics* = LockOrderedTable[string, TopicState]
 
-
-pygil.globalAcquire()
-let topicsCache*: Topics = initLockOrderedTable[string, TopicState]()
-let emptyTopic* = create(TopicState)
-emptyTopic.topdir = -1
-emptyTopic.group = PyNone
-emptyTopic.name = ""
-pygil.release()
-
-var lastTopic {.threadvar.}: string
-let topicsIter = create(OrderedTableIterator[string, TopicState])
-topicsIter[] = initTableIterator[string, TopicState](OrderedTableIterator, topicsCache.storage)
+let
+  emptyTopicObj = (topdir: -1, group: PyNone, name: "")
+  emptyTopic* = emptyTopicObj.unsafeAddr
+var
+  topicsCache* {.threadvar.}: LockOrderedTable[string, TopicState]
+  lastTopic {.threadvar.}: string
+  topicsIter {.threadvar.}: ptr OrderedTableIterator[string, TopicState]
+  isEmptyTopicPy {.threadvar.}: PyObject
+  topicsCount {.threadvar.}: int # Used to check if topics are in sync, but it is not perfect (in case topics deletions happen)
 
 template lastPageNumImpl(topic: string): untyped =
   # assert not site.isnil
@@ -53,20 +50,17 @@ proc loadTopicsIndex*(): PyObject =
       logexc()
 
 import quirks
-pygil.globalAcquire()
-pyObjPtrExp((isEmptyTopicPy, site.getAttr("is_empty")))
-pygil.release()
-
 proc isEmptyTopicAsync*(topic: string): Future[bool] {.async, gcsafe.} =
   withPyLock:
-    result = isEmptyTopicPy[](topic).to(bool)
+    result = isEmptyTopicPy(topic).to(bool)
 
 proc isEmptyTopic*(topic: string): bool {.inline.} =
   {.locks: [pyGil].}:
-    isEmptyTopicPy[](topic).to(bool)
+    isEmptyTopicPy(topic).to(bool)
 
-type TopicTuple* = tuple[slug, name: string, timestamp: int64, pubcount, unpubcount: int]
-proc toTopicTuple(py: PyObject): TopicTuple  =
+type TopicTuple* = tuple[slug, name: string, timestamp: int64, pubcount,
+    unpubcount: int]
+proc toTopicTuple(py: PyObject): TopicTuple =
   try:
     result.slug = py[0].to(string)
     result.name = py[1].to(string)
@@ -110,11 +104,13 @@ proc loadTopics*(n: int; ): Future[seq[PyObject]] {.async.} =
       for c in countDown(nTopics - 1, 0):
         addTopic()
 
-proc topicDescPy*(topic: string): string {.inline, withLocks: [pyGil].} = site.get_topic_desc(topic).to(string)
+proc topicDescPy*(topic: string): string {.inline, withLocks: [
+    pyGil].} = site.get_topic_desc(topic).to(string)
 proc topicDescPyAsync*(topic: string): Future[string] {.async.} =
   withPyLock:
     return topic.topicDescPy
-proc topicUrl*(topic: string, lang: string): string = $(config.websiteUrl / lang / topic)
+proc topicUrl*(topic: string, lang: string): string = $(config.websiteUrl /
+    lang / topic)
 
 
 proc pageSize*(topic: string, pagenum: int): Future[int] {.async.} =
@@ -215,7 +211,7 @@ proc fetchAsync*(_: typedesc[Topics], k: string): Future[TopicState] {.async.} =
     topicsCache[k] = ts
   return move ts
 
-proc fetch*(_: typedesc[Topics], k: string): TopicState  =
+proc fetch*(_: typedesc[Topics], k: string): TopicState =
   var ts: TopicState
   if k in topicsCache:
     ts = topicsCache[k]
@@ -270,7 +266,6 @@ template ensureOneTopic(force = false): (int, PySequence[TopicTuple]) =
       assert nTopics > 0
   (nTopics, pyTopics)
 
-var topicsCount = -1 # Used to check if topics are in sync, but it is not perfect (in case topics deletions happen)
 proc syncTopics*(force = false) {.gcsafe, async.} =
   # NOTE: the [0] is required because quirky zarray `getitem`
   withPyLock:
@@ -285,7 +280,7 @@ proc syncTopics*(force = false) {.gcsafe, async.} =
     if nTopics > topicsCache.len:
       topicsCache.clear()
       withPyLock:
-        let sortedTopics = site.sorted_topics(full=true, rev=true)
+        let sortedTopics = site.sorted_topics(full = true, rev = true)
         block:
           if sortedTopics.len > 1:
             let firstCount = sortedTopics[0].toTopicTuple.unpubcount
@@ -301,6 +296,16 @@ proc syncTopics*(force = false) {.gcsafe, async.} =
     debug "could not sync topics."
 
 template initTopics*(force = false) =
+  if topicsCache.isnil:
+    topicsCache = initLockOrderedTable[string, TopicState]()
+  if topicsIter.isnil:
+    topicsITer = create(OrderedTableIterator[string, TopicState])
+    withLock(topicsCache.lock):
+      topicsIter[] = initTableIterator[string, TopicState](OrderedTableIterator,
+          topicsCache.storage)
+  syncPyLock:
+    isEmptyTopicPy = site.getAttr("is_empty")
+  topicsCount = -1
   waitFor syncTopics(true)
 
 proc nextTopic*(): Future[string] {.async.} =
@@ -310,11 +315,3 @@ proc curTopic*(): string =
   checkTrue lastTopic.len > 0, "topics: current topic not set"
   lastTopic
 
-
-# when isMainModule:
-#   initPy()
-#   initTopics()
-#   let topics = waitFor loadTopics()
-#   syncPyLock:
-#     echo topics[0].toTopicTuple
-#   echo waitFor nextTopic()

@@ -36,7 +36,7 @@ static: echo "cfg: debug level set to: " & $logLevelMacro
 
 export logging
 
-let WEBSITE_DEBUG_PORT* =
+const WEBSITE_DEBUG_PORT* =
   when releaseMode or dockerMode: ""
   else: ":" & os.getenv("WEBSITE_DEBUG_PORT", "5050")
 

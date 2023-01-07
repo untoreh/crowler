@@ -17,37 +17,37 @@ import
   translate_srv,
   translate
 
-template translateVbtm(node: VNode, q: QueueDom) =
+template translateVbtm(fc: FileContext; node: VNode, q: QueueDom) =
   assert node.kind == VNodeKind.verbatim
   let tree = ($node).parseHtml() # FIXME: this should be a conversion, but the conversion doesn't preserve whitespace??
   if tree.kind == xnElement and tree.tag == "document":
     tree.tag = "div"
   takeOverFields(tree.toVNode, node)
-  translateIter(node, vbtm = false)
+  translateIter(fc, node, vbtm = false)
 
-template translateIter(otree; vbtm: static[bool] = true) =
+template translateIter(fc: FileContext; otree; vbtm: static[bool] = true) =
   for el in otree.preorder():
     if el.kind == vdom.VNodeKind.text:
       if not el.text.isEmptyOrWhitespace and isTranslatable(el):
         translate(q.addr, el, srv)
     else:
       if el.kind in tformsTags:
-        getTForms(dom)[el.kind](el, file_path, url_path, pair)
+        getTForms(dom)[el.kind](fc, el, file_path, url_path, pair)
       case el.kind:
         of VNodeKind.a:
           if el.hasAttr("href"):
-            rewriteUrl(el, rewrite_path, hostname)
+            rewriteUrl(el, rewrite_path, fc.config.websiteDomain)
         of VNodeKind.verbatim:
           when vbtm:
             debug "dom: translating verbatim", false
-            translateVbtm(el, q)
+            translateVbtm(fc, el, q)
         else:
           if(el.hasAttr("alt") and el.isTranslatable("alt")) or
             (el.hasAttr("title") and el.isTranslatable("title")):
             translate(q.addr, el, srv)
 
 type DomTranslation = tuple[queue: QueueDom, node: VNode, fut: Future[bool]]
-proc translateDom(fc: FileContext, hostname = config.websiteDomain): Future[DomTranslation] {.async.} =
+proc translateDom(fc: FileContext): Future[DomTranslation] {.async.} =
   translateEnv(dom)
   for node in otree.preorder():
     case node.kind:
@@ -59,7 +59,7 @@ proc translateDom(fc: FileContext, hostname = config.websiteDomain): Future[DomT
         node.add buildHtml(meta(name = "srclang", content = pair.src))
         break
       else: continue
-  translateIter(otree, vbtm = true)
+  translateIter(fc, otree, vbtm = true)
   debug "dom: finishing translations"
   result.queue = q
   result.node = otree
@@ -104,7 +104,7 @@ proc translateLang*(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath
       t_path = if targetPath == "": filedir / lang.trg / (if relpath ==
           "": "index.html" else: relpath)
                   else: targetPath
-    let fc = init(FileContext, tree, filedir, relpath, lang, t_path)
+    let fc = init(FileContext, tree, filedir, relpath, lang, t_path, config.websiteDomain)
   return withTimeout()
 
 proc translateLang*(fc: FileContext, ar = emptyArt[], timeout: static[int] = 0,

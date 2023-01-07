@@ -119,6 +119,7 @@ proc buildHead*(path: string; description = ""; topic = ""; title = "";
                if s.len > 1: s[1..^1].join("/")
                else: ""
   return buildHtml(head):
+    for ad in adsFrom(adsHead): ad
     meta(charset = "UTF-8")
     meta(name = "viewport", content = "width=device-width, initial-scale=1")
     link(rel = "canonical", href = canon)
@@ -169,7 +170,6 @@ proc buildHead*(path: string; description = ""; topic = ""; title = "";
     link(rel = "apple-touch-icon", sizes = "180x180", href = config.applePng180Url)
     # https://stackoverflow.com/questions/21147149/flash-of-unstyled-content-fouc-in-firefox-only-is-ff-slow-renderer
     verbatim("<script>const _ = null</script>")
-    for ad in adsFrom(adsHead): ad
 
 
 proc buildTrending(): VNode =
@@ -465,12 +465,12 @@ proc buildFooter*(topic = ""; pagenum = ""; lang = ""; path = "";
             class = "rss"):
           tdiv(class = "icon i-mdi-rss")
           text("RSS")
-        if facebookUrl[] != "":
-          a(href = facebookUrl[]):
+        if facebookUrl != "":
+          a(href = facebookUrl):
             tdiv(class = "icon i-mdi-facebook")
             text("Facebook")
-        if twitterUrl[] != "":
-          a(href = twitterUrl[]):
+        if twitterUrl != "":
+          a(href = twitterUrl):
             tdiv(class = "icon i-mdi-twitter")
             text("Twitter")
         a(href = "/dmca"):

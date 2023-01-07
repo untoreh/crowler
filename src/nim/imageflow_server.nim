@@ -11,7 +11,6 @@ import
     locktpl,
     shorturls
 
-
 type
   ImgData = object
     mime, data: string
@@ -21,8 +20,13 @@ type
     processed: ptr Imgdata
 
 const rxPathImg = "/([0-9]{1,3})x([0-9]{1,3})/\\?u=(.+)(?=/|$)"
-
-let imgCache = initLockLruCache[string, string](32)
+var
+  iflThread: Thread[void]
+  imgIn: AsyncPColl[ptr ImgQuery]
+  imgOut: AsyncTable[ptr ImgQuery, bool]
+  imgLock: ptr AsyncLock
+  imgCache: LockLruCache[string, string]
+  futs {.threadvar.}: seq[Future[void]]
 
 proc rawImg(imgurl: string): Future[string] {.inline, gcsafe, async.} =
   try:
@@ -39,14 +43,6 @@ proc parseImgUrl*(relpath: string): ImgQuery =
   result.url = imgCapts[2].get
   result.width = imgCapts[0].get
   result.height = imgCapts[1].get
-
-var
-  iflThread: Thread[void]
-  imgIn: AsyncPColl[ptr ImgQuery]
-  imgOut: AsyncTable[ptr ImgQuery, bool]
-  imgLock: ptr AsyncLock
-  futs {.threadvar.}: seq[Future[void]]
-
 
 proc handleImg*(relpath: string): Future[(string, string)] {.async.} =
   var q = parseImgUrl(relpath)
@@ -90,7 +86,6 @@ proc processImgData(q: ptr ImgQuery) {.async.} =
 
 proc asyncImgHandler() {.async.} =
   try:
-    initImageFlow() # NOTE: this initializes thread vars
     var img: ptr ImgQuery
     while true:
       imgIn.pop(img)
@@ -103,10 +98,12 @@ proc asyncImgHandler() {.async.} =
     quitl()
 
 proc imgHandler*() =
+  initImageFlow() # NOTE: this initializes thread vars
+  setNil(imgCache):
+    initLockLruCache[string, string](32)
   while true:
     waitFor asyncImgHandler()
     sleep(1000)
-
 
 proc startImgFlow*() =
   try:
@@ -124,7 +121,6 @@ proc startImgFlow*() =
     logexc()
     warn "Could not init imageflow."
     quitl()
-
 
 # when isMainModule:
 #     var srv = new GuildenServer

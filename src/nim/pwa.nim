@@ -88,5 +88,3 @@ import karax/[vdom, karaxdsl]
 func pwaLink*(): VNode =
      buildHtml(link(rel="manifest", href="/manifest.json"))
 
-when isMainModule:
-  echo pwaLink()

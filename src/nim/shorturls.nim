@@ -21,8 +21,10 @@ when defined(gcDestructors):
       discard free_context(z.d)
 
 proc initZstd*() =
-  z.c = new_compress_context()
-  z.d = new_decompress_context()
+  if z.c.isnil:
+    z.c = new_compress_context()
+    doassert z.d.isnil
+    z.d = new_decompress_context()
 
 proc toBString*(s: string): BString {.gcsafe.} =
   ## Compresses a string and encodes it into base64

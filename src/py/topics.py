@@ -196,9 +196,9 @@ def from_slug(slug: str, cats=None):
         return TopicState(name=name, slug=slug)
     else:
         for c in cats.get("children", []):
-            name = from_slug(slug, c)
-            if name:
-                return TopicState(name=name, slug=slug)
+            ts = from_slug(slug, c)
+            if ts.slug:
+                return ts
     return TopicState()
 
 
@@ -219,4 +219,5 @@ def from_cat(cat: str, cats=None):
         for c in cats.get("children", []):
             val = from_cat(cat, c)
             if val:
+                val.append(name)
                 return val

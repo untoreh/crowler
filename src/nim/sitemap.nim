@@ -235,11 +235,3 @@ proc sitemapLinks*(topic = "", ar = emptyArt[]): seq[VNode] =
 
 {.pop gcsafe.}
 
-when isMainModule:
-  initPy()
-  initcache()
-  echo waitFor buildTopicPagesSitemap("mini")
-  # syncPyLock:
-    # echo n
-  # pageCache[].
-  # echo waitFor fetchSiteMap("mini", on)

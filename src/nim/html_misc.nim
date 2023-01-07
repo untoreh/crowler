@@ -18,15 +18,13 @@ import
   shorturls
 
 var
-  facebookUrl*: ptr string
-  twitterUrl*: ptr string
+  facebookUrl* {.threadvar.}: string
+  twitterUrl* {.threadvar.}: string
 
 proc initSocial*() {.gcsafe.} =
   syncPyLock:
-    facebookUrl = create(string)
-    facebookUrl[] = site.fb_page_url.to(string)
-    twitterUrl = create(string)
-    twitterUrl[] = site.twitter_url.to(string)
+    facebookUrl = site.fb_page_url.to(string)
+    twitterUrl = site.twitter_url.to(string)
 
 proc pathLink*(path: string, code = "", rel = true,
     amp = false): string {.gcsafe.} =

@@ -27,10 +27,22 @@ import cfg,
 
 when SERVER_MODE:
   import rss
+  when cfg.YDX:
+    import yandex
 
-let pageset = initLockTable[string, bool]()
+threadVars(
+  (pageset, LockTable[string, bool]),
+  (lastPubTime, Time),
+  (pubLock, ThreadLock)
+)
 
 include "pages"
+
+proc initPublish*() =
+  initPages()
+  lastPubTime = getTime()
+  pageset = initLockTable[string, bool]()
+  pubLock = newThreadLock()
 
 proc ensureDir(dir: string) =
   if not dirExists(dir):
@@ -269,8 +281,6 @@ proc pubTopic*(topic: string, stateful: static[bool] = false): Future[bool] {.gc
   return true
 
 
-var lastPubTime = getTime()
-let pubLock = newThreadLock()
 
 proc pubTimeInterval(topic: string): Future[int] {.async.} =
   ## Publication interval is dependent on how many articles we can publish
@@ -303,13 +313,13 @@ proc maybePublish*(topic: string) {.gcsafe, async.} =
       debug "pubtasks: time until next {topic} publishing: {remaining} minutes."
 
 
-proc resetTopic(topic: string) =
-  syncPyLock():
-    discard site.reset_topic_data(topic)
-  when SERVER_MODE:
+when false:
+  proc resetTopic(topic: string) =
+    syncPyLock():
+      discard site.reset_topic_data(topic)
     pageCache.delete(topic.feedKey)
-  clearSiteMap(topic, all = true)
-  waitFor saveLS(topic, init(PublishedArticles))
+    clearSiteMap(topic, all = true)
+    waitFor saveLS(topic, init(PublishedArticles))
 
 proc pubAllPages(topic: string, clear = true) {.async.} =
   ## Starting from the homepage, rebuild all archive pages, and their articles
@@ -349,9 +359,6 @@ proc pubAllPages(topic: string, clear = true) {.async.} =
 # when isMainModule:
 #     let topic = "vps"
 #     # refreshPageSizes(topic)
-#     # resetTopic("web")
-#     # resetTopic("vps")
-#     # resetTopic("dedi")
 #     dopublish(topic)
 #     quitl()
 #     let

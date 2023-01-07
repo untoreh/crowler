@@ -16,8 +16,8 @@ import
     ldj
 
 type
-    TransformFunc* = proc(el: XmlNode, file: string, url: string, pair: langPair) {.gcsafe.}
-    VTransformFunc* = proc(el: VNode, file: string, url: string, pair: langPair) {.gcsafe.}
+    TransformFunc* = proc(fc: FileContext, el: XmlNode, file: string, url: string, pair: langPair) {.gcsafe.}
+    VTransformFunc* = proc(fc: FileContext, el: VNode, file: string, url: string, pair: langPair) {.gcsafe.}
     TFormsTable = LockTable[string, TransformFunc]
     VTFormsTable = LockTable[VNodeKind, VTransformFunc]
     TForms = ptr TFormsTable
@@ -37,10 +37,10 @@ macro getTforms*(kind: static[FcKind]): untyped =
         else:
             quote do: vtransforms
 
-proc head_tform(el: VNode, basedir: string, relpath: string, pair: langPair) {.gcsafe.} =
+proc head_tform(fc: FileContext, el: VNode, basedir: string, relpath: string, pair: langPair) {.gcsafe.} =
     let
-        srcUrl = $(config.websiteUrl / relpath)
-        trgUrl = $(config.websiteUrl / pair.trg / relpath)
+        srcUrl = $(fc.config.websiteUrl / relpath)
+        trgUrl = $(fc.config.websiteUrl / pair.trg / relpath)
     var title, desc, img, date: string
     var tags: seq[string]
     var stack = 6 # how many variables do we have to set
@@ -84,7 +84,7 @@ proc head_tform(el: VNode, basedir: string, relpath: string, pair: langPair) {.g
             tags, img)
     el.add ldjTrans.asVNode
 
-proc breadcrumb_tform(el: VNode, basedir: string, relpath: string, pair: langPair) =
+proc breadcrumb_tform(fc: FileContext, el: VNode, basedir: string, relpath: string, pair: langPair) =
   let node = el.find(VNodeKind.a, "breadcrumb-lang-link")
   if node.kind == VNodeKind.a:
     let txt = node.find(VNodeKind.text)

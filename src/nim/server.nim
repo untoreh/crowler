@@ -79,10 +79,13 @@ var
   threadInitLock: Lock
   reqCtxCache {.threadvar.}: LockLruCache[string, ref ReqContext]
   assetsCache {.threadvar.}: LockLruCache[string, string]
+  redirectJs {.threadvar.}: string
 
 proc initThreadBase() {.gcsafe.} =
+  initConfig(os.getenv("CONFIG_NAME", ""))
   initPy()
   initTypes()
+  initCompressor()
   initLogging()
   registerChronosCleanup()
 
@@ -117,6 +120,7 @@ proc initThreadImpl() {.gcsafe.} =
   debug "thread: cache"
   reqCtxCache = initLockLruCache[string, ref ReqContext](32)
   assetsCache = initLockLruCache[string, string](32)
+  redirectJs = fmt"""<script>window.location.replace("{config.websiteUrl}");</script>"""
   debug "thread: topics"
   initTopics()
   debug "thread: assets"
@@ -205,10 +209,8 @@ proc doReply(reqCtx: ref ReqContext, rqid: ReqId) {.async.} = respond()
 
 {.push dirty.}
 
-let redirectJsStr = fmt"""<script>window.location.replace("{config.websiteUrl}");</script>"""
-let redirectJS = redirectJsStr.unsafeAddr
 template ifHtml(els): string =
-  if reqCtx.mime == "text/html": redirectJs[]
+  if reqCtx.mime == "text/html": redirectJs
   else: $els
 
 template handle301*(loc: string = $config.websiteUrl) =
@@ -549,7 +551,6 @@ template handleTranslation(): bool =
   else:
     false
 
-
 template handleDeletion(): bool =
   var ret = false
   if not delParam.isnull:
@@ -746,7 +747,6 @@ template wrapInit(code: untyped): proc() =
     code
   task
 
-
 proc doServe*(address: string, callback: HttpProcessCallback) =
   let ta = resolveTAddress(address)[0]
   let srv =
@@ -762,21 +762,22 @@ proc doServe*(address: string, callback: HttpProcessCallback) =
 
 proc startServer*(doclear = false, port = 0, loglevel = "info") =
 
-  let serverPort =
-    if port == 0: config.websitePort
-    else: port
-
   initThread()
   initCache(doclear)
   initStats()
   readAdsConfig()
 
-  runTasks(@[mem, cleanup, tpc])
+  # runTasks(@[mem, cleanup, tpc])
   runAdsWatcher()
   runAssetsWatcher()
 
   while not (adsFirstRead and assetsFirstRead):
     sleep(500)
+
+  checkNil config
+  let serverPort =
+    if port == 0: config.websitePort
+    else: port
   # Configure and start server
   let address = "0.0.0.0:" & $serverPort
 

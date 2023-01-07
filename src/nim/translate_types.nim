@@ -12,6 +12,8 @@ import
   chronos
 export sets
 
+from cfg import ConfigObj
+
 static:
   echo "loading translate types..."
 type
@@ -50,6 +52,7 @@ type
     url_path*: string
     pair*: langPair
     t_path*: string
+    config*: ptr cfg.ConfigObj
   FileContext* = object of FileContextBase
     case kind: FcKind
     of xml: xhtml*: XmlNode
@@ -60,7 +63,6 @@ type
   TranslateVNodeProc* =
     proc(fc: FileContext, hostname: string, finish: bool): (Queue,
         VNode) {.gcsafe.} ## the proc that is called for each `langPair`
-
 
 macro getHtml*(code: untyped, kind: static[FcKind], ): untyped =
   case kind:
@@ -74,14 +76,16 @@ macro getHtml*(code: untyped, kind: static[FcKind], ): untyped =
 proc `html=`*(fc: var FileContext, data: XmlNode) = fc.xhtml = data
 proc `html=`*(fc: var FileContext, data: vdom.VNode) = fc.vhtml = data
 
-proc init*(_: typedesc[FileContext], data: XmlNode | VNode; file_path, url_path, pair,
-    t_path: auto): FileContext =
+proc init*(_: typedesc[FileContext], data: XmlNode | VNode;
+           file_path, url_path, pair, t_path, configPtr: auto): FileContext =
   result = FileContext(kind: (if data is XmlNode: xml else: dom))
   result.html = data
   result.file_path = file_path
   result.url_path = url_path
   result.pair = pair
   result.t_path = t_path
+  doassert not configPtr.isnil, "Config can't be nil"
+  result.config = configPtr
 
 proc free*(o: ptr FileContext) =
   if not o.isnil:
@@ -111,7 +115,6 @@ proc initPunctRgx*() =
 proc `$`*(t: Translator): string =
   let langs = collect(for k in keys(t.tr): k)
   fmt"Translator: {t.name}, to langs ({len(langs)}): {langs}"
-
 
 proc initLang*(name: string, code: string): Lang =
   result.name = name
@@ -198,4 +201,3 @@ macro getQueue*(kind: static[FcKind], pair: langPair): untyped =
     of xml: QueueXml
     else: QueueDom
   quote do: initQueue[`tp`](`pair`)
-

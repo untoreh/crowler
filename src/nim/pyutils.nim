@@ -34,8 +34,6 @@ template withPyLock*(code): untyped =
     try:
       await pygil.acquire()
       code
-    except:
-      raise getCurrentException()
     finally:
       pygil.release()
 
@@ -43,8 +41,6 @@ template withOutPylock*(code): untyped =
   try:
     pygil.release()
     code
-  except:
-    raise getCurrentException()
   finally:
     await pygil.acquire()
 
@@ -53,8 +49,6 @@ template syncPyLock*(code): auto =
     try:
       pygil.globalAcquire()
       code
-    except:
-      raise getCurrentException()
     finally:
       pygil.release()
 
@@ -74,6 +68,7 @@ let
     if dirExists "py": "py"
     elif dirExists "lib/py": "lib/py"
     elif dirExists "../py": "../py"
+    elif dirExists "../src/py": "../src/py"
     else: raise newException(Defect, "could not find python library path. in {getAppFileName.parentDir}")
 
 proc relpyImport*(relpath: string; prefix = prefixPy): PyObject =
@@ -95,7 +90,6 @@ proc relpyImport*(relpath: string; prefix = prefixPy): PyObject =
     let e = getCurrentException()[]
     raise newException(ValueError, fmt"Cannot import python module, pwd is {getCurrentDir()}, trying to load {abspath} {'\n'} {e}")
 
-# we have to load the config before utils, otherwise the module is "partially initialized"
 {.push guard: pyGil.}
 pygil.globalAcquire()
 import cfg
@@ -113,7 +107,8 @@ macro pyObjExp*(defs: varargs[untyped]): untyped =
       name = d[0]
       def = d[1]
     result.add quote do:
-      let `name`* {.guard: pyGil.} = `def`
+      var `name`* {.guard: pyGil, threadvar.}: PyObject
+      `name` = `def`
 
 macro pyObjPtr*(defs: varargs[untyped]): untyped =
   result = newNimNode(nnkStmtList)
@@ -134,7 +129,6 @@ macro pyObjPtrExp*(defs: varargs[untyped]): untyped =
     result.add quote do:
       let `name`* {.guard: pyGil.} = create(PyObject)
       `name`[] = `def`
-
 
 # https://github.com/yglukhov/nimpy/issues/164
 pyObjPtrExp(
@@ -159,7 +153,7 @@ when os.getEnv("PYTHON_PROFILING", "").len > 0:
                 out_split = splitfile(out_path)
               doassert out_split.dir.dirExists and out_split.name.len > 0
               discard tryRemoveFile(out_path)
-              mr.Tracker(out_path, native_traces=true)
+              mr.Tracker(out_path, native_traces = true)
               ))
   discard pyTracker[].callMethod("__enter__")
   import std/exitprocs
@@ -168,19 +162,11 @@ when os.getEnv("PYTHON_PROFILING", "").len > 0:
       let none = pybi[].getAttr("None")
       discard pyTracker[].callMethod("__exit__", [none, none, none])
   addExitProc(stopPyTracker)
-# let
-  # pybi* = pyBuiltinsModule()
-  # pyza* = pyimport("zarr")
-  # PyBoolClass = pybi[].True.getattr("__class__")
-  # PyNoneClass = pybi[].None.getattr("__class__")
-  # PyDateTimeClass = pyimport("datetime").datetime
-  # PyStrClass = pybi[].getattr("str")
-  # PyIntClass = pybi[].getattr("int")
-  # PyDictClass = pybi[].getattr("dict")
-  # PyZArray = pyza.getAttr("Array")
 pygil.release()
 {.pop.}
+
 var PyNone* {.threadvar.}: PyObject
+var site* {.guard: pyGil, threadvar.}: PyObject
 
 from utils import withLocks
 proc pyhasAttr*(o: PyObject; a: string): bool {.withLocks: [pyGil].} = pybi[
@@ -196,11 +182,6 @@ proc pyisbool*(py: PyObject): bool {.withLocks: [pyGil].} =
   return pybi[].isinstance(py, PyBoolClass[]).to(bool)
 
 proc pyisnone*(py: PyObject): bool {.gcsafe, withLocks: [pyGil].} =
-  # assert not pybi[].isnil, "pyn: pybi should not be nil"
-  # assert pyhasAttr(pybi[], "isinstance"), "pyn: pybi[].isinstance should not be nil"
-  # assert not PyNoneClass[].isnil, "pyn: PyNoneClass should not be nil"
-  # let check = pybi[].isinstance(py, PyNoneClass[])
-  # assert not check.isnil, "pyn: check should not be nil"
   return py.isnil or pybi[].isinstance(py, PyNoneClass[]).to(bool)
 
 proc pyisdatetime*(py: PyObject): bool {.withLocks: [pyGil].} =
@@ -211,7 +192,6 @@ proc pyisstr*(py: PyObject): bool {.withLocks: [pyGil].} =
 
 proc pyisint*(py: PyObject): bool {.withLocks: [pyGil].} =
   return pybi[].isinstance(py, pybi[].getattr("int")).to(bool)
-
 
 proc pyiszarray*(py: PyObject): bool {.withLocks: [pyGil].} =
   return pybi[].isinstance(py, PyZArray[]).to(bool)
@@ -248,8 +228,6 @@ when false:
 
 pyObjExp((ut, pyImport("utils")))
 doassert not pyisnone(ut)
-pyObjExp((site, pyImport("sites").Site(config.websiteName)))
-doassert not pyisnone(site)
 when not SERVER_MODE:
   pyObjPtrExp(
       (pySched, pyImport("scheduler")),
@@ -268,25 +246,30 @@ when false:
         return prx.to(string)
 pygil.release()
 
-echo "pyutils initialized." # Should eval inside try/catch but pyobj macros are not compatible (they export definitions)
+echo "pyutils (base) initialized." # Should eval inside try/catch but pyobj macros are not compatible (they export definitions)
 
 proc initPy*() =
-  syncPyLock:
-    try:
+  try:
+    syncPyLock:
       if PyNone.isnil:
         PyNone = pybi[].getattr("None")
-    except:
-      echo "Can't initialize PyNone"
-      quit()
+      if pyisnone(site):
+        site = pyImport("sites").Site(config.websiteName)
+        doassert not pyisnone(site)
+  except:
+    let e = getCurrentException()
+    echo "Can't initialize python site object for " & config.websiteName
+    if not e.isnil:
+      echo e[]
+    quit()
 
 pygil.globalAcquire()
-let pyslice = create(PyObject)
-pySlice[] = pybi[].slice
+let pysliceObj = pybi[].slice
+let pySlice = pysliceObj.unsafeAddr
 pygil.release()
 
 proc contains*[K](v: PyObject; k: K): bool =
   v.callMethod("__contains__", k).to(bool)
-
 
 # PySequence
 type PySequence*[T] = ref object
@@ -336,17 +319,13 @@ macro `.=`*(o: PySequence; field: untyped; value: untyped): untyped =
   quote do:
     `o`.py.`field` = `value`
 
-var e: ref ValueError
-new(e)
-e.msg = "All python objects were None."
-
 proc pysome*(pys: varargs[PyObject]; default = new(PyObject)): PyObject =
   for py in pys:
     if pyisnone(py):
       continue
     else:
       return py
-  raise e
+  raise newException(ValueError, "All python objects were None.")
 
 proc len*(py: PyObject): int {.withLocks: [pyGil].} =
   pybi[].len(py).to(int)
@@ -405,9 +384,3 @@ proc topy*[T](tbl: T; _: typedesc[PyDict]): PyDict =
     result = pybi[].dict()
     for (k, v) in tbl.pairs():
       result["k"] = v
-
-# Exported
-# proc cleanText*(text: string): string {.exportpy.} =
-#     multireplace(text, [("\n", "\n\n"),
-#                         ("(.)\1{4,}", "\n\n\1")
-#                         ])

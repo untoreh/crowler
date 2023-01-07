@@ -9,6 +9,7 @@ import server_types,
 
 
 proc pubTask*(): Future[void] {.gcsafe, async.} =
+  initPublish()
   var n, prevSize: int
   when false:
     while true:
@@ -175,9 +176,3 @@ template runTasks*(tasks = @[pub, cleanup, mem], wait: static[bool] = false): un
   else:
     let ttbl = tasksMonitorImpl(tasks)
 
-when isMainModule:
-  import cache
-  import strformat
-  initCache()
-  initStats()
-  cleanupTask()

@@ -31,7 +31,7 @@ def get_kw_batch(site: Site, topic):
     if not kwlist.exists():
         ts = tpm.from_slug(topic)
         tpm.gen_topic(site, check_sentiment=False, topic=ts)
-    assert kwlist.exists(), f"kwbatch: {kwlist} was not found on storage"
+        assert kwlist.exists(), f"kwbatch: {kwlist} was not found on storage"
 
     queue = subdir / "queue"
     kws = ut.read_file(queue)
@@ -311,7 +311,8 @@ def run_server(sites):
         if len(sites) == 0:
             log.warn("no sites provided.")
             return
-        sites = list(sites.keys())
+        ## site names, which is the name of the config
+        sites = list(map(lambda s: s[0], sites.values()))
     initialize()
     jobs = {}
 

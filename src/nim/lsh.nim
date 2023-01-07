@@ -1,16 +1,26 @@
 import std/[importutils, strutils, marshal, tables, sets, algorithm, os, monotimes, strformat], chronos,
     minhash {.all.}
 
-import cfg, types, utils, sharedqueue, locktpl
-lockedSet(HashSet)
+import cfg, types, utils
 privateAccess(LocalitySensitive)
 export minhash
 {.experimental: "notnil".}
 
 type
   PublishedArticles* = LocalitySensitive[uint64]
-var lshThread: Thread[void]
-var futs {.threadvar.}: seq[Future[void]]
+
+type
+  LshQuery = object
+    id: MonoTime
+    lsh: ptr PublishedArticles
+    content: ptr string
+
+# these should be generalized since it's the same from `imageflow_server` and `sonic` and `http`
+var
+  lshThread: Thread[void]
+  lshIn: AsyncPColl[ptr LshQuery]
+  lshOut: AsyncTable[ptr LshQuery, bool]
+  futs {.threadvar.}: seq[Future[void]]
 
 proc getLSPath(topic: string): string =
   config.dataPath / "sites" / config.websiteName / "topics" / topic / "lsh"
@@ -70,15 +80,6 @@ proc loadLS*(topic: string): Future[PublishedArticles] {.async.} =
   else:
     return init(PublishedArticles)
 
-type
-  LshQuery = object
-    id: MonoTime
-    lsh: ptr PublishedArticles
-    content: ptr string
-
-# these should be generalized since it's the same from `imageflow_server`
-var lshIn: AsyncPColl[ptr LshQuery]
-var lshOut: AsyncTable[ptr LshQuery, bool]
 
 proc addArticle*(lsh: PublishedArticles, content: ptr string): Future[bool] {.async.} =
   var q: LshQuery

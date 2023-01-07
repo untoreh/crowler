@@ -3,13 +3,16 @@ import chronos/apps/http/httpclient except TLSFlags
 import httputils
 import std/[httpcore, tables, monotimes, hashes, uri, macros, sequtils]
 
-import types, pyutils, utils, httptypes, locktplutils
+import types, pyutils, utils, httptypes
 
-var handler: Thread[void]
-var sem: AsyncSemaphore
-var futs {.threadvar.}: seq[Future[void]]
-const chronHttpDebug {.booldefine.} = false
-const maxConcurrentRequests {.intdefine.} = 200
+var
+  handler: Thread[void]
+  sem: AsyncSemaphore
+  futs {.threadvar.}: seq[Future[void]]
+
+const
+  chronHttpDebug {.booldefine.} = false
+  maxConcurrentRequests {.intdefine.} = 200
 
 template cdebug(code) =
   # Failed requests stacktraces are too noisy
@@ -99,7 +102,6 @@ proc requestHandlerAsync() {.async.} =
     try:
       var q: ptr Request
       while true:
-        # q = await httpIn.popFirstWait()
         pop(httpIn, q)
         clearFuts(futs)
         checkNil(q):
@@ -110,23 +112,6 @@ proc requestHandlerAsync() {.async.} =
       await sleepAsync(1.seconds)
 
 proc requestHandler() = waitFor requestHandlerAsync()
-
-# proc httpGet*(url: string; headers: HttpHeaders = nil;
-#               decode = Decode.yes; proxied = false): Future[Response] {.async,
-#                   raises: [Defect].} =
-#   var q: Request
-#   q.id = getMonoTime()
-#   q.meth = HttpGet
-#   q.url = url.parseUri
-#   q.headers =
-#     if headers.isnil: newHttpHeaders()
-#     else: headers
-#   q.decode = decode
-#   q.proxied = proxied
-#   httpIn.add q.addr
-#   discard await httpOut.pop(q.addr)
-#   checkNil(q.response):
-#     result = q.response[]
 
 proc initHttp*() {.gcsafe.} =
   httptypes.initHttp()

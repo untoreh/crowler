@@ -4,10 +4,7 @@ import chronos
 import httptypes except initHttp
 import
   utils,
-  # pyhttp
-  # threadshttp
   chronhttp
-
 
 export Request, Response, RequestError, HttpHeaders, initHttp, httpIsInitialized
 
@@ -56,11 +53,3 @@ template get*(url: Url; args: varargs[untyped]): untyped =
 template post*(url: Url; args: varargs[untyped]): Future[Response] =
   request(url.asUri, HttpPost, args)
 
-when isMainModule:
-  initHttp()
-  proc f() {.async.} =
-    let u = "https://ipinfo.io/ip".parseUri
-    let resp = await get(u, proxied = false)
-    echo resp.code
-    echo resp.body
-  waitFor f()

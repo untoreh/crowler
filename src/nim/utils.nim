@@ -21,7 +21,6 @@ import os,
 # import std/segfaults
 # export segfaults
 
-# import translate_types
 import locktpl
 import locktplutils
 export nre, tables, locktplutils
@@ -934,7 +933,7 @@ proc raw*(n: VNode, indent = 0): string =
 
 import zstd / [compress, decompress]
 type
-  CompressorObj = object of RootObj
+  CompressorObj = object
     zstd_c: ptr ZSTD_CCtx
     zstd_d: ptr ZSTD_DCtx
   Compressor = ptr CompressorObj
@@ -946,9 +945,13 @@ when defined(gcDestructors):
     if not c.zstd_d.isnil:
       discard free_context(c.zstd_d)
 
-let comp = create(CompressorObj)
-comp.zstd_c = new_compress_context()
-comp.zstd_d = new_decompress_context()
+var comp {.threadvar.}: CompressorObj
+
+proc initCompressor*() =
+  if comp.zstd_c.isnil:
+    comp.zstd_c = new_compress_context()
+    doassert comp.zstd_d.isnil
+    comp.zstd_d = new_decompress_context()
 
 proc compress*[T](v: T): seq[byte] = compress(comp.zstd_c, v, level = 2)
 proc decompress*[T](v: sink seq[byte]): T = cast[T](decompress(comp.zstd_d, v))

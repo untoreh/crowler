@@ -59,7 +59,7 @@ Http.onreadystatechange = (e) => {
       if (resp.startsWith("<!doctype") || resp.startsWith("<!DOCTYPE")) {
         let domTr = (new DOMParser()).parseFromString(resp, "text/html")
         let mainTr = $("main", domTr)
-        if (mainTr) {
+        if (mainTr && mainTr.innerText.length > 0) {
           trBox.classList.remove("waiting")
           sleep(100).then(() => {
             mainContentEl.replaceWith(mainTr)

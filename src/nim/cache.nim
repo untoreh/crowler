@@ -1,4 +1,5 @@
 import nimpy, std/[os, strutils, hashes, times, parseutils]
+import lrucache
 import
   utils,
   quirks,
@@ -11,12 +12,13 @@ import
 export data
 
 const pageCacheTtl = initDuration(days = 1)
-let searchCache* = initLockLruCache[string, string](32)
-var pageCache*: LockDB
-var imgCache*: LockDB
+var searchCache*: LockLruCache[string, string]
+var pageCache*, imgCache*: LockDB
 
 proc initCache*(doclear=false, comp=false) =
   try:
+    setNil(searchCache):
+      initLockLruCache[string, string](32)
     setNil(pageCache):
       init(LockDB, config.websitePath / "page", initDuration(hours = 8))
     setNil(imgCache):

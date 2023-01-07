@@ -7,23 +7,18 @@ import
   locktpl,
   orderedtableiterator
 
-lockedStore(OrderedTableRef)
-lockedList(seq)
+lockedStore(OrderedTable)
 type
   TopicState* = tuple[topdir: int, group: PyObject, name: string]
-  Topics* = LockOrderedTableRef[string, TopicState]
-  TopicsSeq* = LockSeq[(string, TopicState)]
+  Topics* = LockOrderedTable[string, TopicState]
 
 
 pygil.globalAcquire()
-let topicsCache*: Topics = initLockOrderedTableRef[string, TopicState]()
+let topicsCache*: Topics = initLockOrderedTable[string, TopicState]()
 let emptyTopic* = create(TopicState)
 emptyTopic.topdir = -1
 emptyTopic.group = PyNone
 emptyTopic.name = ""
-pyObjExp((pytopicsMod,
-          if os.getEnv("NEW_TOPICS_ENABLED", "") != "": pyImport("topics")
-          else: PyNone))
 pygil.release()
 
 var lastTopic {.threadvar.}: string
@@ -267,8 +262,8 @@ template ensureOneTopic(force = false): (int, PySequence[TopicTuple]) =
     nTopics: int
   withPyLock:
     nTopics = pytopics.len
-    if nTopics == 0 and (not pyisnone(pyTopicsMod)):
-      discard pyTopicsMod.new_topic()
+    if nTopics == 0:
+      discard pyImport("topics").new_topic()
       withOutPyLock:
         pytopics = await loadTopics()
       nTopics = pytopics.len

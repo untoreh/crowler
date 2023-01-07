@@ -2,7 +2,7 @@ import std/[importutils, tables]
 
 type
   OrderedTableIterator*[K, V] = object
-    tbl*: OrderedTableRef[K, V]
+    tbl*: OrderedTable[K, V]
     next: int
   OrderedTableIteratorRef[K, V] = ref OrderedTableIterator[K, V]
 
@@ -15,9 +15,8 @@ proc initTableIterator*[K, V](_: typedesc[
   result.next = result.tbl.first
 
 proc initTableIterator*[K, V](_: typedesc[OrderedTableIterator],
-    tbl: OrderedTableRef[K, V]): OrderedTableIterator[K, V] =
+    tbl: OrderedTable[K, V]): OrderedTableIterator[K, V] =
   privateAccess(OrderedTable)
-  assert not tbl.isnil
   result.tbl = tbl
   result.next = result.tbl.first
 

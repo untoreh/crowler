@@ -82,7 +82,8 @@ var
   redirectJs {.threadvar.}: string
 
 proc initThreadBase() {.gcsafe.} =
-  initConfig(os.getenv("CONFIG_NAME", ""))
+  let configName = os.getenv("CONFIG_NAME")
+  initConfig(configName)
   initPy()
   initTypes()
   initCompressor()
@@ -100,6 +101,7 @@ proc initThreadImpl() {.gcsafe.} =
   debug "thread: http"
   initHttp()
   debug "thread: html"
+  initPages()
   initHtml()
   debug "thread: ldj"
   initLDJ()
@@ -349,7 +351,7 @@ template handleTopic(capts: auto, ctx: HttpRequestRef) =
   else:
     var filename = capts.topic.extractFilename()
     debug "topic: looking for assets {filename:.120}"
-    if filename in assetsFiles[]:
+    if filename in assetsFiles:
       page = getOrCache(filename):
         # allow to cache this unconditionally of the file existing or not
         await readFileAsync(config.dataAssetsPath / filename)
@@ -765,14 +767,10 @@ proc startServer*(doclear = false, port = 0, loglevel = "info") =
   initThread()
   initCache(doclear)
   initStats()
-  readAdsConfig()
+  initAds()
 
   # runTasks(@[mem, cleanup, tpc])
-  runAdsWatcher()
-  runAssetsWatcher()
 
-  while not (adsFirstRead and assetsFirstRead):
-    sleep(500)
 
   checkNil config
   let serverPort =

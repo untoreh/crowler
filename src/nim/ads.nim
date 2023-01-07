@@ -1,5 +1,5 @@
-import std/[os, sets, htmlparser, xmltree, parsexml, strformat, strutils, locks,
-    sugar, streams, algorithm, macros]
+import std/[macros, os, sets, htmlparser, xmltree, parsexml, strformat, strutils, locks,
+    sugar, streams, algorithm]
 import karax/[vdom, karaxdsl]
 import chronos, chronos/asyncsync
 import lrucache
@@ -29,15 +29,18 @@ var
     adsArticlesLock*, adsRelatedLock*, adsSeparatorLock*: Lock
 
 var adsLinksCount, adsLinksIdx: int
+var initializers {.threadvar.}: seq[proc(): void]
 
 macro loadIfExists(basename: static[string], varname) =
+  let procname = ident("init" & $varname)
   quote do:
-    let `varname`* = create(string)
-    let path = config.dataAdsPath / `basename`
-    if fileExists(path):
-      `varname`[] = readFile(path)
-    else:
-      `varname`[] = ""
+    var `varname`* {.threadvar.}: string
+    proc `procname()` =
+      checkNil(config)
+      let path = config.dataAdsPath / `basename`
+      if fileExists(path):
+        `varname` = readFile(path)
+    initializers.add `procname`
 
 when defined(adsense):
   loadIfExists("adsense.html", ADSENSE_SRC)
@@ -179,7 +182,6 @@ proc adsGen*(loc: ptr VNode): Iterator[VNode] =
     privateAccess(VNode)
     result = newIter[VNode](loc[].kids)
 
-
 proc insertAds*(txt: string, charsInterval = 2500, topic = "", lang = "",
     kws: seq[string] = @[]): Future[string] {.async.} =
   ## Insert ads over `txt` after chunks of texts of specified `charsInterval` size.
@@ -209,26 +211,26 @@ proc updateAds(event: seq[PathEvent]) =
       info "ads: config updated"
     break
 
-var assetsFileLock: Lock
-initLock(assetsFileLock)
-let assetsFiles* = create(HashSet[string])
+var
+  assetsFileLock: Lock
+  assetsFiles* {.threadvar.}: HashSet[string]
 proc loadAssets*() =
   if not dirExists(config.dataAssetsPath):
     createDir(config.dataAssetsPath)
-  assetsFiles[].clear()
+  assetsFiles.clear()
   for (kind, file) in walkDir(config.dataAssetsPath):
-    assetsFiles[].incl file.extractFilename()
+    assetsFiles.incl file.extractFilename()
 
 proc updateAssets(event: seq[PathEvent]) {.gcsafe.} =
   withLock(assetsFileLock):
-    let prevnum = assetsFiles[].len
-    for filename in assetsFiles[]:
+    let prevnum = assetsFiles.len
+    for filename in assetsFiles:
       pageCache.delete(filename)
     for e in event:
       if e.action in [Create, Modify, Rename, Remove].toHashSet:
         loadAssets()
         break
-    info "assets: files list updated {prevnum} -> {assetsFiles[].len}"
+    info "assets: files list updated {prevnum} -> {assetsFiles.len}"
 
 proc pollWatcher(args: (string, WatchKind)) {.nimcall, gcsafe.} =
   var watcher = initWatcher()
@@ -251,10 +253,15 @@ proc runAssetsWatcher*() =
   var thr {.global.}: Thread[(string, WatchKind)]
   createThread(thr, pollWatcher, (config.dataAssetsPath, WatchKind.assets))
 
-when isMainModule:
-  import std/strtabs {.all.}
-  import std/importutils
+proc initAds*() =
+  initLock(assetsFileLock)
+  readAdsConfig()
+
+  runAssetsWatcher()
   runAdsWatcher()
-  # for n in adsHeader[]:
-  #
-  #   echo n
+
+  for f in initializers:
+    f()
+
+  while not (adsFirstRead and assetsFirstRead):
+    sleep(500)

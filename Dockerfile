@@ -97,7 +97,7 @@ RUN cd /site; \
 FROM sitedeps3 AS sitedeps4
 RUN /usr/bin/python3 -m textblob.download_corpora
 COPY / /site/
-RUN /usr/bin/python3 lib/py/main.py; true # perform modules setups on imports
+RUN /usr/bin/python3 lib/py/main.py -sites dev; true # perform modules setups on imports
 
 FROM sitedeps4 AS sitebuild
 ARG NIM_ARG release

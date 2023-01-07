@@ -145,7 +145,10 @@ proc initConfig*(name: string) =
   setConfig("website_title")
   setConfig("website_description")
   setConfig("website_contact")
-  fromConfig("website_custom_pages", os.getenv("WEB_CUSTOM_PAGES"), doSplit)
+  fromConfig("website_custom_pages",
+             os.getenv("WEB_CUSTOM_PAGES", "dmca,terms-of-service,privacy-policy"), doSplit)
+  if config.websiteCustomPages.len == 0:
+    config.websiteCustomPages.add  @["dmca", "terms-of-service", "privacy-policy"]
 
   config.siteAssetsPath = BASE_URL / "assets" / config.websiteName
   config.siteAssetsDir = BASE_URL / SITE_PATH / "assets" / config.websiteName

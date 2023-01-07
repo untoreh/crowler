@@ -1,10 +1,11 @@
 import chronos
+import chronos_patches
 import os, times, cligen
 
 const SERVER_MODE* {.booldefine.} = false
 
 import server_tasks
-import cfg, utils, pyutils, search, lsh, nativehttp, topics, shorturls, stats, cache
+import types, cfg, utils, pyutils, search, lsh, nativehttp, topics, shorturls, stats, cache
 
 proc initThreadBase() =
   initConfig(os.getenv("CONFIG_NAME", ""))
@@ -24,7 +25,7 @@ proc run() =
   waitFor runTasks(@[pub, tpc, mem], wait=true)
 
 proc cleanupImpl() {.async.} =
-  init()
+  initThreadBase()
   var futs: seq[Future[void]]
   for topic in topicsCache.keys():
     futs.add deleteLowTrafficArts(topic)

@@ -313,6 +313,7 @@ def run_server(sites):
             return
         ## site names, which is the name of the config
         sites = list(map(lambda s: s[0], sites.values()))
+        assert len(sites) and len(sites[0])
     initialize()
     jobs = {}
 
@@ -358,7 +359,7 @@ if __name__ == "__main__":
         run_server(sites)
     else:
         assert (
-            len(sites) == 1
+            len(sites) == 1 and len(sites[0]) > 0
         ), "Can only execute jobs on a single site:topic combination."
         st = Site(sites[0], publishing=True)
         if args.topic != "":

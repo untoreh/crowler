@@ -23,8 +23,8 @@ var
   ppRep {.threadvar.}: seq[(string, string)]
 
 proc initPages*() =
-  tplRep = @{"WEBSITE_DOMAIN": config.websiteDomain}
-  ppRep = @{"WEBSITE_URL": $config.websiteUrl.combine(),
+  tplRep.add @{"WEBSITE_DOMAIN": config.websiteDomain}
+  ppRep.add @{"WEBSITE_URL": $config.websiteUrl.combine(),
                  "WEBSITE_DOMAIN": config.websiteDomain}
 
 proc getSubDirs(path: string): seq[int] =
@@ -233,6 +233,8 @@ proc pageFromTemplate*(tpl, lang, amp: string): Future[string] {.async.} =
       of "privacy-policy": (ppRep, "Privacy Policy",
                             fmt"Privacy Policy for {domain}")
       else: (tplRep, tpl, "")
+  echo tplRep
+  echo ppRep
   txt = multiReplace(txt, vars)
   let
     slug = slugify(title)
@@ -357,7 +359,7 @@ proc buildSearchPage*(topic: string, kws: string, lang: string,
       text "Search query is empty."
     content.add $r
   when defined(adsense):
-    content.add ADSENSE_SEARCH[]
+    content.add ADSENSE_SEARCH
   let
     footer = await pageFooter(topic, "s", home = false)
   let fromcat = if topic != "": fmt" (from category: {topic})" else: ""

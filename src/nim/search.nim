@@ -37,7 +37,7 @@ var conn: sonic.Connection
 
 type
   SonicMessageKind = enum query, sugg
-  SonicQueryArgsTuple = tuple[topic: string, keywords: string, lang: string, limit: int]
+  SonicQueryArgsTuple = tuple[col: string, topic: string, keywords: string, lang: string, limit: int]
   SonicMessageTuple = tuple[args: SonicQueryArgsTuple, kind: SonicMessageKind,
       o: ptr[seq[string]], id: MonoTime]
   SonicMessage = ptr SonicMessageTuple
@@ -166,12 +166,12 @@ proc querySonic(msg: SonicMessage) {.async.} =
   ## translate the query to source language, because we only index
   ## content in source language
   ## the resulting entries are in the form {page}/{slug}
-  let (topic, keywords, lang, limit) = msg.args
+  let (col, topic, keywords, lang, limit) = msg.args
   # FIXME: this is too expensive
   # let kws = await translateKws(keywords, lang)
   # logall "sonic: kws -- {kws}, query -- {keywords}"
   logall "sonic: query -- {keywords}"
-  let res = sonic.query(conn, config.websiteDomain.cptr, defaultBucket,
+  let res = sonic.query(conn, col.cptr, defaultBucket,
                         keywords.cptr, lang = lang.cptr, limit = limit.csize_t)
   if not res.isnil:
     defer: sonic.destroy_response(res)
@@ -182,10 +182,10 @@ proc querySonic(msg: SonicMessage) {.async.} =
 proc suggestSonic(msg: SonicMessage) {.async.} =
   # Partial inputs language can't be handled if we
   # only ingestClient the source language into sonic
-  let (topic, input, lang, limit) = msg.args
+  let (col, topic, input, lang, limit) = msg.args
   logall "suggest: topic: {topic}, input: {input}"
   let kw = input.split[^1]
-  let sug = sonic.suggest(conn, config.websiteDomain.cptr, defaultBucket,
+  let sug = sonic.suggest(conn, col.cptr, defaultBucket,
                           kw.cptr, limit = limit.csize_t)
   if not sug.isnil:
     defer: sonic.destroy_response(sug)
@@ -256,6 +256,7 @@ proc query*(topic: string, keywords: string, lang: string = SLang.code,
   if unlikely(keywords.len == 0):
     return
   var msg: SonicMessageTuple
+  msg.args.col = config.websiteDomain
   msg.args.topic = topic
   msg.args.keywords = keywords
   msg.args.lang = lang
@@ -273,6 +274,7 @@ proc suggest*(topic, input: string, limit = defaultLimit): Future[seq[
   if unlikely(input.len == 0):
     return
   var msg: SonicMessageTuple
+  msg.args.col = config.websiteDomain
   msg.args.topic = topic
   msg.args.keywords = input
   msg.kind = sugg

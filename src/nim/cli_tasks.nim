@@ -1,31 +1,77 @@
+import os, times, cligen, sugar
 import chronos
 import chronos_patches
-import os, times, cligen
 
 const SERVER_MODE* {.booldefine.} = false
 
 import server_tasks
-import types, cfg, utils, pyutils, search, lsh, nativehttp, topics, shorturls, stats, cache
+import types, cfg, utils, pyutils, search, lsh, nativehttp, topics, shorturls, stats, cache, lazyjson
 
-proc initThreadBase() =
-  initConfig(os.getenv("CONFIG_NAME", ""))
-  initPy()
-  initTypes()
-  initCompressor()
+proc initMainThread() =
   initLogging()
   registerChronosCleanup()
 
-proc run() =
-  initThreadBase()
+proc initThreadBase(name: string) =
+  var name =
+    if name == "": os.getenv("CONFIG_NAME", "")
+    else: name
+  initConfig(name)
+  initPy()
+  initTypes()
+  initCompressor()
+
+proc initRun(name: string) =
+  initThreadBase(name)
   initTopics()
   initSonic()
   initZstd()
   initHttp()
   startLSH()
-  waitFor runTasks(@[pub, tpc, mem], wait=true)
+
+proc run(name: string) =
+  try:
+    initRun(name)
+  except:
+    logexc()
+    quit()
+  while true:
+    try:
+      waitFor runTasks(@[pub, tpc], wait=true)
+    except:
+      logexc()
+      warn "worker for site {name} crashed. restarting.."
+      sleep(1000)
+
+proc multiRun() =
+  initMainThread()
+  let
+    sites_list = PROJECT_PATH / "config" / "sites.json"
+    sites_json = readFile(PROJECT_PATH / "config" / "sites.json")
+  var (reader, input) = getJsonReader(sites_json)
+  var sites: JsonNode
+  try:
+    sites = reader.readValue(JsonNode)
+  finally:
+    input.close()
+  var threads: array[1024, (string, Thread[string])]
+  var nRunning = 0
+  for (domain, name_port) in sites.pairs():
+    let (name, _) = (name_port[0].to(string), name_port[1])
+    info "Creating worker thread for site {name}."
+    createThread(threads[nRunning][1], run, name,)
+    threads[nRunning][0].add name
+    nRunning.inc
+  info "Running indefinitely..."
+  while true:
+    for i in 0..<nRunning:
+      if not threads[i][1].running:
+        warn "Worker for site {threads[i][0]} is not running!, restarting..."
+        quit()
+    sleep(5000)
+
 
 proc cleanupImpl() {.async.} =
-  initThreadBase()
+  initThreadBase(os.getenv("CONFIG_NAME", ""))
   var futs: seq[Future[void]]
   for topic in topicsCache.keys():
     futs.add deleteLowTrafficArts(topic)
@@ -53,4 +99,4 @@ proc compactdata(name = "translate.db") =
   db.compact()
 
 when isMainModule:
-  dispatchMulti([run], [purge], [clearcache], [compactdata])
+  dispatchMulti([run], [multiRun], [purge], [clearcache], [compactdata])

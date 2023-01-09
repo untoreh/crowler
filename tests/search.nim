@@ -30,3 +30,19 @@ for i in 0..1000000:
 echo "test.nim:42"
 # import os
 # os.sleep(100000000)
+
+when isMainModule:
+  initSonic()
+  # waitFor syncTopics(true)
+  # waitFor pushAllSonic()
+  debug "nice"
+  let q = waitFor query("mini", "mini", "hello")
+  echo q
+  # let qq = waitFor query("mini", "mini", "es")
+  # echo qq
+  # debug "done"
+  # let qq = waitFor suggest("mini", "mini")
+  # echo qq
+  # push(relpath)
+  # discard controlClient.trigger("consolidate")
+  # echo suggest("web", "web host")

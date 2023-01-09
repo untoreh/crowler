@@ -253,10 +253,10 @@ proc initPy*() =
     syncPyLock:
       if PyNone.isnil:
         PyNone = pybi[].getattr("None")
+      if ut.isnil:
+        ut = pyImport("utils")
       if pyisnone(site):
-        echo "pyutils.nim:257"
         site = pyImport("sites").Site(config.websiteName)
-        echo "pyutils.nim:259"
         doassert not pyisnone(site)
   except:
     let e = getCurrentException()

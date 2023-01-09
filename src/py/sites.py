@@ -3,6 +3,7 @@ import json
 from re import compile, sub
 from time import time, sleep
 from collections import deque
+from traceback import print_exc
 from cachetools import LRUCache
 from datetime import datetime
 from pathlib import Path
@@ -81,7 +82,7 @@ class TopicState:
         return f"""
         slug: {self.slug}
         name: {self.name}
-        date: {datetime.fromtimestamp(self.pub_date)}
+        date: (datetime.fromtimestamp(self.pub_date) if isinstance(self.pub_date, float) else self.pub_date)
         pub_count: {self.pub_count}
         unpub_count: {self.unpub_count}
         """
@@ -184,12 +185,11 @@ class Site:
 
         self.topics_dir = self.site_dir / "topics"
         self.topics_idx = self.topics_dir / "index"
-        self._topics = self.get_setting("topics", [])
-        self.new_topics_enabled = self.get_setting("new_topics", False)
+        self.new_topics_enabled = self.get_setting("new_topics", False) or False
 
-        self.created = self.get_setting("created", "1970-01-01")
+        self.created = self.get_setting("created", "1970-01-01") or ""
         self.created_dt = datetime.fromisoformat(self.created)
-        self.domain: str = self.get_setting("website_domain", "")
+        self.domain = self.get_setting("website_domain", "") or ""
         self.domain_rgx = compile(f"(?:https?:)?//{self.domain}")
         self.url = "https://" + self.domain
         self._domain_title = None
@@ -241,14 +241,13 @@ class Site:
             return 0
 
     def _init_facebook(self):
-        self._fb_page_id = self.get_setting("facebook_page_id", "")
+        self._fb_page_id = self.get_setting("facebook_page_id", "") or ""
         if not self._fb_page_id:
             log.warn("Facebook page id not set.")
         self._fb_page_token = self.get_setting("facebook_page_token", "")
-        if self._fb_page_id:
-            assert (
-                self._fb_page_token
-            ), "To submit posts to facebook, a page access token is required."
+        assert (
+            self._fb_page_token
+        ), "To submit posts to facebook, a page access token is required."
         self._fb_graph = FBApi(self._fb_page_token)
         self._feed_path = self._fb_page_id + "/feed" if self._fb_page_id else ""
         self.has_facebook = True
@@ -284,7 +283,7 @@ class Site:
                 message=message,
                 scrape=True,
             )
-            self._last_facebook = time.time()
+            self._last_facebook = time()
             self._save_post_time("facebook", self._last_facebook)
         except Exception as e:
             if "abusive" in str(e):
@@ -296,7 +295,7 @@ class Site:
 
     def facebook_worker(self):
         while True:
-            time.sleep(self.time_until_next(Job.facebook))
+            sleep(self.time_until_next(Job.facebook))
             j = sched.apply(self.facebook_post)
             j.wait(60)
             if not j.ready():
@@ -311,7 +310,7 @@ class Site:
         reddit_id = self.get_setting("reddit_client_id")
         reddit_secret = self.get_setting("reddit_client_secret")
         reddit_user = self.get_setting("reddit_user")
-        reddit_psw = self.get_setting("reddit_pass", "")
+        reddit_psw = self.get_setting("reddit_pass", "") or ""
         try:
             reddit_psw = base64.b64decode(reddit_psw).decode("utf-8")
         except:
@@ -361,13 +360,13 @@ class Site:
         url = self.article_url(a, topic)
         s = self._subreddit.submit(title=title, url=url)
         self.recent_reddit_submissions.append(url)
-        self._last_reddit = time.time()
+        self._last_reddit = time()
         self._save_post_time("reddit", self._last_reddit)
         return s
 
     def reddit_worker(self):
         while True:
-            time.sleep(self.time_until_next(Job.reddit))
+            sleep(self.time_until_next(Job.reddit))
             self.reddit_submit()
 
     def _init_twitter(self):
@@ -389,9 +388,13 @@ class Site:
         topic, a = self.choose_article()
         assert isinstance(self._twitter_api, TwitterApi), "twitter api instance error"
         assert isinstance(a, dict)
+        kwargs = {}
         url = self.article_url(a, topic)
         status = "{}: {}".format(a["title"], url)
+        kwargs["status"] = status
         media = a.get("imageUrl", "")
+        if media:
+            kwargs["media"] = media
         if len(url) > 280:
             return
         if len(status) > 280:
@@ -399,14 +402,14 @@ class Site:
             status = "{}: {}".format(tags, url)
             if len(status) > 280:
                 status = url
-        pu = self._twitter_api.PostUpdate(status=status, media=media)
-        self._last_twitter = time.time()
+        pu = self._twitter_api.PostUpdate(**kwargs)
+        self._last_twitter = time()
         self._save_post_time("twitter", self._last_twitter)
         return pu
 
     def twitter_worker(self):
         while True:
-            time.sleep(self.time_until_next(Job.twitter))
+            sleep(self.time_until_next(Job.twitter))
             j = sched.apply(self.tweet)
             j.wait(60)
             if not j.ready():
@@ -447,12 +450,12 @@ class Site:
             return 1
         upd = arr.attrs.get("updated")
         if not upd:
-            upd = arr.attrs["updated"] = time.time()
-        return max(1, (len(arr) * 20 * 60) - (time.time() - upd))
+            upd = arr.attrs["updated"] = time()
+        return max(1, (len(arr) * 20 * 60) - (time() - upd))
 
     @staticmethod
     def _social_time(last, kind):
-        return max(1, kind.value - (time.time() - last))
+        return max(1, kind.value - (time() - last))
 
     def time_until_next(self, kind: Job, topic: str = ""):
         # How much time should we wait until next job
@@ -513,11 +516,19 @@ class Site:
         return ut.load_zarr(k=ZarrKey.feeds, root=self.topic_dir(topic))
 
     def load_done(self, topic: str, pagenum: Optional[int] = None):
-        return (
-            self.topic_group(topic)["done"]
-            if pagenum is None
-            else self.load_articles(topic, k=ZarrKey.done, subk=pagenum)
-        )
+        try:
+            return (
+                self.topic_group(topic)["done"]
+                if pagenum is None
+                else self.load_articles(topic, k=ZarrKey.done, subk=pagenum)
+            )
+        except KeyError as e:
+            tg = self.topic_group(topic)
+            if len(tg) == 0:
+                self.reset_topic_data(topic)
+                return self.load_done(topic, pagenum)
+            else:
+                raise e
 
     def get_last_done(self, topic: str):
         pagenum = self.get_top_page(topic)
@@ -542,7 +553,7 @@ class Site:
         page_articles = page_articles_arr[:]
         for (n, art) in enumerate(page_articles):
             if art is not None:
-                art["pubTime"] = int(time.time())
+                art["pubTime"] = int(time())
                 page_articles[n] = art
         page_articles_arr[:] = page_articles
         return page_articles_arr
@@ -618,10 +629,26 @@ class Site:
             save_zarr([], k=ZarrKey.feeds, root=self.topic_dir(topic))
         self.update_article_count(topic)
 
-    def _init_data(self):
-        if not os.path.exists(self.topics_idx):
-            os.makedirs(self.topics_idx)
-            load_zarr(k=ZarrKey.topics, root=self.topics_idx, dims=2, overwrite=True)
+
+    @property
+    def topics(self):
+        if self._topics is None:
+            tops = self._config.get("topics", [])
+            if isinstance(tops, str):
+                if tops != "all":
+                    tops = tops.split(",")
+                else:
+                    self.load_topics()
+                    tops = list(self.topics_dict.keys())
+            self._topics = tops
+        return self._topics
+
+    @property
+    def slugs(self):
+        if self._slugs is None:
+            self._slugs = [ut.slugify(s) for s in self.topics]
+        return self._slugs
+
 
     def load_topics(self, force=False):
         if self.topics_arr is None or force:
@@ -630,6 +657,21 @@ class Site:
             )
             if self.topics_arr is None:
                 raise IOError(f"Couldn't load topics. for root {self.topics_idx}")
+            if len(self.topics_arr) == 0:
+                states = []
+                for (tp, slug) in zip(self.topics, self.slugs):
+                    states.append(
+                        np.array(
+                            tuple(
+                                x
+                                for x in TopicState(
+                                    name=tp, slug=slug
+                                ).__dict__.values()
+                            ),
+                            dtype=object,
+                        )
+                    )
+                self.topics_arr.append(states)
             if len(self.topics_arr) > 0:
                 self.topics_dict = dict(
                     zip(self.topics_arr[:, 0], self.topics_arr[:, 1])
@@ -639,17 +681,17 @@ class Site:
                 )
         return (self.topics_arr, self.topics_dict)
 
-    @property
-    def topics(self):
-        if self._topics is None:
-            self._topics = self._config.get("topics", [])
-        return self._topics
-
-    @property
-    def slugs(self):
-        if self._slugs is None:
-            self._slugs = [ut.slugify(s) for s in self.topics]
-        return self._slugs
+    def _init_data(self):
+        if not os.path.exists(self.topics_idx):
+            os.makedirs(self.topics_idx)
+            load_zarr(k=ZarrKey.topics, root=self.topics_idx, dims=2, overwrite=True)
+        self.load_topics()
+        tg = self.topic_group(self.slugs[-1])
+        if len(list(tg.keys())) == 0:
+            for slug in self.slugs:
+                tg = self.topic_group(slug)
+                if len(list(tg.keys())) == 0:
+                    self.reset_topic_data(slug)
 
     def get_topic_count(self):
         return len(self.topics_dict)
@@ -669,6 +711,8 @@ class Site:
 
     def is_empty(self, topic: str):
         self.load_topics()
+        if not topic:
+            return False
         done = self.load_done(topic)
         return len(done) == 0 or len(done[0]) == 0
 
@@ -696,7 +740,7 @@ class Site:
         d = np.asarray([tp.slug, tp.name, tp.pub_date, tp.pub_count, tp.unpub_count])
         topics.append([d])
         tpset[tp.slug] = tp.name
-        self.load_topics(force=True) # update topics_index and topics_dict
+        self.load_topics(force=True)  # update topics_index and topics_dict
         self.reset_topic_data(tp.slug)
 
     def reset_topics_idx(self, topics):
@@ -748,15 +792,26 @@ class Site:
         return self.topics_index[topic]
 
     def get_topic_pubDate(self, topic: str):
-        self.load_topics()
-        assert isinstance(self.topics_arr, za.Array)
-        assert isinstance(topic, str)
-        idx = self.get_topic_idx(topic)
-        if idx < len(self.topics_arr):
-            t = self.topics_arr[idx, Topic.PubDate]
-            assert isinstance(t, int)
-            return t
-        else:
+        try:
+            self.load_topics()
+            assert isinstance(self.topics_arr, za.Array)
+            assert isinstance(topic, str)
+            idx = self.get_topic_idx(topic)
+            if idx < len(self.topics_arr):
+                t = self.topics_arr[idx, Topic.PubDate]
+                if not t:  # when nothing has been published yet
+                    return 0
+                if t == "0":
+                    t = 0
+                if not isinstance(t, int):
+                    raise ValueError(
+                        "date is not a (int) timestamp! (%s: %s)", type(t), t
+                    )
+                return t
+            else:
+                return 0
+        except:
+            print_exc()
             return 0
 
     def set_topic_pubDate(self, topic: str) -> bool:
@@ -824,7 +879,7 @@ class Site:
     def topics_watcher(self):
         while True:
             self.load_topics(force=True)
-            time.sleep(self.topics_sync_freq)
+            sleep(self.topics_sync_freq)
 
     def is_img_new(self, img: str):
         return img in self.img_bloom

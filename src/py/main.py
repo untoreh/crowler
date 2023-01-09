@@ -285,10 +285,6 @@ def topics_worker(site: Site):
 def site_scheduling(site: Site, throttle=60):
     site.load_topics()
     try:
-        topics = site.sorted_topics(key=Topic.UnpubCount)
-        for topic in topics:
-            sched.apply(parse_worker, site, topic)
-            sched.apply(feed_worker, site, topic)
         if site.new_topics_enabled:
             sched.apply(topics_worker)
         if site.has_reddit:
@@ -297,6 +293,12 @@ def site_scheduling(site: Site, throttle=60):
             sched.apply(site.twitter_worker)
         if site.has_facebook:
             sched.apply(site.facebook_worker)
+        # schedule topics at the end to make sure social
+        # publishing does not starve for jobs
+        topics = site.sorted_topics(key=Topic.UnpubCount)
+        for topic in topics:
+            sched.apply(parse_worker, site, topic)
+            sched.apply(feed_worker, site, topic)
         while True:
             time.sleep(throttle)
     except:

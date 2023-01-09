@@ -789,13 +789,3 @@ proc startServer*(doclear = false, port = 0, loglevel = "info") =
   # var settings = initSettings(port = Port(serverPort), bindAddr = "0.0.0.0")
   # run(callback, settings = settings)
 
-when isMainModule:
-  # initThread()
-  # let topic = "vps"
-  # let page = buildHomePage("en", "")
-  # page.writeHtml(SITE_PATH / "index.html")
-  # initSonic()
-  # let argt = getLastArticles(topic)
-  # echo buildRelated(argt[0])
-  # imgCache.clear()
-  startServer(doclear = true)

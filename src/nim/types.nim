@@ -37,7 +37,7 @@ type
     tags*: seq[string]
     py*: PyObject
 
-var emptyArt*: ptr Article
+var emptyArt* {.threadvar.}: Article
 const emptyseq*: seq[string] = @[]
 
 proc `$`*(a: Article): string =
@@ -116,9 +116,8 @@ proc default*(_: typedesc[Article]): Article = initArticle(PyNone)
 proc initTypes*() =
   try:
     pygil.globalAcquire()
-    if emptyArt.isnil():
-      emptyArt = create(Article)
-    emptyArt[] = default(Article)
+    if emptyArt.isnil:
+      emptyArt = default(Article)
   except:
     try:
       let e = getCurrentException()[]

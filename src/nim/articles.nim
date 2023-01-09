@@ -34,7 +34,10 @@ proc getArticleUrl*(a: Article, lang: string): string {.inline.} = $(config.webs
 
 proc isValidArticlePy*(py: PyObject): bool =
   {.locks: [pyGil].}:
-    ut.is_valid_article(py).to(bool)
+    doassert not ut.isnil
+    doassert not ut.is_valid_article.isnil
+    return if py.isnil: false
+           else: ut.is_valid_article(py).to(bool)
 
 proc getArticles*(topic: string, n = 3, pagenum: int = -1): Future[(int, seq[
     Article])] {.async.} =
@@ -200,12 +203,12 @@ proc getArticleContent*(topic, page, slug: string): Future[string] {.async.} =
 proc getArticle*(topic, page, slug: auto): Future[Article] {.async.} =
   let py = await getArticlePy(topic, page, slug)
   if py.isnil:
-    return emptyArt[]
+    return emptyArt
   withPyLock:
     result = if not pyisnone(py):
             initArticle(py, parseInt(page))
         else:
-            emptyArt[]
+            emptyArt
 
 
 proc isEmpty*(a: Article): bool = a.isnil or a.title == "" or a.content == ""

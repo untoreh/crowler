@@ -96,7 +96,7 @@ template withTimeout(): VNode =
     td.node
 
 proc translateLang*(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath = "",
-                    ar = emptyArt[], timeout: static[int] = 0,
+                    ar = emptyArt, timeout: static[int] = 0,
                         jobId = ""): Future[VNode] {.gcsafe, async.} =
   when timeout <= 0 or jobId notin translateFuts:
     let
@@ -107,7 +107,7 @@ proc translateLang*(tree: vdom.VNode, file, rx: auto, lang: langPair, targetPath
     let fc = init(FileContext, tree, filedir, relpath, lang, t_path, config.websiteDomain)
   return withTimeout()
 
-proc translateLang*(fc: FileContext, ar = emptyArt[], timeout: static[int] = 0,
+proc translateLang*(fc: FileContext, ar = emptyArt, timeout: static[int] = 0,
     jobId = ""): Future[VNode] {.gcsafe, async.} =
   try:
     result = withTimeout()

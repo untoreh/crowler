@@ -233,8 +233,6 @@ proc pageFromTemplate*(tpl, lang, amp: string): Future[string] {.async.} =
       of "privacy-policy": (ppRep, "Privacy Policy",
                             fmt"Privacy Policy for {domain}")
       else: (tplRep, tpl, "")
-  echo tplRep
-  echo ppRep
   txt = multiReplace(txt, vars)
   let
     slug = slugify(title)

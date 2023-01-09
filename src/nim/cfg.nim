@@ -55,7 +55,6 @@ type ConfigObj* = object
   cleanupHits*: uint
 
 var
-  tomlConfig {.threadvar.}: TomlValueRef
   configState {.threadvar.}: ConfigObj
   config* {.threadvar.}: ptr ConfigObj
 
@@ -129,10 +128,15 @@ const
   # not implemented
   TRENDS* = false
 
-proc initConfig*(name: string) =
+proc initConfigImpl(name: string = "") =
+  var name = name
+  when not releaseMode:
+    if name.len == 0:
+      name = os.getenv("CONFIG_NAME", "")
   assert len(name) > 0, "Empty website config name."
   let configPath = PROJECT_PATH / "config" / "sites" / name & ".toml"
-  {.cast(gcsafe)}: # grumble grumble
+  var tomlConfig: TomlValueRef
+  {.cast(gcsafe).}:
     tomlConfig = parseFile(configPath)
   configState = ConfigObj()
   config = configState.addr
@@ -182,5 +186,13 @@ proc initConfig*(name: string) =
   config.sonicBacklog = config.dataPath / "sonic" / "backlog.txt"
   config.cleanupAge = 3600 * 24 * 30 * 4
   config.cleanupHits = 2
+
+proc initConfig*(name: string) =
+  try:
+    initConfigImpl(name)
+  except:
+    echo getCurrentException()[]
+    echo "Failed to load config for site: " & name
+    quit()
 
 static: echo "Project Path is '" & PROJECT_PATH & "'"

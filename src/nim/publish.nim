@@ -11,6 +11,7 @@ import nimpy,
        macros
 
 import times except milliseconds
+const SERVER_MODE* {.booldefine.} = false
 
 import cfg,
        types,

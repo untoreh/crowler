@@ -128,7 +128,8 @@ proc startLsh*() =
     newAsyncPColl[ptr LshQuery]()
   setNil(lshOut):
     newAsyncTable[ptr LshQuery, bool]()
-  createThread(lshThread, lshHandler)
+  if not lshThread.running:
+    createThread(lshThread, lshHandler)
 
 when isMainModule:
   startLsh()

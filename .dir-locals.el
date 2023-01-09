@@ -16,4 +16,4 @@
               (lsp-nim-project-mapping . [(:projectFile "tests/all.nim" :fileRegex "tests/.*\\.nim")
                                           (:projectFile "src/nim/server.nim" :fileRegex "src/nim/.*|.*\\.nim")
                                           (:projectFile "src/nim/test.nim" :fileRegex "src/nim/test.*\\.nim")])
-              (projectile-project-compilation-cmd . "nim r src/nim/server.nim"))))
+              (projectile-project-compilation-cmd . "nim r tests/test_server.nim"))))

@@ -1,22 +1,15 @@
 import std/[importutils, tables]
 
 type
-  OrderedTableIterator*[K, V] = object
-    tbl*: OrderedTable[K, V]
+  OrderedTableIteratorObj[K, V] = object
+    tbl*: ptr OrderedTable[K, V]
     next: int
-  OrderedTableIteratorRef[K, V] = ref OrderedTableIterator[K, V]
-
-privateAccess(OrderedTable)
-proc initTableIterator*[K, V](_: typedesc[
-    OrderedTableIterator]): OrderedTableIterator[K, V] =
-  privateAccess(OrderedTable)
-  new(result.tbl)
-  result.tbl[] = initOrderedTable[K, V]()
-  result.next = result.tbl.first
+  OrderedTableIterator*[K, V] = ref OrderedTableIteratorObj[K, V]
 
 proc initTableIterator*[K, V](_: typedesc[OrderedTableIterator],
-    tbl: OrderedTable[K, V]): OrderedTableIterator[K, V] =
+    tbl: ptr OrderedTable[K, V]): OrderedTableIterator[K, V] =
   privateAccess(OrderedTable)
+  new(result)
   result.tbl = tbl
   result.next = result.tbl.first
 
@@ -27,10 +20,10 @@ template nextImpl() =
     else: t.tbl.data[t.next]
   t.next = this.next
 
-proc next*[K, V](t: var OrderedTableIterator[K, V]): V =
+proc next*[K, V](t: OrderedTableIterator[K, V]): V =
   nextImpl()
   result = this.val
 
-proc nextKey*[K, V](t: var OrderedTableIterator[K, V]): K =
+proc nextKey*[K, V](t: OrderedTableIterator[K, V]): K =
   nextImpl()
   result = this.key

@@ -112,7 +112,7 @@ proc styleLink(url: string): VNode =
   # for n in nodes: result.add n
 
 proc buildHead*(path: string; description = ""; topic = ""; title = "";
-    ar = emptyArt[]): Future[VNode] {.gcsafe, async.} =
+    ar = emptyArt): Future[VNode] {.gcsafe, async.} =
   let canon = $(config.websiteUrl / path)
   let tail = block:
                let s = path.split("/")
@@ -338,7 +338,7 @@ proc buildCrumbs(ar: Article; topic = ""; page = "";
 
 
 proc buildMenuSmall*(currentPage: string; topicUri: Uri; path: string;
-    ar = emptyArt[]; lang = ""): Future[VNode] {.gcsafe, async.} =
+    ar = emptyArt; lang = ""): Future[VNode] {.gcsafe, async.} =
   let relpath = $(topicUri / path)
   return buildHtml():
     section(class = "menu-list mdc-top-app-bar--fixed-adjust"):
@@ -354,8 +354,8 @@ proc buildMenuSmall*(currentPage: string; topicUri: Uri; path: string;
       # Topics
       await topicsList(ucls = "menu-list-topics", icls = "menu-topic-item")
 
-proc buildMenuSmall*(currentPage: string; topicUri: Uri; ar = emptyArt[
-    ]; lang = ""): Future[VNode] {.async.} =
+proc buildMenuSmall*(currentPage: string; topicUri: Uri; ar = emptyArt;
+         lang = ""): Future[VNode] {.async.} =
   return await buildMenuSmall(currentPage, topicUri, ar.getArticlePath, ar, lang)
 
 proc buildLogo(pos: string): VNode =
@@ -369,8 +369,8 @@ proc buildLogo(pos: string): VNode =
         img(src = config.logoRelUrl, loading = "lazy", alt = "logo-light")
 
 
-proc buildMenu*(currentPage: string; topicUri: Uri; path: string; ar = emptyArt[
-    ]; topic = ""; page = ""; lang = ""): Future[VNode] {.async.} =
+proc buildMenu*(currentPage: string; topicUri: Uri; path: string; ar = emptyArt;
+    topic = ""; page = ""; lang = ""): Future[VNode] {.async.} =
   return buildHtml(header(class = "mdc-top-app-bar menu", id = "app-bar")):
     tdiv(class = "mdc-top-app-bar__row"):
       section(class = "mdc-top-app-bar__section mdc-top-app-bar__section--align-start"):
@@ -514,7 +514,7 @@ proc postTitle(a: Article): Future[VNode] {.async.} =
 
     buildImgUrl(a, defsrc = $config.defaultImageUrl)
 
-proc postContent(txt: string; ar: ptr Article = emptyArt; topic = ""; lang = "";
+proc postContent(txt: string; ar = emptyArt; topic = ""; lang = "";
     withlinks = true): Future[VNode] {.async.} =
   return buildHtml(article(class = "post-wrapper")):
     # NOTE: use `code` tag to avoid minification to collapse whitespace
@@ -549,7 +549,7 @@ proc buildBody(ar: Article; website_title: string = config.websiteTitle;
     main(class = "mdc-top-app-bar--fixed-adjust"):
       for ad in adsFrom(adsHeader): ad
       await postTitle(ar)
-      await postContent(ar.content, ar.unsafeAddr, topic = topicName, lang = lang)
+      await postContent(ar.content, ar, topic = topicName, lang = lang)
       postFooter(ar.pubdate)
       hr()
       related
@@ -625,7 +625,7 @@ proc writeHtml*(data: auto; path: string) {.inline.} =
 
 
 proc processHtml*(relpath: string; slug: string; data: VNode;
-    ar = emptyArt[]): Future[void] {.async.} =
+    ar = emptyArt): Future[void] {.async.} =
   # outputs (slug, data)
   var o: seq[(string, VNode)]
   let
@@ -678,7 +678,7 @@ proc buildPost*(a: Article; lang = ""): Future[VNode] {.async.} =
 
 proc buildPage*(title: string; content: VNode; slug: string; pagefooter: VNode = nil;
                 topic = ""; lang, desc: string = "";
-                    ar = emptyArt[]): Future[VNode] {.gcsafe, async.} =
+                    ar = emptyArt): Future[VNode] {.gcsafe, async.} =
   var topicName, currentPage: string
   if topic.isEmptyOrWhitespace:
     topicName = config.websiteTitle.toUpper

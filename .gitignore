@@ -53,6 +53,7 @@ data_*/proxies/*
 !/config/sites/dev.toml
 !/config/misc.toml
 !/config/supervisord_sites_tasks.conf
+!/config/supervisor.conf
 /src/css/colors/*
 !/src/css/colors/template.scss
 /config/logo/*

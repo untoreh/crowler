@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
-from datetime import datetime
-from os import symlink as os_symlink, makedirs
-from sys import stdin
-import json
 import argparse
+import json
+from datetime import datetime
+from os import makedirs
+from os import symlink as os_symlink
 from pathlib import Path
-from shutil import copyfile
-from typing import NamedTuple
-from traceback import print_exc
 from pprint import pprint
+from shutil import copyfile
+from sys import stdin
+from traceback import print_exc
+from typing import NamedTuple
 
-from praw.models.listing.mixins import base
 import tomli_w
+
 import config as cfg
-from utils import slugify
 import topics as tpm
-from sites import load_sites, SITES_PATH
+from sites import SITES_PATH, load_sites
+from utils import slugify
 
 SITES = {}
 
@@ -118,7 +119,7 @@ def gen_site(domain, cat, force=False):
     site_config = base_config.copy()
     site_config[ConfigKeys.name] = slug
     site_config[ConfigKeys.domain] = domain
-    site_config[ConfigKeys.port] = unused_port()
+    site_config[ConfigKeys.port] = str(unused_port())
     site_config[ConfigKeys.contact] = "contact@{}.{}".format(*domain.split(".")[-2:])
     site_config[ConfigKeys.topics] = topics
     site_config[ConfigKeys.created] = datetime.now().strftime("%Y-%m-%d")
@@ -144,7 +145,7 @@ def gen_site(domain, cat, force=False):
             try:
                 write_config(site_config)
             finally:
-                return
+                return site_config
         elif ans == "n":
             print("Aborting")
             exit()
@@ -152,15 +153,71 @@ def gen_site(domain, cat, force=False):
             print("Type y or n")
 
 
+
+def build_match(domain):
+    return [{"host": [domain]}]
+
+
+def build_upstream(from_host, to_host):
+    return [{"dial": from_host}, {"dial": to_host}]
+
+
+def build_reverse_proxy_handle(from_host, to_host):
+    [
+        {
+            "handler": "subroute",
+            "routes": [
+                {
+                    "handle": [
+                        {
+                            "handler": "reverse_proxy",
+                            "upstream": build_upstream(from_host, to_host),
+                        }
+                    ]
+                }
+            ],
+        }
+    ]
+
+
+def build_route(domain, from_host, to_host):
+    return {
+        "match": build_match(domain),
+        "handle": build_reverse_proxy_handle(from_host, to_host),
+    }
+
+
+def update_caddy_config(caddy_file: str, domain, port, from_host="localhost:80"):
+    with open(caddy_file, "r") as f:
+        cfg = json.load(f)
+    # copy backup after successful read of the main config
+    # so we can be sure it's not corrupted
+    copyfile(caddy_file, caddy_file + ".bak")
+    srv = next(iter(cfg["apps"]["http"]["servers"].values()))
+    assert ":80" in srv["listen"]
+    routes = srv["routes"]
+    assert isinstance(domain, str)
+    assert isinstance(port, int)
+    to_host = f":{port}"
+    new_route = build_route(domain, from_host, to_host)
+    routes.append(new_route)
+    with open(caddy_file, "w") as f:
+        json.dump(f, cfg)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-domain", help="The domain name of the new site.", default="")
     parser.add_argument("-cat", help="The category to pull topics from.", default="")
     parser.add_argument("-f", help="Force generation.", default=False)
+    parser.add_argument("-caddy", help="Caddyfile.json file path.", default="/site/config/Caddyfile.json")
     args = parser.parse_args()
     if args.domain == "":
         raise ValueError("Domain can't be empty.")
     if args.cat == "":
         raise ValueError("Category can't be empty.")
+    if not Path(args.caddy).exists():
+        raise ValueError(f"Caddyfile not found at {args.caddy}")
     SITES = load_sites()
-    gen_site(args.domain, args.cat, force=args.f)
+    site_config = gen_site(args.domain, args.cat, force=args.f)
+    update_caddy_config(args.caddy, args.domain, site_config[ConfigKeys.port])

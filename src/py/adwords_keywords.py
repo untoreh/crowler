@@ -158,7 +158,7 @@ class Keywords:
             raise OSError(f"file not found {self._customer_id_path}")
         self.client = GoogleAdsClient.load_from_storage(self._config, version="v10")
         with open(self._customer_id_path, "r") as f:
-            self._customer_id = f.read()
+            self._customer_id = f.read().strip()
 
     def suggest(
         self,

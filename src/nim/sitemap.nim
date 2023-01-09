@@ -183,9 +183,7 @@ template checkSitemapSize(sm): untyped = doassert sizeof(sm) * sm.len < maxSize;
 
 proc fetchSiteMap*(): Future[string] {.async.} =
   return pageCache.lgetOrPut(sitemapKey("")):
-    echo "sitemap.nim:190"
     let sm = (await buildSiteSitemap()).toXmlString
-    echo "sitemap.nim:192"
     checkSitemapSize sm
 
 proc fetchSiteMap*(topic: string): Future[string] {.async.} =
@@ -222,7 +220,7 @@ proc clearSiteMap*[T](topic: string, pagenum: T) =
   pageCache.delete(sitemapKey(topic, $pagenum))
 
 import karax/[vdom, karaxdsl]
-proc sitemapLinks*(topic = "", ar = emptyArt[]): seq[VNode] =
+proc sitemapLinks*(topic = "", ar = emptyArt): seq[VNode] =
   # site wide sitemap (index)
   result.add buildHtml link(rel = "sitemap", href = sitemapUrl())
   # articles topic sitemap

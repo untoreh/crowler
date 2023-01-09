@@ -110,8 +110,3 @@ converter toKV*(t: (string | Header, string | Header)): (string, string) = ($t[0
 #     for (h, s) in headers:
 #         h.add(s)
 
-when isMainModule:
-  initMimes()
-  # var s = @[""]
-  # mimeHeader("asd.json", s)
-  # echo s

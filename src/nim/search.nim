@@ -113,7 +113,7 @@ proc push*(capts: UriCaptures, content: string) {.async.} =
               f.close()
       break
 
-proc push*(relpath: string) {.async.} =
+proc push*(relpath: string, fromcache = false) {.async.} =
   var vrelpath = relpath
   vrelpath.removeSuffix('/')
   let
@@ -121,14 +121,19 @@ proc push*(relpath: string) {.async.} =
     capts = uriTuple(vrelpath)
   let content =
     block:
-      let cached = pageCache.getUnchecked(fpath)
-      if cached != "":
-        let page = cached.parseHtml
-        assert capts.lang == "" or page.findel("html").getAttr("lang") == (capts.lang)
-        page.findclass(HTML_POST_SELECTOR).innerText()
-      else:
+      template getContent(): string =
         if capts.art != "": await getArticleContent(capts.topic, capts.page, capts.art)
         else: ""
+      if fromcache:
+        let cached = pageCache.getUnchecked(fpath)
+        if cached != "":
+          let page = cached.parseHtml
+          assert capts.lang == "" or page.findel("html").getAttr("lang") == (capts.lang)
+          page.findclass(HTML_POST_SELECTOR).innerText()
+        else:
+          getContent()
+      else:
+        getContent()
   if content == "":
     warn "search: content matching path {vrelpath} not found."
   else:
@@ -154,9 +159,7 @@ when not defined(release):
 when false:
   proc translateKws(kws: string, lang: string): Future[string] {.async.} =
     if lang in TLangsTable and lang != "en":
-      # echo "ok"
       let lp = (src: lang, trg: SLang.code)
-      # echo "?? ", translate(keywords, lp)
       var tkw: string
       tkw = await callTranslator(kws, lp)
       something tkw, kws
@@ -328,20 +331,5 @@ proc initSonic*() {.gcsafe.} =
     newAsyncPColl[SonicMessage]()
   setNil(sonicOut):
     newAsyncTable[SonicMessage, bool]()
-  createThread(sonicThread, sonicHandler)
-
-when isMainModule:
-  initSonic()
-  # waitFor syncTopics(true)
-  # waitFor pushAllSonic()
-  debug "nice"
-  let q = waitFor query("mini", "mini", "hello")
-  echo q
-  # let qq = waitFor query("mini", "mini", "es")
-  # echo qq
-  # debug "done"
-  # let qq = waitFor suggest("mini", "mini")
-  # echo qq
-  # push(relpath)
-  # discard controlClient.trigger("consolidate")
-  # echo suggest("web", "web host")
+  if not sonicThread.running:
+    createThread(sonicThread, sonicHandler)

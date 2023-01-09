@@ -113,10 +113,11 @@ proc startImgFlow*() =
     setNil(imgOut):
       newAsyncTable[ptr ImgQuery, bool]()
     setNil(imgLock):
-      create(AsyncLock)
-    reset(imgLock[])
-    imgLock[] = newAsyncLock()
-    createThread(iflThread, imgHandler)
+      let p = create(AsyncLock)
+      p[] = newAsyncLock()
+      p
+    if not iflThread.running:
+      createThread(iflThread, imgHandler)
   except:
     logexc()
     warn "Could not init imageflow."

@@ -175,4 +175,3 @@ template runTasks*(tasks = @[pub, cleanup, mem], wait: static[bool] = false): un
     tasksMonitorImpl(tasks)
   else:
     let ttbl = tasksMonitorImpl(tasks)
-

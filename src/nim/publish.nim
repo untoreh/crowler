@@ -11,7 +11,6 @@ import nimpy,
        macros
 
 import times except milliseconds
-const SERVER_MODE* {.booldefine.} = false
 
 import cfg,
        types,
@@ -57,70 +56,64 @@ proc curPageNumber(topic: string): Future[int] {.async.} =
   withPyLock:
     return site.get_top_page(topic).to(int)
   # return getSubdirNumber(topic, curdir)
+  #
+macro infoPub(msg: static[string]) =
+  var m = "pub({topic}): "
+  m.add msg
+  quote do:
+    info `m`
 
-proc pubPage(topic: string, pagenum: string, nPagePosts: int, finalize = false, istop = false,
-        with_arts = false) {.async.} =
-  ## Writes a single page (fetching its related articles, if its not a template) to storage
-  when not SERVER_MODE:
-    topicPage(topic, pagenum, istop)
+proc finalizePage(topic: string, pagenum, postsCount: int) {.async.} =
+  withPylock:
+    discard site.update_page_size(topic, pagenum, postsCount, final = true)
 
-    info "Updating page:{pagenum} for topic:{topic} with entries:{nPagePosts}"
-    await processHTML(topic,
-                pagenum / "index",
-                pagetree)
-  # if we pass a nPagePosts we mean to finalize
-  if finalize:
-    withPylock:
-      discard site.update_page_size(topic, pagenum.parseInt, nPagePosts, final = true)
-  when not SERVER_MODE:
-    if with_arts:
-      for a in arts:
-        await processHtml(topic / pagenum, a.slug, (await buildPost(a)), a)
 
 proc finalizePages(topic: string, pn: int, newpage: bool,
-    nPagePosts: ptr int) {.async.} =
+                   postsCount: int, static_pub: static[
+                       bool] = false) {.async.} =
   ## Always update both the homepage and the previous page
+  # if its a new page, the page posts count is equivalent to the just published count
+  var postsCount = postsCount
+  infopub "updating db page size"
+  withPyLock:
+    if not newpage:
+      # add previous published articles
+      let pagesize = site.get_page_size(topic, pn)
+      # In case we didn't save the count, re-read from disk
+      if not pyisnone(pagesize):
+        postsCount += pagesize[0].to(int)
+    discard site.update_page_size(topic, pn, postsCount)
+
   let pages = await topicPages(topic)
-  var pagenum = pn.intToStr
-  # current articles count
-  let pnStr = pagenum
-  let pn = pagenum.parseInt
+  var pagenum = pn
+  # # current articles count
+  # let pn = pagenum
   # the current page is the homepage
-  await pubPage(topic, pnStr, nPagePosts[])
+  when static_pub: # static publishing is disabled
+    await pubPage(topic, pn.intToStr, postsCount)
   # Also build the previous page if we switched page
   if newpage:
     # make sure the second previous page is finalized
-    let pn = pagenum.parseInt
+    let pn = pagenum
     if pn > 1:
       var pagesize: PyObject
       var final: bool
       withPyLock:
         pagesize = pages[pn-2]
-        nPagePosts[] = pagesize[0].to(int)
+        postsCount = pagesize[0].to(int)
         final = pagesize[1].to(bool)
       if not final:
-        pagenum = (pn-2).intToStr
-        await pubPage(topic, pagenum, nPagePosts[], finalize = true)
+        pagenum = pn - 2
+        await finalizePage(topic, pagenum, postsCount)
+        when static_pub:
+          await pubPage(topic, pagenum.intToStr, postsCount, finalize = true)
     # now update the just previous page
     withPyLock:
-      nPagePosts[] = pages[pn-1][0].to(int)
-    pagenum = (pn-1).intToStr
-    await pubPage(topic, pagenum, nPagePosts[], finalize = true)
-
-# proc resetPages(topic: string) =
-#     ## Takes all the published articles in `done`
-#     ## and resets their page numbers
-#     let done = topicDonePages(topic)
-#     withPyLock:
-#         assert isa(done, site.za.Group)
-#         let topdir = len(done)
-#         if topdir == 0:
-#             return
-#         var i = 0
-#         var newdone = newSeq[PyObject]()
-#         for k in done.keys():
-#             let pagedone = done[k]
-#             newdone.add()
+      postsCount = pages[pn-1][0].to(int)
+    pagenum = pn - 1
+    await finalizePage(topic, pagenum, postsCount)
+    when static_pub:
+      await pubPage(topic, pagenum.intToStr, postsCount, finalize = true)
 
 template pySaveDone() =
   withPyLock:
@@ -130,7 +123,7 @@ proc filterDuplicates(topic: string, lsh: PublishedArticles, pagenum: int,
                       posts: ptr seq[(VNode, Article)],
                       donePy: ptr seq[PyObject],
                       doneArts: ptr seq[Article],
-                      stateful: static[bool]): Future[bool] {.gcsafe, async.} =
+                      ): Future[bool] {.gcsafe, async.} =
 
   var (nProcessed, arts) = await getArticles(topic, pagenum = pagenum)
   let pubtime = getTime().toUnix
@@ -162,7 +155,7 @@ proc filterDuplicates(topic: string, lsh: PublishedArticles, pagenum: int,
         a.py["pubTime"] = pubtime
       block:
         var post: VNode
-        when stateful:
+        when STATIC_PUBLISHING:
           post = await buildPost(a)
         posts[].add((post, a))
   # update done articles after uniqueness checks
@@ -187,14 +180,35 @@ proc ensureLS(topic: string): Future[PublishedArticles] {.async, raises: [].} =
     except:
       warn "Failed to rebuild lsh for topic {topic}. Proceeding anyway."
 
+template stateUpdates() =
+  if newpage:
+    ensureDir(SITE_PATH / pagedir)
+  # after writing the new page, ensure home points to the new page
+  infopub "Writing {nNewPosts} articles for topic: {topic}"
+  for (tree, a) in posts:
+    await processHtml(pagedir, a.slug, tree, a)
+  if newpage:
+    ensureHome(topic, pagenum)
+  # update feed file
+  infopub "updating feeds"
+  let tfeed = await topic.fetchFeed
+  tfeed.update(topic, doneArts, dowrite = true)
+  when cfg.SEARCH_ENABLED:
+    infopub "indexing search"
+    for ar in doneArts:
+      var relpath = topic / $pagenum / ar.slug
+      await search.push(relpath)
+  infopub "clearing sitemaps"
+  clearSiteMap(topic)
+  clearSiteMap(topic, pagenum)
+  # update ydx turbo items
+  when cfg.YDX:
+    infopub "updating yandex"
+    writeFeed()
 
-macro infoPub(msg: static[string]) =
-  var m = "pub({topic}): "
-  m.add msg
-  quote do:
-    info `m`
 
-proc pubTopic*(topic: string, stateful: static[bool] = false): Future[bool] {.gcsafe, async.} =
+proc pubTopic*(topic: string): Future[
+    bool] {.gcsafe, async.} =
   ##  Generates html for a list of `Article` objects and writes to file.
   infopub "start"
   withPyLock:
@@ -217,18 +231,15 @@ proc pubTopic*(topic: string, stateful: static[bool] = false): Future[bool] {.gc
     posts: seq[(VNode, Article)]
     donePy: seq[PyObject]
     doneArts: seq[Article]
+
   infopub "filter"
-  while posts.len == 0 and (getTime() - startTime).inSeconds <
-      cfg.PUBLISH_TIMEOUT:
-    if not await filterDuplicates(topic, lsh, pagenum, posts.addr, donePy.addr,
-                                  doneArts.addr, stateful):
+  while posts.len == 0 and
+        (getTime() - startTime).inSeconds < PUBLISH_TIMEOUT:
+    let filtered =
+      await filterDuplicates(topic, lsh, pagenum, posts.addr, donePy.addr, doneArts.addr)
+    if not filtered:
       break
 
-  # At this point articles "state" is updated on python side
-  # new articles are "published" and the state (pagecache, rss, search) has to be synced
-  when not SERVER_MODE:
-    if newpage:
-      ensureDir(SITE_PATH / pagedir)
   let nNewPosts = len(posts)
   if nNewPosts == 0:
     info "No new posts written for topic: {topic}"
@@ -238,50 +249,14 @@ proc pubTopic*(topic: string, stateful: static[bool] = false): Future[bool] {.gc
   # even if we don't publish them, but we never want duplicates
   infopub "save lsh"
   await saveLS(topic, lsh)
-  infopub "Writing {nNewPosts} articles for topic: {topic}"
-  # after writing the new page, ensure home points to the new page
-  when not SERVER_MODE:
-    for (tree, a) in posts:
-      await processHtml(pagedir, a.slug, tree, a)
-    if newpage:
-      ensureHome(topic, pagenum)
-  # if its a new page, the page posts count is equivalent to the just published count
-  var nPagePosts: int
-  nPagePosts = nNewPosts
-  infopub "updating db page size"
-  withPyLock:
-    if not newpage:
-      # add previous published articles
-      let pagesize = site.get_page_size(topic, pagenum)
-      # In case we didn't save the count, re-read from disk
-      if not pyisnone(pagesize):
-        nPagePosts += pagesize[0].to(int)
-    discard site.update_page_size(topic, pagenum, nPagePosts)
-
   infopub "finalizing pages"
-  await finalizePages(topic, pagenum, newpage, nPagePosts.addr)
-  # update feed file
-  when stateful:
-    infopub "updating feeds"
-    let tfeed = await topic.fetchFeed
-    tfeed.update(topic, doneArts, dowrite = true)
-  when cfg.SEARCH_ENABLED:
-    infopub "indexing search"
-    for ar in doneArts:
-      var relpath = topic / $pagenum / ar.slug
-      await search.push(relpath)
-  infopub "clearing sitemaps"
-  when stateful:
-    clearSiteMap(topic)
-    clearSiteMap(topic, pagenum)
-  # update ydx turbo items
-  when cfg.YDX and stateful:
-    infopub "updating yandex"
-    writeFeed()
+  await finalizePages(topic, pagenum, newpage, len(posts))
+  # At this point articles "state" is updated on python side
+  # new articles are "published" and the state (pagecache, rss, search) has to be synced
+  when false: # It is disabled since we don't do static publishing and
+    stateUpdates() # the server cache has a short TTL...so it will eventually update
   infopub "published {nNewPosts} new posts."
   return true
-
-
 
 proc pubTimeInterval(topic: string): Future[int] {.async.} =
   ## Publication interval is dependent on how many articles we can publish
@@ -292,7 +267,6 @@ proc pubTimeInterval(topic: string): Future[int] {.async.} =
     let artsLen = site.load_articles(topic).len
     # in minutes
     result = 120.div(max(1, artsLen)) * 60
-
 
 proc maybePublish*(topic: string) {.gcsafe, async.} =
   let t = getTime()
@@ -312,58 +286,3 @@ proc maybePublish*(topic: string) {.gcsafe, async.} =
     else:
       let remaining = pubInterval - pastTime
       debug "pubtasks: time until next {topic} publishing: {remaining} minutes."
-
-
-when false:
-  proc resetTopic(topic: string) =
-    syncPyLock():
-      discard site.reset_topic_data(topic)
-    pageCache.delete(topic.feedKey)
-    clearSiteMap(topic, all = true)
-    waitFor saveLS(topic, init(PublishedArticles))
-
-proc pubAllPages(topic: string, clear = true) {.async.} =
-  ## Starting from the homepage, rebuild all archive pages, and their articles
-  let (topdir, numdone) = await topic.getState
-  assert topdir == numdone, fmt"{topdir}, {numdone}"
-  when not SERVER_MODE:
-    if clear:
-      for d in walkDirs(SITE_PATH / topic / "*"):
-        removeDir(d)
-      let topic_path = SITE_PATH / topic
-      for n in 0..topdir:
-        ensureDir(topic_path / $n)
-  block:
-    let nPagePosts = await pageSize(topic, topdir)
-    await pubPage(topic, $topdir, nPagePosts, finalize = false,
-        with_arts = true, istop = true)
-  for n in 0..<topdir:
-    let pagenum = n
-    var nPagePosts = await pageSize(topic, n)
-    await pubPage(topic, $pagenum, nPagePosts, finalize = true,
-        with_arts = true)
-  when not SERVER_MODE:
-    ensureHome(topic, topdir)
-
-# proc refreshPageSizes(topic: string) =
-#     withPyLock:
-#         let grp = site.topic_group(topic)
-#         let donearts = grp[$topicData.done]
-#         assert isa(donearts, site.za.Group)
-#         assert len(donearts) == len(grp[$topicData.pages])
-#         let topdir = len(donearts) - 1
-#         for pagenum in 0..<topdir:
-#             discard site.update_page_size(topic, pagenum, len(donearts[$pagenum]), final = true)
-#         discard site.update_page_size(topic, topdir, len(donearts[$topdir]), final = false)
-
-# import translate
-# when isMainModule:
-#     let topic = "vps"
-#     # refreshPageSizes(topic)
-#     dopublish(topic)
-#     quitl()
-#     let
-#         topdir = 0
-#         nPagePosts = pageSize(topic, topdir)
-#     # pubPage(topic, $topdir, nPagePosts, finalize = false, with_arts = true)
-#     # pubPageFromTemplate("dmca.html", "DMCA")

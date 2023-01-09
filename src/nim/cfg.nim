@@ -86,8 +86,10 @@ proc doSplit(s: string): seq[string] = s.split(",")
 
 
 
-when not declared(SERVER_MODE):
+when not defined(SERVER_MODE):
   const SERVER_MODE* {.booldefine.} = os.getenv("SERVER_MODE", "1").parseBool
+when not defined(STATIC_PUBLISHING):
+  const STATIC_PUBLISHING* {.booldefine.} = os.getenv("SERVER_MODE", "0").parseBool
 
 const
   SITE_PATH* = PROJECT_PATH / "site"

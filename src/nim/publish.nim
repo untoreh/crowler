@@ -25,6 +25,7 @@ import cfg,
        lsh,
        sharedqueue
 
+const SERVER_MODE* {.booldefine.} = false
 when SERVER_MODE:
   import rss
   when cfg.YDX:

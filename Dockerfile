@@ -109,7 +109,7 @@ ENV PROJECT_DIR /site
 # nim not still supporting ssl3
 # RUN apt -y install libssl1.1
 RUN /site/scripts/switchdebug.sh /site
-RUN cd /site; nimble build -d:SERVER_MODE=0 cli_tasks
+RUN cd /site; nimble build cli_tasks -d:SERVER_MODE=0
 
 
 # FROM sitebuild as sitebuild-debug
@@ -125,9 +125,10 @@ RUN cd /site; nimble build -d:SERVER_MODE=0 cli_tasks
 #     rm /tmp/valgrind -rf
 # RUN apt -y install massif-visualizer
 
-FROM sitebuild as scraper
-ENV SITES dev
+FROM sitebuild as server
+# ENV SITES dev
 # HEALTHCHECK --timeout=5s CMD scripts/healthcheck.sh
-RUN cd /site; nimble build cli -d:adsense=1
+RUN cd /site; nimble build cli -d:adsense=1 -d:SERVER_MODE=1
 RUN [ "$NIM" = release ] && strip -s cli || exit 0
+ENV PATH="$PROJECT_DIR/scripts:$PATH"
 CMD /site/scripts/start.sh

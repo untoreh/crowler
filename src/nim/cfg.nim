@@ -18,6 +18,7 @@ type ConfigObj* = object
   websiteDescription*: string
   websiteContact*: string
   websiteCustomPages*: seq[string]
+  isSubSite*: bool
   sitePath*: string
   siteAssetsPath*: Uri
   siteAssetsDir*: Uri
@@ -89,7 +90,7 @@ proc doSplit(s: string): seq[string] = s.split(",")
 when not defined(SERVER_MODE):
   const SERVER_MODE* {.booldefine.} = os.getenv("SERVER_MODE", "1").parseBool
 when not defined(STATIC_PUBLISHING):
-  const STATIC_PUBLISHING* {.booldefine.} = os.getenv("SERVER_MODE", "0").parseBool
+  const STATIC_PUBLISHING* {.booldefine.} = os.getenv("STATIC_PUBLISHING", "0").parseBool
 
 const
   SITE_PATH* = PROJECT_PATH / "site"
@@ -122,7 +123,7 @@ const
   ## how many related articles to display at the bottom of an article page.
   N_RELATED* = 3
   ## Number of articles (1 per topic) to display on the homepage
-  HOME_ARTS* = 10
+  HOME_ARTS* = 30
 
   # These are useless in server mode
   TRANSLATION_TO_FILE* = true
@@ -145,6 +146,7 @@ proc initConfigImpl(name: string = "") =
 
   setConfig("website_name")
   setConfig("website_domain")
+  config.isSubsite = config.websiteDomain.split(".").len > 2
   setConfig("website_scheme")
   doassert $config.website_scheme in ["http://", "https://"]
   putConfig("website_port", parseInt)
@@ -156,14 +158,17 @@ proc initConfigImpl(name: string = "") =
   if config.websiteCustomPages.len == 0:
     config.websiteCustomPages.add  @["dmca", "terms-of-service", "privacy-policy"]
 
-  config.siteAssetsPath = BASE_URL / "assets" / config.websiteName
-  config.siteAssetsDir = BASE_URL / SITE_PATH / "assets" / config.websiteName
+  template orDefault(val, def = "default"): untyped =
+    if config.isSubsite: def else: val
+
+  config.siteAssetsPath = BASE_URL / "assets" / config.websiteName.orDefault
+  config.siteAssetsDir = BASE_URL / SITE_PATH / "assets" / config.websiteName.orDefault
   config.dataPath = PROJECT_PATH / "data"
-  config.websitePath = config.dataPath / "sites" / config.websiteName
+  config.websitePath = config.dataPath / "sites" / config.websiteName.orDefault
   config.websiteUrl = parseUri(config.websiteScheme & (config.websiteDomain &
       WEBSITE_DEBUG_PORT))
   config.dataAssetsPath = config.dataPath / "assets" / config.websiteName
-  config.dataAdsPath = config.dataPath / "ads" / config.websiteName
+  config.dataAdsPath = config.dataPath / "ads" / config.websiteName.orDefault
   config.assetsPath = PROJECT_PATH / "src" / "assets"
   config.defaultImage = config.assetsPath / "image.svg"
   config.defaultImageUrl = BASE_URL / "assets" / "image.svg"
@@ -171,7 +176,7 @@ proc initConfigImpl(name: string = "") =
   config.cssBunUrl = $(config.siteAssetsPath / "bundle.css")
   config.cssCritRelUrl = $(config.siteAssetsDir / "bundle-crit.css")
   config.jsRelUrl = $(config.siteAssetsPath / "bundle.js")
-  config.logoRelDir = BASE_URL / "assets" / "logo" / config.websiteName
+  config.logoRelDir = BASE_URL / "assets" / "logo" / config.websiteName.orDefault
   config.logoRelUrl = $(config.logoRelDir / "logo.svg")
   config.logoSmallUrl = $(config.logoRelDir / "logo-small.svg")
   config.logoIconUrl = $(config.logoRelDir / "logo-icon.svg")

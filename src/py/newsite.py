@@ -73,13 +73,15 @@ def unused_port():
     return ports[-1] + 1
 
 
+def site_config_path(site_config):
+    return cfg.SITES_CONFIG_DIR / (site_config[ConfigKeys.name] + ".toml")
+
+
 def write_config(site_config):
     success = False
     try:
-        site_config_path = cfg.SITES_CONFIG_DIR / (
-            site_config[ConfigKeys.name] + ".toml"
-        )
-        with open(site_config_path, "wb") as f:
+        config_path = site_config_path(site_config)
+        with open(config_path, "wb") as f:
             tomli_w.dump(site_config, f)
         success = True
     finally:
@@ -107,6 +109,7 @@ def symlink(base: Path, tld, slug):
         print_exc()
         print("Couldn't create symlink")
         return False
+
 
 def gen_site(domain, cat, force=False):
     if domain in SITES and not force:
@@ -151,7 +154,6 @@ def gen_site(domain, cat, force=False):
             exit()
         else:
             print("Type y or n")
-
 
 
 def build_match(domain):
@@ -205,12 +207,28 @@ def update_caddy_config(caddy_file: str, domain, port, from_host="localhost:80")
         json.dump(f, cfg)
 
 
+def add_to_supervisor(name):
+    supervisor_config = f"""
+[program:{name}_server]
+directory=%(ENV_PWD)s/
+environment=CONFIG_NAME="{name}"
+command=./cli startServer
+"""
+    supervisor_path = cfg.SUPERVISOR_DIR / (name + ".conf")
+    with open(supervisor_path, "w") as f:
+        f.write(supervisor_config)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-domain", help="The domain name of the new site.", default="")
     parser.add_argument("-cat", help="The category to pull topics from.", default="")
     parser.add_argument("-f", help="Force generation.", default=False)
-    parser.add_argument("-caddy", help="Caddyfile.json file path.", default="/site/config/Caddyfile.json")
+    parser.add_argument(
+        "-caddy",
+        help="Caddyfile.json file path.",
+        default="/site/config/Caddyfile.json",
+    )
     args = parser.parse_args()
     if args.domain == "":
         raise ValueError("Domain can't be empty.")
@@ -221,3 +239,4 @@ if __name__ == "__main__":
     SITES = load_sites()
     site_config = gen_site(args.domain, args.cat, force=args.f)
     update_caddy_config(args.caddy, args.domain, site_config[ConfigKeys.port])
+    add_to_supervisor(site_config[ConfigKeys.name])

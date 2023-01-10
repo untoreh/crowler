@@ -57,6 +57,8 @@ data_*/proxies/*
 /src/css/colors/*
 !/src/css/colors/template.scss
 /config/logo/*
+!/config/logo
+!/config/logo/example
 !/config/logo/.gitkeep
 replace.txt
 README_local.org

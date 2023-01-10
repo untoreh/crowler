@@ -357,7 +357,6 @@ if __name__ == "__main__":
     cfg.POOL_SIZE = int(args.workers)
     sites = args.sites.split(",")
     if args.server:
-        assert len(sites) > 0 and sites[0] != "", "Invalid sites list."
         run_server(sites)
     else:
         assert (

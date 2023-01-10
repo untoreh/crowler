@@ -56,6 +56,7 @@ DATA_DIR = Path(
 assert DATA_DIR is not None  # and isdir(Path(dirname(DATA_DIR)) / ".venv")
 CONFIG_DIR = DATA_DIR.parent / "config"
 
+SUPERVISOR_DIR = CONFIG_DIR / "supervisor.d"
 PROXIES_DIR = DATA_DIR / "proxies"
 PROXIES_FILES = [ PROXIES_DIR / f"{prx}proxies.json" for prx in ("socks5", "socks4", "http")]
 SOCKS5PEERS_FILE = PROXIES_DIR / "socks5peers.txt"

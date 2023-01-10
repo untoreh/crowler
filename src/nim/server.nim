@@ -193,7 +193,7 @@ proc doReply(reqCtx: ref ReqContext, body: string, rqid: ReqId, scode = Http200,
     if sre("^(?:text)|(?:image)|(?:application)/") in reqCtx.mime:
       setEncoding
     debug "reply: headers -- {reqCtx.respHeaders}"
-    reqCtx.respHeaders.set(hetag, '"' & $reqCtx.key & '"')
+    reqCtx.respHeaders.set(hetag, '"' & $(reqCtx.respBody[].hash) & '"')
   except:
     swarn "reply: troubles serving page {reqCtx.file}"
     sdebug "reply: sending: {size} to {reqCtx.url}"

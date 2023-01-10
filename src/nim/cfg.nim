@@ -20,8 +20,8 @@ type ConfigObj* = object
   websiteCustomPages*: seq[string]
   isSubSite*: bool
   sitePath*: string
-  siteAssetsPath*: Uri
-  siteAssetsDir*: Uri
+  remoteAssetsPath*: Uri
+  localAssetsPath*: Uri
   dataPath*: string
   websitePath*: string
   websiteUrl*: Uri
@@ -161,10 +161,10 @@ proc initConfigImpl(name: string = "") =
   template orDefault(val, def = "default"): untyped =
     if config.isSubsite: def else: val
 
-  config.siteAssetsPath = BASE_URL / "assets" / config.websiteName.orDefault
-  config.siteAssetsDir = BASE_URL / SITE_PATH / "assets" / config.websiteName.orDefault
+  config.remoteAssetsPath = BASE_URL / "assets" / config.websiteName.orDefault
+  config.localAssetsPath = BASE_URL / SITE_PATH / "assets" / config.websiteName.orDefault
   config.dataPath = PROJECT_PATH / "data"
-  config.websitePath = config.dataPath / "sites" / config.websiteName.orDefault
+  config.websitePath = config.dataPath / "sites" / config.websiteName
   config.websiteUrl = parseUri(config.websiteScheme & (config.websiteDomain &
       WEBSITE_DEBUG_PORT))
   config.dataAssetsPath = config.dataPath / "assets" / config.websiteName
@@ -173,9 +173,9 @@ proc initConfigImpl(name: string = "") =
   config.defaultImage = config.assetsPath / "image.svg"
   config.defaultImageUrl = BASE_URL / "assets" / "image.svg"
   config.defaultImageMime = "image/svg+xml"
-  config.cssBunUrl = $(config.siteAssetsPath / "bundle.css")
-  config.cssCritRelUrl = $(config.siteAssetsDir / "bundle-crit.css")
-  config.jsRelUrl = $(config.siteAssetsPath / "bundle.js")
+  config.cssBunUrl = $(config.remoteAssetsPath / "bundle.css")
+  config.cssCritRelUrl = $(config.localAssetsPath / "bundle-crit.css")
+  config.jsRelUrl = $(config.remoteAssetsPath / "bundle.js")
   config.logoRelDir = BASE_URL / "assets" / "logo" / config.websiteName.orDefault
   config.logoRelUrl = $(config.logoRelDir / "logo.svg")
   config.logoSmallUrl = $(config.logoRelDir / "logo-small.svg")
@@ -188,7 +188,7 @@ proc initConfigImpl(name: string = "") =
   config.applePng180Url = $(config.logoRelDir / "apple-touch-icon.png")
   config.articleExcerptSize = 300
   config.translationFlagsPath = config.assetsPath / "flags-sprite.css"
-  config.translationFlagsRelUrl = config.siteAssetsPath / "flags-sprite.css"
+  config.translationFlagsRelUrl = config.remoteAssetsPath / "flags-sprite.css"
   config.websiteUrlImg = parseUri(config.websiteDomain & WEBSITE_DEBUG_PORT) / "i"
   config.sonicBacklog = config.dataPath / "sonic" / "backlog.txt"
   config.cleanupAge = 3600 * 24 * 30 * 4

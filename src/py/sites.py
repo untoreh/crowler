@@ -243,7 +243,7 @@ class Site:
     def _init_facebook(self):
         self._fb_page_id = self.get_setting("facebook_page_id", "") or ""
         if not self._fb_page_id:
-            log.warn("Facebook page id not set.")
+            log.warn(f"Facebook page id not set for site {self.name}.")
         self._fb_page_token = self.get_setting("facebook_page_token", "")
         assert (
             self._fb_page_token

@@ -632,7 +632,7 @@ proc processHtml*(relpath: string; slug: string; data: VNode;
     path = SITE_PATH
     pagepath = relpath / slug & ".html"
     fpath = path / pagepath
-  when cfg.SERVER_MODE:
+  when not cfg.STATIC_PUBLISHING:
     pageCache[relpath.fp] = data.asHtml
     return
   when cfg.TRANSLATION_ENABLED and defined(weaveRuntime):

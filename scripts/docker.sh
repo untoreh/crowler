@@ -29,7 +29,7 @@ else
 fi
 
 [ -n "$docopy" ] && scripts/copy.sh $sites
-for target in "scraper" "server"; do
+for target in "server"; do
     tag=untoreh/sites:$target
     sudo docker build --target $target $nocache \
         --build-arg NIM_ARG=$NIM \

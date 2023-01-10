@@ -8,7 +8,8 @@ if [ "$1" = "-css" ]; then
 else
     buildCss=
 fi
-sites=$(echo "${1:-dev}" | tr "," "\n")
+sites="${1},default"
+sites=$(echo "${sites:-dev}" | tr "," "\n")
 
 [ -e $trg/cli ] && rm -f $trg/cli
 cp requirements{,2,.git}.txt $trg/

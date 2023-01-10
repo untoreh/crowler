@@ -392,7 +392,6 @@ def proxy_sync_forever(proxies_files: List[Path], config_dir: Path, interval=15)
                 except:
                     pass
 
-        sched.initPool()
         PROXY_SYNC_JOB = sched.apply(job)
 
 

@@ -148,7 +148,6 @@ class Providers:
     dump_prefix = "proxies"
 
     def __init__(self):
-        scheduler.initPool()
         self._last_update = 0
         self.proxies = {}
         self.proxy_types = set()
@@ -254,7 +253,6 @@ class Providers:
         self.dump()
 
     def checkall(self, verbose=False):
-        scheduler.initPool()
         self.fetch()
         global checked
         checked = {}

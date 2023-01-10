@@ -81,7 +81,7 @@ def apply(f, *args, **kwargs):
             return j
     # Pools are busy, create a new one
     new_pool()
-    apply(f, *args, **kwargs)
+    return apply(f, *args, **kwargs)
 
 
 def err(e):

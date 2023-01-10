@@ -81,7 +81,6 @@ def ensure_globals(site, topic):
 def fromsources(sources, topic, site: Site, n=cfg.POOL_SIZE):
     """Create list of feeds from a subset of links found in the source file, according to SRC_SAMPLE_SIZE."""
     global FEEDS, ARTICLES
-    sched.initPool()
     ensure_globals(site, topic)
     jobs = []
     logger.info("Starting to collect articles/feeds from %d sources.", len(sources))
@@ -111,7 +110,6 @@ def fromsources(sources, topic, site: Site, n=cfg.POOL_SIZE):
 def fromfeeds(sources, topic, site: Site, n=cfg.POOL_SIZE) -> List:
     """Create list of feeds from a subset of links found in the source file, according to SRC_SAMPLE_SIZE."""
     global ARTICLES
-    sched.initPool()
     ensure_globals(site, topic)
     jobs = []
     url = ""

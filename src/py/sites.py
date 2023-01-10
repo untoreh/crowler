@@ -221,7 +221,7 @@ class Site:
 
     def get_setting(self, k: str, default=None):
         v = self._config.get(k)
-        if v is None:
+        if v is None or v == "":
             if self.is_subsite:
                 return self._tl_config.get(k, default)
             else:

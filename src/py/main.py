@@ -54,7 +54,6 @@ def get_kw_batch(site: Site, topic):
 
 def initialize(procs=False):
     log.setloglevel()
-    sched.initPool(True, procs=procs)
     sources.ensure_engines()
     pb.proxy_sync_forever(cfg.PROXIES_FILES, cfg.PROXIES_DIR)
 

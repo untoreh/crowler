@@ -120,7 +120,6 @@ class Translator:
         self._sl = SLang.code
         for (_, code) in TLangs:
             self._translate[(self._sl, code)] = self._tr(source=self._sl, target=code)
-        sched.initPool(procs=False)
         if sync_proxies:
             pb.proxy_sync_forever(cfg.PROXIES_FILES, cfg.PROXIES_DIR)
         log.info("translator: initialized.")
@@ -239,5 +238,4 @@ def translate(text: str, to_lang: str, from_lang="auto"):
     global _SLATOR
     if _SLATOR is None:
         _SLATOR = Translator()
-        sched.initPool(procs=False)
     return _SLATOR.translate(text, target=to_lang, source=from_lang)

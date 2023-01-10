@@ -638,8 +638,11 @@ class Site:
                 if tops != "all":
                     tops = tops.split(",")
                 else:
-                    self.load_topics()
-                    tops = list(self.topics_dict.keys())
+                    tops = []
+            if not len(tops):
+                self.load_topics()
+                tops = list(self.topics_dict.keys())
+            assert len(tops) > 0, "Topics couldn't be loaded! Check site config."
             self._topics = tops
         return self._topics
 
@@ -710,9 +713,9 @@ class Site:
         return topic in self.topics_dict
 
     def is_empty(self, topic: str):
-        self.load_topics()
         if not topic:
-            return False
+            return True
+        self.load_topics()
         done = self.load_done(topic)
         return len(done) == 0 or len(done[0]) == 0
 
@@ -838,15 +841,23 @@ class Site:
 
     def get_random_topic(self, allow_empty=False):
         assert self.topics_arr is not None
+        topic = self.slugs[-1]
+        avail = 0
+        trials = 0
         while True:
             if len(self.random_topic_list) == 0:
                 self.random_topic_list.extend(self.topics_dict.keys())
+                if not avail:
+                    avail = len(self.random_topic_list)
+                if trials > avail:
+                    return topic # exahusted
                 if len(self.random_topic_list) == 0:
                     return ""
             idx = randint(0, len(self.random_topic_list) - 1)
             topic = self.random_topic_list.pop(idx)
             if allow_empty or not self.is_empty(topic):
                 return topic
+            trials += 1
 
     def remove_broken_articles(self, topic):
         # valid_unpub = []

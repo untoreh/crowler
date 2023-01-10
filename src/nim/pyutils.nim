@@ -228,7 +228,7 @@ when false:
 
 pyObjExp((ut, pyImport("utils")))
 doassert not pyisnone(ut)
-when not SERVER_MODE:
+when false:
   pyObjPtrExp(
       (pySched, pyImport("scheduler")),
       (pySchedApply, pySched[].getAttr("apply"))

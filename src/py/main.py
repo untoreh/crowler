@@ -65,7 +65,8 @@ def run_sources_job(site: Site, topic):
     This function should never be called directly, instead `parse` should use it when it runs out of sources.
     """
     log.info("Getting kw batch...")
-    initialize()
+    if sched.POOL is None:
+        initialize()
     batch = get_kw_batch(site, topic)
     root = site.topic_sources(topic)
     results = dict()
@@ -307,7 +308,8 @@ def site_scheduling(site: Site, throttle=60):
 
 
 def run_server(sites):
-    if len(sites) == 0:
+    initialize()
+    if len(sites) == 0 or sites[0] == "":
         sites = load_sites()
         assert isinstance(sites, dict)
         if len(sites) == 0:
@@ -316,7 +318,6 @@ def run_server(sites):
         ## site names, which is the name of the config
         sites = list(map(lambda s: s[0], sites.values()))
         assert len(sites) and len(sites[0])
-    initialize()
     jobs = {}
 
     def dispatch(name):

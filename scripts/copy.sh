@@ -22,7 +22,7 @@ mkdir -p $trg/{site,lib,data}
     exit 1
 }
 mkdir -p $trg/site/assets/logo
-cp -aL src/assets/logo/* $trg/site/assets/logo/
+cp -aL config/logo/* $trg/site/assets/logo/
 mkdir -p $trg/src
 cp -a src/{assets,css,js} $trg/src/ &>/dev/null
 

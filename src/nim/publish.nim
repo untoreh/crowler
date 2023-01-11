@@ -164,7 +164,6 @@ proc filterDuplicates(topic: string, lsh: PublishedArticles, pagenum: int,
     for (_, a) in posts[]:
       donePy[].add a.py
       doneArts[].add a
-  doassert await updateTopicPubdate(topic)
   pySaveDone()
   return true
 
@@ -238,7 +237,7 @@ proc pubTopic*(topic: string): Future[
         (getTime() - startTime).inSeconds < PUBLISH_TIMEOUT:
     let filtered =
       await filterDuplicates(topic, lsh, pagenum, posts.addr, donePy.addr, doneArts.addr)
-    if not filtered:
+    if not filtered: # We ran out of articles
       break
 
   let nNewPosts = len(posts)
@@ -256,6 +255,7 @@ proc pubTopic*(topic: string): Future[
   # new articles are "published" and the state (pagecache, rss, search) has to be synced
   when false: # It is disabled since we don't do static publishing and
     stateUpdates() # the server cache has a short TTL...so it will eventually update
+  doassert await updateTopicPubdate(topic)
   infopub "published {nNewPosts} new posts."
   return true
 

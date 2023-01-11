@@ -122,8 +122,7 @@ from enum import Enum
 
 
 class Job(Enum):
-    parse = -1
-    feed = -1
+    articles = -1
     reddit = 60 * 60 * 24
     twitter = 60 * 60 * 2
     facebook = 60 * 60 * 4
@@ -460,14 +459,10 @@ class Site:
     def time_until_next(self, kind: Job, topic: str = ""):
         # How much time should we wait until next job
         match kind:
-            case Job.parse:
+            case Job.articles:
                 assert isinstance(topic, str)
                 arts = self.load_articles(topic)
                 return self._sources_time(arts)
-            case Job.feed:
-                assert isinstance(topic, str)
-                feeds = self.load_feeds(topic)
-                return self._sources_time(feeds)
             case Job.reddit:
                 return (
                     self._social_time(self._last_reddit, kind) if self.has_reddit else 1

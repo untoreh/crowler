@@ -255,15 +255,6 @@ def parse_worker(site, topic):
         if idle == 1:
             backoff += 1
         run_parse_job(site, topic)
-
-
-def feed_worker(site, topic):
-    backoff = 1
-    while True:
-        idle = site.time_until_next(Job.feed, topic)
-        time.sleep(idle + backoff)
-        if idle == 1:
-            backoff += 1
         run_feed_job(site, topic)
 
 
@@ -277,7 +268,6 @@ def topics_worker(site: Site):
         time.sleep(next_topic_idle(site))
         topic = tpm.new_topic(site)
         sched.apply(parse_worker, site, topic)
-        sched.apply(feed_worker, site, topic)
         log.info("topics: added new topic %s", topic)
         gc.collect()
 
@@ -298,9 +288,6 @@ def site_scheduling(site: Site, throttle=60):
         topics = site.sorted_topics(key=Topic.UnpubCount)
         for topic in topics:
             sched.apply(parse_worker, site, topic)
-            sched.apply(feed_worker, site, topic)
-        while True:
-            time.sleep(throttle)
     except:
         log.warn(f"{tb.format_exc()} (site: {site.name})")
         exit()
@@ -317,26 +304,20 @@ def run_server(sites):
         ## site names, which is the name of the config
         sites = list(map(lambda s: s[0], sites.values()))
         assert len(sites) and len(sites[0])
-    jobs = {}
 
-    def dispatch(name):
+    def dispatch(name, backoff=1):
         try:
             site = Site(name, publishing=True)
-            jobs[site] = sched.apply(site_scheduling, site)
+            sched.apply(site_scheduling, site)
         except:
-            time.sleep(1)
-            dispatch(name)
+            tb.print_exc()
+            time.sleep(backoff)
+            dispatch(name, backoff * 2)
 
     list(map(dispatch, sites))
-    # NOTE: this runs indefinitely
+    # All sites have been scheduled
     while True:
-        try:
-            for (site, j) in jobs.items():
-                j.wait()
-                if j.ready():
-                    dispatch(site.name)
-        except:
-            time.sleep(5)
+        time.sleep(1e9)
 
 
 JOBS_MAP = {

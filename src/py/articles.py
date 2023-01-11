@@ -69,7 +69,7 @@ noise_rgx = re.compile(
 )
 
 
-def isnoise(content, thresh=0.005) -> bool:
+def isnoise(content, thresh=0.01) -> bool:
     m = re.findall(noise_rgx, content)
     if len(m) / len(content) > thresh:
         return True
@@ -116,17 +116,24 @@ def isrelevant(title, body):
         return False
     # only allow contents that don't start with special chars to avoid spam/code blocks
     if re.match(char_start_rgx, body):
+        log.debug("is_rv: content starts with '{body[:25]}'")
         LRS.chars = False
         return False
     # skip error/messages/warnings pages
-    if isnoise(title) or isnoise(body):
-        LRS.noise = False
+    LRS.noise = False
+    if isnoise(title):
+        log.debug("is_rv: title noise '{title[:25]}'")
+    elif isnoise(body):
+        log.debug("is_rv: body noise '{body[:25]}'")
+    else: LRS.noise = True
+    if LRS.noise is False:
         return False
     t_words = set(title.split())
     for w in ut.splitStr(body):
         if w in t_words:
             return True
     LRS.body = False
+    log.debug("is_rv: body '{body[:25]}' not found in title '{title[:25]}'")
     return False
 
 
@@ -320,7 +327,7 @@ def process_content(final, logf):
     final["content"] = replace_profanity(final["content"])
 
     if not final["content"] or not isrelevant(final["title"], final["content"]):
-        logf("content not relevant (%d)", len(final["content"] or ""))
+        logf("content not relevant (%d), (%s)", len(final["content"] or ""), LRS)
         return {}
 
     final["content"] = clean_content(final["content"])

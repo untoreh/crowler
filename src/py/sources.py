@@ -1,8 +1,9 @@
 import os
 import sys
 from random import shuffle
-from time import sleep
+from time import sleep, time
 from typing import Dict, List
+import pickle
 
 import searx
 from searx import search
@@ -23,11 +24,9 @@ from log import LoggerLevel, logger, logging
 # Path params to disable ssl verification
 # online_req_params = proc.online.default_request_params()
 
-
 # def default_request_params():
 #     online_req_params["verify"] = False
 #     return online_req_params
-
 
 # proc.online.default_request_params = default_request_params
 
@@ -122,6 +121,27 @@ def get_searx_settings():
 PROCESSORS = None
 ENGINES_TRACKING: Dict[str, Dict[EngineRef, int]] = {}  # {cat, {egn_ref, n_fails}}
 SCHEDULED_SEARCHES = {}
+LAST_ENGINES_SNAPSHOT = 0
+ENGINES_SNAPSHOT_INTERVAL = 60
+
+
+def save_tracking(force=False):
+    try:
+        global LAST_ENGINES_SNAPSHOT
+        if time() - LAST_ENGINES_SNAPSHOT > ENGINES_SNAPSHOT_INTERVAL or force:
+            with open(cfg.CONFIG_DIR / "engines.pkl", "wb") as f:
+                pickle.dump(ENGINES_TRACKING, f)
+            LAST_ENGINES_SNAPSHOT = time()
+    except:
+        logger.warn("failed to save engine stats.")
+
+
+def load_tracking():
+    try:
+        with open(cfg.CONFIG_DIR / "engines.pkl", "rb") as f:
+            ENGINES_TRACKING.update(pickle.load(f))
+    except:
+        logger.warn("failed to load engine stats.")
 
 
 def hotfixes():
@@ -149,6 +169,7 @@ def ensure_engines(force=False):
                 ENGINES_TRACKING[cat] = {
                     EngineRef(engine.name, cat): 0 for engine in engines_for_cat
                 }
+            load_tracking()
     assert searx.search.PROCESSORS
     if PROCESSORS is None:
         PROCESSORS = searx.search.PROCESSORS
@@ -286,6 +307,7 @@ def fromkeyword(
     if verbose:
         print(res)
     del SCHEDULED_SEARCHES[keyword]
+    save_tracking()
     return res
 
 
@@ -318,6 +340,7 @@ def get_images(kw, maxiter=3, min_count=1, raw=False):
             if len(results) > min_count:
                 break
     finally:
+        save_tracking()
         return (
             results
             if raw

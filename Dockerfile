@@ -130,5 +130,5 @@ FROM sitebuild as server
 # HEALTHCHECK --timeout=5s CMD scripts/healthcheck.sh
 RUN cd /site; nimble build cli -d:adsense=1 -d:SERVER_MODE=1
 RUN [ "$NIM" = release ] && strip -s cli || exit 0
-ENV PATH="$PROJECT_DIR/scripts:$PATH"
+ENV PATH "$PROJECT_DIR/scripts:$PATH"
 CMD /site/scripts/start.sh

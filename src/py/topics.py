@@ -201,6 +201,7 @@ def from_slug(slug: str, cats=None):
                 return ts
     return TopicState()
 
+all_cat = "All categories"
 
 def from_cat(cat: str, cats=None):
     """Return the list of children categories given a main one, or the main one if it has no children."""
@@ -211,13 +212,17 @@ def from_cat(cat: str, cats=None):
     name = cats.get("name", "")
     if ut.slugify(name) == cat:
         cdr = cats.get("children", [])
+        result = []
         if len(cdr) == 0:
-            return [name]
+            result.append(name)
         else:
-            return [c.get("name", "") for c in cdr]
+            for c in cdr:
+                result.append(c.get("name", ""))
+        return result
     else:
         for c in cats.get("children", []):
             val = from_cat(cat, c)
             if val:
-                val.append(name)
+                if name != all_cat:
+                    val.append(name)
                 return val

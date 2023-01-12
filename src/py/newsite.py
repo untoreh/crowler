@@ -69,7 +69,7 @@ def add_site(domain, name, port):
 
 def unused_port():
     assert isinstance(SITES, dict)
-    ports = sorted(SITES.values())
+    ports = sorted([s[1] for s in SITES.values()])
     return ports[-1] + 1
 
 
@@ -128,13 +128,14 @@ def gen_site(domain, cat, force=False):
     site_config[ConfigKeys.created] = datetime.now().strftime("%Y-%m-%d")
     tps = tpm.from_slug(slug)
     assert tps.name
-    print("Generating symlinks..")
 
+    print("Generating symlinks..")
     tld = get_tld(domain)
     if tld != slug:
         makedirs(cfg.DATA_DIR / "sites" / slug, exist_ok=True)
-        symlink(cfg.DATA_DIR / "ads", tld, slug)
-        symlink(cfg.CONFIG_DIR / "logo", tld, slug)
+        # NOT needed since using "default" links
+        # symlink(cfg.DATA_DIR / "ads", tld, slug)
+        # symlink(cfg.CONFIG_DIR / "logo", tld, slug)
 
     print("Type website title:")
     site_config[ConfigKeys.title] = stdin.readline().strip()
@@ -190,8 +191,12 @@ def build_route(domain, from_host, to_host):
 
 
 def update_caddy_config(caddy_file: str, domain, port, from_host="localhost:80"):
-    with open(caddy_file, "r") as f:
-        cfg = json.load(f)
+    try:
+        with open(caddy_file, "r") as f:
+            cfg = json.load(f)
+    except:
+        with open(caddy_file + ".bak", "r") as f:
+            cfg = json.load(f)
     # copy backup after successful read of the main config
     # so we can be sure it's not corrupted
     copyfile(caddy_file, caddy_file + ".bak")
@@ -204,7 +209,7 @@ def update_caddy_config(caddy_file: str, domain, port, from_host="localhost:80")
     new_route = build_route(domain, from_host, to_host)
     routes.append(new_route)
     with open(caddy_file, "w") as f:
-        json.dump(f, cfg)
+        json.dump(cfg, f)
 
 
 def add_to_supervisor(name):
@@ -238,5 +243,5 @@ if __name__ == "__main__":
         raise ValueError(f"Caddyfile not found at {args.caddy}")
     SITES = load_sites()
     site_config = gen_site(args.domain, args.cat, force=args.f)
-    update_caddy_config(args.caddy, args.domain, site_config[ConfigKeys.port])
+    update_caddy_config(args.caddy, args.domain, int(site_config[ConfigKeys.port]))
     add_to_supervisor(site_config[ConfigKeys.name])

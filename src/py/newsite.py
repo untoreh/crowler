@@ -64,7 +64,7 @@ def add_site(domain, name, port):
     bak_file = str(SITES_PATH) + ".bak"
     copyfile(SITES_PATH, bak_file)
     with open(SITES_PATH, "w") as f:
-        json.dump(SITES, f)
+        json.dump(SITES, f, indent=2)
 
 
 def unused_port():
@@ -114,9 +114,13 @@ def symlink(base: Path, tld, slug):
 def gen_site(domain, cat, force=False):
     if domain in SITES and not force:
         raise ValueError("Domain already present in SITES list.")
-    topics = tpm.from_cat(cat)
-    slug = slugify(cat)
-    assert isinstance(topics, list)
+    spl = cat.split(",")
+    if len(spl) > 1: # custom categories
+        topics = spl
+        slug = slugify(spl[0])
+    else:
+        topics = tpm.from_cat(cat)
+        slug = slugify(cat)
     if not topics:
         raise ValueError(f"No topics found for given domain {domain}.")
     site_config = base_config.copy()

@@ -1,18 +1,10 @@
-import macros
+import leveldb
+import ../src/nim/data
 
+import os
+# let pd = os.getenv("PROJECT_DIR", "")
+# os.putenv("LD_LIBRARY_PATH", pd / "lib")
 
-var enabled {.compileTime.} = false
+discard init(LockDB, "/tmp/watdb")
 
-proc acquire() =
-  enabled = true
-
-proc release() =
-  enabled = false
-
-proc test(): bool {.compileTime.} = enabled
-
-proc run() =
-  when not enabled:
-    {.error: "Lock not acquired!".}
-
-run()
+echo "test.nim:8"

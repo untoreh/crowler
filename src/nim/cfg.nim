@@ -19,6 +19,7 @@ type ConfigObj* = object
   websiteContact*: string
   websiteCustomPages*: seq[string]
   isSubSite*: bool
+  tld*: string
   sitePath*: string
   remoteAssetsPath*: Uri
   localAssetsPath*: Uri
@@ -146,7 +147,13 @@ proc initConfigImpl(name: string = "") =
 
   setConfig("website_name")
   setConfig("website_domain")
-  config.isSubsite = config.websiteDomain.split(".").len > 2
+  let parts = config.websiteDomain.split(".")
+  config.isSubsite = parts.len > 2
+  when os.getenv("CONFIG_NAME", "") != "dev":
+    config.tld = parts[^2]
+    doassert len(config.tld) > 0
+  else:
+    config.tld = config.websiteDomain
   setConfig("website_scheme")
   doassert $config.website_scheme in ["http://", "https://"]
   putConfig("website_port", parseInt)
@@ -158,7 +165,7 @@ proc initConfigImpl(name: string = "") =
   if config.websiteCustomPages.len == 0:
     config.websiteCustomPages.add  @["dmca", "terms-of-service", "privacy-policy"]
 
-  template orDefault(val, def = "default"): untyped =
+  template orDefault(val, def = config.tld): untyped =
     if config.isSubsite: def else: val
 
   config.remoteAssetsPath = BASE_URL / "assets" / config.websiteName.orDefault

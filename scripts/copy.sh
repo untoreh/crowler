@@ -38,9 +38,10 @@ mkdir -p $trg/{src/py,lib}
 cp -a src/py/*.py $trg/src/py/
 ln -srf $trg/src/py $trg/lib/
 
+# css styles are not custom anymore shared across all sites
+scripts/cssconfig.sh $buildCss "server"
 for site in $sites; do
     [ "$site" = scraper ] && continue
-    scripts/cssconfig.sh $buildCss $site
     for fn in dist/*{.js,.css,.png}; do
         # name=$(basename ${fn%%.*})
         # ext=${fn##*.}

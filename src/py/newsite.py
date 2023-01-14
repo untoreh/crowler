@@ -57,14 +57,17 @@ base_config = {
 
 
 def add_site(domain, name, port):
-    assert isinstance(SITES, dict)
-    assert isinstance(port, int)
-    assert isinstance(name, str)
-    SITES[domain] = [name, port]
-    bak_file = str(SITES_PATH) + ".bak"
-    copyfile(SITES_PATH, bak_file)
-    with open(SITES_PATH, "w") as f:
-        json.dump(SITES, f, indent=2)
+    try:
+        assert isinstance(SITES, dict)
+        assert isinstance(port, int)
+        assert isinstance(name, str)
+        SITES[domain] = [name, port]
+        bak_file = str(SITES_PATH) + ".bak"
+        copyfile(SITES_PATH, bak_file)
+        with open(SITES_PATH, "w") as f:
+            json.dump(SITES, f, indent=2)
+    except:
+        print_exc()
 
 
 def unused_port():
@@ -89,7 +92,7 @@ def write_config(site_config):
             add_site(
                 site_config[ConfigKeys.domain],
                 site_config[ConfigKeys.name],
-                site_config[ConfigKeys.port],
+                int(site_config[ConfigKeys.port]),
             )
 
 
@@ -104,20 +107,23 @@ def get_tld(domain):
 def symlink(base: Path, tld, slug):
     try:
         os_symlink(base / tld, base / slug)
-        return True
     except:
-        print_exc()
-        print("Couldn't create symlink")
-        return False
+        if not (base / slug).exists():
+            print_exc()
+            print("Couldn't create symlink")
+            return False
+    return True
 
 
 def gen_site(domain, cat, force=False):
     if domain in SITES and not force:
         raise ValueError("Domain already present in SITES list.")
     spl = cat.split(",")
+    custom = False
     if len(spl) > 1: # custom categories
         topics = spl
         slug = slugify(spl[0])
+        custom = True
     else:
         topics = tpm.from_cat(cat)
         slug = slugify(cat)
@@ -130,16 +136,16 @@ def gen_site(domain, cat, force=False):
     site_config[ConfigKeys.contact] = "contact@{}.{}".format(*domain.split(".")[-2:])
     site_config[ConfigKeys.topics] = topics
     site_config[ConfigKeys.created] = datetime.now().strftime("%Y-%m-%d")
-    tps = tpm.from_slug(slug)
-    assert tps.name
+    if not custom:
+        tps = tpm.from_slug(slug)
+        assert tps.name
 
     print("Generating symlinks..")
     tld = get_tld(domain)
     if tld != slug:
         makedirs(cfg.DATA_DIR / "sites" / slug, exist_ok=True)
-        # NOT needed since using "default" links
-        # symlink(cfg.DATA_DIR / "ads", tld, slug)
-        # symlink(cfg.CONFIG_DIR / "logo", tld, slug)
+        symlink(cfg.DATA_DIR / "ads", tld, slug)
+        symlink(cfg.CONFIG_DIR / "logo", tld, slug)
 
     print("Type website title:")
     site_config[ConfigKeys.title] = stdin.readline().strip()

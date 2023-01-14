@@ -7,6 +7,20 @@ For $sites assume the name of the python ~Site~ object or `$CONFIG_NAME` in nim.
 - run the nim server `nim r src/nim/server.nim` on port `:5050`
 - `scripts/copy.sh -css $sites` (ensure that `npm run build` is working correctly by checking files in `dist/*.css` to be fresh.)
 - scripts/docker.sh -c $sites
+** leveldb:
+The leveldb binary is included in the repository, because we don't want many mmapped files. Leveldb keeps up to 1000 mmaped files in memory (where the file size is the block size of the database). For default block sizes this means that leveldb can take >2G memory on 64bit.
+To rebuild:
+#+begin_src shell
+cd vendor/leveldb
+git submodule init
+git submodule update
+
+#+end_src
+Change `kDefaultMmapLimit` to a very small value e.g. 10.
+In file `util/env_posix.c` (and `env_windows.c`)
+#+begin_src c
+constexpr const int kDefaultMmapLimit = (sizeof(void*) >= 8) ? 10: 0;
+#+end_src
 * Deploy
 - Ensure /mnt is a mounted storage on remove server
 - create /mnt/hosts directory

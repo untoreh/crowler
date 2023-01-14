@@ -4,4 +4,4 @@
 
 [ -e .venv/bin/activate ] && . .venv/bin/activate
 
-exec supervisorctl -c scripts/supervisor.conf $@
+exec supervisorctl -c config/supervisor.conf $@

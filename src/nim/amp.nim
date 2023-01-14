@@ -48,7 +48,7 @@ proc getFile(path: string): Future[string] {.async.} =
   except KeyError:
     parseUri(path, fileUri)
     url =
-      if fileUri.scheme.isEmptyOrWhitespace:
+      if fileUri.scheme.isEmptyOrWhitespace and len(fileUri.query) == 0:
         path.asLocalUrl
       else:
         path
@@ -65,10 +65,11 @@ proc getFile(path: string): Future[string] {.async.} =
           let resp = (await get(url, proxied = false))
           checkTrue(resp.body.len > 0, "amp: body empty")
           filesCache[path] = resp.body
+          return resp.body
       except:
         debug "Couldn't fetch file during amp conversion. {path}"
         return ""
-    result = filesCache[path]
+    return filesCache[path]
 
 
 proc ampTemplate(): (VNode, VNode, VNode) =

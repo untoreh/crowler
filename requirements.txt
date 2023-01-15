@@ -32,7 +32,6 @@ bloom_filter2
 ## for nim
 unidecode
 langcodes
-pysonic-channel
 
 # sources/articles
 feedparser

@@ -59,6 +59,7 @@ libsonic=src/rust/sonic-bindings/target/release/libsonic_channel.so
 mkdir -p "$trg/$(dirname $libsonic)"
 cp -a $libsonic "${trg}/${libsonic}"
 ln -srf "${trg}/${libsonic}" $trg/lib
+cp -a lib/libleveldb* $trg/lib
 
 cp -a nim.cfg $trg/nim.cfg.debug
 cp -a nim.cfg.release $trg/nim.cfg

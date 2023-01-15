@@ -3,7 +3,7 @@ FROM debian:bookworm AS sonic
 ENV DEBIAN_FRONTEND=noninteractive
 ENV CURL_V 7.83.1
 RUN apt update; \
-    apt install -y  curl clang libclang-dev build-essential libleveldb-dev; \
+    apt install -y  curl clang libclang-dev build-essential; \
     # wget -q -O /usr/local/bin/curl https://github.com/moparisthebest/static-curl/releases/download/v$CURL_V/curl-amd64 && \
     # chmod +x /usr/local/bin/curl && \
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -q --profile minimal --default-toolchain stable -y && \
@@ -62,14 +62,16 @@ RUN curl http://ftp.de.debian.org/debian/pool/main/o/openssl/libssl1.1_1.1.1n-0+
     rm libssl.deb
 RUN cd /; nimble install -y nimterop
 RUN cd /
+# add leveldb-dev to make the leveldb cli tool build not fail...
 RUN cd /site; \
+    apt install -y libleveldb-dev; \
     tries=3; \
     while true; do \
         nimble install -y -d --verbose && break; \
         tries=$((tries+1)); \
         [ $tries -gt 3 ] && exit 1; \
-    done
-
+    done; \
+    apt remove -y libleveldb-dev;
 
 FROM sitedeps1 AS sitedeps2
 ARG CACHE 0
@@ -97,6 +99,9 @@ RUN cd /site; \
 FROM sitedeps3 AS sitedeps4
 RUN /usr/bin/python3 -m textblob.download_corpora
 COPY / /site/
+# leveldb is vendored
+RUN apt install -y libsnappy1v5 # required by leveldb
+RUN nimble install -y leveldb --passL:-L$PROJECT_DIR/lib --passL:"-Wl,-rpath,$PROJECT_DIR/lib"
 RUN /usr/bin/python3 lib/py/main.py -sites dev; true # perform modules setups on imports
 
 FROM sitedeps4 AS sitebuild
@@ -109,7 +114,7 @@ ENV PROJECT_DIR /site
 # nim not still supporting ssl3
 # RUN apt -y install libssl1.1
 RUN /site/scripts/switchdebug.sh /site
-RUN cd /site; nimble build cli_tasks -d:SERVER_MODE=0
+RUN ls /root/.nimble/pkgs/ && cd /site; nimble build cli_tasks -d:SERVER_MODE=0
 
 
 # FROM sitebuild as sitebuild-debug

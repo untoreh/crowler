@@ -57,14 +57,16 @@ proc multiRun() =
   var nRunning = 0
   for (domain, name_port) in sites.pairs():
     let (name, _) = (name_port[0].to(string), name_port[1])
-    info "Creating worker thread for site {name}."
-    createThread(threads[nRunning][1], run, name,)
-    threads[nRunning][0].add name
-    nRunning.inc
+    if len(name) > 0:
+      info "Creating worker thread for site {name}."
+      createThread(threads[nRunning][1], run, name,)
+      threads[nRunning][0].add name
+      nRunning.inc
+    doassert nRunning < len(threads) "Reached max number of concurrent publishers (1024)"
   info "Running indefinitely..."
   while true:
     for i in 0..<nRunning:
-      if not threads[i][1].running:
+      if not threads[i][1].running and len(threads[i][0]) > 0:
         warn "Worker for site {threads[i][0]} is not running!, restarting..."
         quit()
     sleep(5000)

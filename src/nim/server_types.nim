@@ -1,5 +1,5 @@
 import nimpy, std/[options, strutils, strformat, os, enumerate, mimetypes,
-    uri, locks], scorper/http/httpcore
+    uri, locks]
 import cfg, quirks, utils
 
 const

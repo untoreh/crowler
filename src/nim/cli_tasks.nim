@@ -62,7 +62,7 @@ proc multiRun() =
       createThread(threads[nRunning][1], run, name,)
       threads[nRunning][0].add name
       nRunning.inc
-    doassert nRunning < len(threads) "Reached max number of concurrent publishers (1024)"
+    doassert nRunning < len(threads), "Reached max number of concurrent publishers (1024)"
   info "Running indefinitely..."
   while true:
     for i in 0..<nRunning:

@@ -88,10 +88,8 @@ proc doSplit(s: string): seq[string] = s.split(",")
 
 
 
-when not defined(SERVER_MODE):
-  const SERVER_MODE* {.booldefine.} = os.getenv("SERVER_MODE", "1").parseBool
-when not defined(STATIC_PUBLISHING):
-  const STATIC_PUBLISHING* {.booldefine.} = os.getenv("STATIC_PUBLISHING", "0").parseBool
+const SERVER_MODE* {.booldefine.} = os.getenv("SERVER_MODE", "1").parseBool
+const STATIC_PUBLISHING* {.booldefine.} = os.getenv("STATIC_PUBLISHING", "0").parseBool
 
 const
   SITE_PATH* = PROJECT_PATH / "site"
@@ -149,7 +147,7 @@ proc initConfigImpl(name: string = "") =
   setConfig("website_domain")
   let parts = config.websiteDomain.split(".")
   config.isSubsite = parts.len > 2
-  when os.getenv("CONFIG_NAME", "") != "dev":
+  when os.getenv("CONFIG_NAME", "") != "dev" and SERVER_MODE:
     config.tld = parts[^2]
     doassert len(config.tld) > 0
   else:

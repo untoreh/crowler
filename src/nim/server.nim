@@ -770,6 +770,7 @@ proc startServer*(doclear = false, port = 0, loglevel = "info") =
   initAds()
 
   # runTasks(@[mem, cleanup, tpc])
+  runTasks(@[mem])
 
 
   checkNil config

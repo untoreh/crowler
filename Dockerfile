@@ -71,7 +71,7 @@ RUN cd /site; \
         tries=$((tries+1)); \
         [ $tries -gt 3 ] && exit 1; \
     done; \
-    apt remove -y libleveldb-dev;
+    apt remove -y libleveldb-dev libleveldb1d;
 
 FROM sitedeps1 AS sitedeps2
 ARG CACHE 0

@@ -250,12 +250,16 @@ def run_feed_job(site: Site, topic):
 def parse_worker(site, topic):
     backoff = 1
     while True:
-        idle = site.time_until_next(Job.parse, topic)
-        time.sleep(idle + backoff)
-        if idle == 1:
-            backoff += 1
-        run_parse_job(site, topic)
-        run_feed_job(site, topic)
+        try:
+            idle = site.time_until_next(Job.articles, topic)
+            time.sleep(idle + backoff)
+            if idle == 1:
+                backoff += 1
+            run_parse_job(site, topic)
+            run_feed_job(site, topic)
+        except:
+            tb.print_exc()
+            time.sleep(1)
 
 
 def next_topic_idle(site):
@@ -265,11 +269,15 @@ def next_topic_idle(site):
 
 def topics_worker(site: Site):
     while True:
-        time.sleep(next_topic_idle(site))
-        topic = tpm.new_topic(site)
-        sched.apply(parse_worker, site, topic)
-        log.info("topics: added new topic %s", topic)
-        gc.collect()
+        try:
+            time.sleep(next_topic_idle(site))
+            topic = tpm.new_topic(site)
+            sched.apply(parse_worker, site, topic)
+            log.info("topics: added new topic %s", topic)
+            gc.collect()
+        except:
+            tb.print_exc()
+            time.sleep(1)
 
 
 def site_scheduling(site: Site, throttle=60):

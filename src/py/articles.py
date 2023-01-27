@@ -64,7 +64,7 @@ if not hasattr(nltk, "punkt"):
 
 char_start_rgx = re.compile(r"^[^a-zA-Z\-\*\=]")
 noise_rgx = re.compile(
-    r"(cookies?)|(policy)|(privacy)|(browser)|(firefox)|(chrome)|(mozilla)|(\sads?\s)|(copyright)|(\slogo\s)|(trademark)|(advertisements?)|(javascript)|(supported)|(block)|(available)|(country?i?e?s?)|(slow)|(loading)|(allowe?d?)|(sign\sin)|(sign\s?up)|(sign\s?on)|(log\s?in)|(user menu)|(can\'t be reached)|(create)|(follow)|(home)|(popular)|(feeds?)|(denied)|(access denied)|(r\/)|(\\x\\x\\x)",
+    r"(cookies?)|(policy)|(privacy)|(browser)|(firefox)|(chrome)|(mozilla)|(\sads?\s)|(copyright)|(\slogo\s)|(trademark)|(advertisements?)|(javascript)|(supported)|(block)|(available)|(country?i?e?s?)|(slow)|(loading)|(allowe?d?)|(sign\sin)|(sign\s?up)|(sign\s?on)|(log\s?in)|(user menu)|(can\'t be reached)|(create)|(follow)|(home)|(popular)|(feeds?)|(denied)|(access denied)|(r\/)",
     re.IGNORECASE,
 )
 
@@ -75,20 +75,31 @@ def isnoise(content, thresh=0.01) -> bool:
         return True
     return False
 
+def is_noise_filter(art: dict):
+    None if isnoise(art["content"]) else art
 
-def purge_bad_articles(s: Site):
+def _fix_unicode(s):
+    return s.encode('utf8').decode('unicode-escape')
+
+def unicode_fixer(art: dict):
+    try:
+        art["title"] = _fix_unicode(art["title"])
+        art["content"] = _fix_unicode(art["content"])
+        return art
+    except:
+        return None
+
+def process_articles(s: Site, process_func=is_noise_filter):
     def clear_topic(topic):
         done = s.load_done(topic)
         for n in range(len(done)):
             page_arts = done[n]
             for i, a in enumerate(page_arts):
                 if a and len(a.get("content", "")) > 0:
-                    if isnoise(a["content"]):
-                        page_arts[i] = None
+                    page_arts[i] = process_func(a)
 
     for topic in s.load_topics()[1].keys():
         clear_topic(topic)
-
 
 class Relevance:
     content = chars = noise = body = True
@@ -296,6 +307,8 @@ rgx_4 = re.compile(r"(?:\!\[.*?\].*?\(.*?\))|(?:\!\[.*?\).*?\n?)")
 def clean_content(content: str):
     """"""
     try:
+        # ensure string doesn't have spurious unicode codes
+        content = content.encode('utf8').decode('unicode-escape')
         # some weird broken md links
         content = re.sub(rgx_4, "", content)
         # double new lines for better formatting

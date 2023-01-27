@@ -149,19 +149,32 @@ template addArticleToFeed() =
 
   addUrlToFeed(baseUrl, langUrl)
 
+template addPageToFeed() =
+  template baseUrl(): untyped =
+    $(config.websiteUrl / topic / $pagenum)
+  template langUrl(lang): untyped =
+    $(config.websiteUrl / lang / topic / $pagenum)
+  addUrlToFeed(baseUrl, langUrl)
+
 proc buildTopicSitemap(topic: string): Future[XmlNode] {.async.} =
   initUrlSet()
   let done = await topicDonePages(topic)
+  var from_page = 0
   var nEntries = 0
   withPyLock:
     # add the most recent articles first (pages with higher idx)
-    for pagenum in countDown(len(done) - 1, 0):
+    # from last 10 pages
+    for pagenum in countDown(len(done) - 1, len(done) - 2):
       if unlikely(nEntries > maxEntries):
         warn "Number of URLs for sitemap of topic: {topic} exceeds limit! {nEntries}/{maxEntries}"
         break
       checkTrue pagenum in done, "Mismatching number of pages"
       for a in done[pagenum]:
         addArticleToFeed()
+    from_page = len(done) - 3
+  for pagenum in countDown(from_page, 0):
+    addPageToFeed()
+
 
 proc buildPageSitemap(topic: string, page: int): Future[XmlNode] {.async.} =
   result = newElement("urlset")
@@ -179,7 +192,13 @@ proc sitemapKey(topic: string): string = topic & "-sitemap.xml"
 proc sitemapKey(topic: string, page: string): string = topic & "-" & page & "-sitemap.xml"
 proc sitemapKey(topic: string, _: bool): string = topic & "-index.xml"
 
-template checkSitemapSize(sm): untyped = doassert sizeof(sm) * sm.len < maxSize; sm
+template checkSitemapSize(sm): untyped =
+  if sizeof(sm) * sm.len < maxSize:
+    block:
+      let sz {.inject.} = sizeof(sm) * sm.len
+      warn "Sitemap exceeding max size! ({sz} > {maxSize})"
+  sm
+
 
 proc fetchSiteMap*(): Future[string] {.async.} =
   return pageCache.lgetOrPut(sitemapKey("")):

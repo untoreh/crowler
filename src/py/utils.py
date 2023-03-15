@@ -23,6 +23,7 @@ import proxies_pb as pb
 from httputils import fetch_data
 from config import strtobool
 from cachetools import LRUCache
+from threading import Lock
 
 # data
 compressor = Blosc(cname="zstd", clevel=2, shuffle=Blosc.BITSHUFFLE)
@@ -30,7 +31,7 @@ codec = numcodecs.Pickle()
 TOPICS: Optional[za.Array] = None
 PUBCACHE = LRUCache(3)
 OVERWRITE_FLAG = strtobool(os.getenv("RESET_ARTICLES", "False"))
-
+LOCKS: Dict[tuple, Lock] = dict()
 
 def somekey(d, *keys):
     v = None
@@ -42,7 +43,6 @@ def somekey(d, *keys):
 
 slash_rgx = re.compile(r"/+")
 from pathlib import Path
-
 
 
 # From a list of keywords
@@ -126,9 +126,11 @@ def splitStr(string, sep="\\s+"):
     else:
         return (_.group(1) for _ in finditer(f"(?:^|{sep})((?:(?!{sep}).)*)", string))
 
-def partition(lst, size = cfg.POOL_SIZE):
+
+def partition(lst, size=cfg.POOL_SIZE):
     for i in range(0, len(lst), size):
-        yield lst[i : i+size]
+        yield lst[i : i + size]
+
 
 def similar(a, b):
     return SequenceMatcher(None, a, b).ratio()
@@ -161,61 +163,71 @@ def _wrap_path(root):
     return os.path.normpath(os.path.sep + str(root) + os.path.sep)
 
 
+
+
+def _get_lock(k):
+    l = LOCKS.get(k)
+    if l is None:
+        l = Lock()
+        LOCKS[k] = l
+    return l
+
 def save_zarr(
     contents,
     root,
     k: ZarrKey = ZarrKey.articles,
-    subk: int | str ="",
+    subk: int | str = "",
     reset=False,
 ):
-    if len(contents) > cfg.MAX_BACKLOG_SIZE:
-        contents = contents[-cfg.MAX_BACKLOG_SIZE :]
-    try:
-        if k == ZarrKey.articles:
-            contents = [c for c in contents if isinstance(c, dict)]
-        data = np.asarray(contents)
-    except:
-        raise ValueError("Contents provided can't be converted to numpy array.")
-    # append to existing array or create new one
-    if not reset:
-        # NOTE: there might be some recursion going on here :)
+    with _get_lock((root, k, subk)):
+        if len(contents) > cfg.MAX_BACKLOG_SIZE:
+            contents = contents[-cfg.MAX_BACKLOG_SIZE :]
         try:
-            # print(f"loading zarr: {k}, subk: {subk}, root: {root}")
-            z = load_zarr(k, subk=subk, root=root)
-        except Exception as e:
-            if isinstance(e, TypeError):
-                # print("loading zarr: type error")
-                z = load_zarr(k, subk=subk, root=root, overwrite=True)
-            else:
-                # logger.warning(f"Couldn't save content root: '{root}', k: '{k}', subk: '{subk}'")
-                raise e
-        max_append = cfg.MAX_BACKLOG_SIZE - len(z)
-        if len(data) > max_append:
-            # print(f"loading zarr: resizing data to {max_append}")
-            data = data[-max_append:]
-        # print(f"loading zarr: appending {len(data)} elements")
-        z.append(data)
-        z.attrs["updated"] = time()
-    else:
-        store = za.DirectoryStore(_wrap_path(root))
-        path = ZarrKey(k).name
-        if subk != "":
-            path += f"/{subk}"
-        kwargs = {
-            "store": store,
-            "path": path,
-            "object_codec": codec,
-            "compressor": compressor,
-            "dtype": object,
-        }
-        if len(data) == 0:
-            # NOTE: 5 is the number of fields in TopicState
-            kwargs["shape"] = (0, 5) if k == ZarrKey.topics else (0,)
-            zfun = za.empty
+            if k == ZarrKey.articles:
+                contents = [c for c in contents if isinstance(c, dict)]
+            data = np.asarray(contents)
+        except:
+            raise ValueError("Contents provided can't be converted to numpy array.")
+        # append to existing array or create new one
+        if not reset:
+            # NOTE: there might be some recursion going on here :)
+            try:
+                # print(f"loading zarr: {k}, subk: {subk}, root: {root}")
+                z = load_zarr(k, subk=subk, root=root)
+            except Exception as e:
+                if isinstance(e, TypeError):
+                    # print("loading zarr: type error")
+                    z = load_zarr(k, subk=subk, root=root, overwrite=True)
+                else:
+                    # logger.warning(f"Couldn't save content root: '{root}', k: '{k}', subk: '{subk}'")
+                    raise e
+            max_append = cfg.MAX_BACKLOG_SIZE - len(z)
+            if len(data) > max_append:
+                # print(f"loading zarr: resizing data to {max_append}")
+                data = data[-max_append:]
+            # print(f"loading zarr: appending {len(data)} elements")
+            z.append(data)
+            z.attrs["updated"] = time()
         else:
-            kwargs["arr"] = data
-            zfun = za.save_array
-        zfun(**kwargs)
+            store = za.DirectoryStore(_wrap_path(root))
+            path = ZarrKey(k).name
+            if subk != "":
+                path += f"/{subk}"
+            kwargs = {
+                "store": store,
+                "path": path,
+                "object_codec": codec,
+                "compressor": compressor,
+                "dtype": object,
+            }
+            if len(data) == 0:
+                # NOTE: 5 is the number of fields in TopicState
+                kwargs["shape"] = (0, 5) if k == ZarrKey.topics else (0,)
+                zfun = za.empty
+            else:
+                kwargs["arr"] = data
+                zfun = za.save_array
+            zfun(**kwargs)
 
 
 def arr_key(k=ZarrKey.articles, subk="", root=cfg.DATA_DIR):
@@ -228,7 +240,7 @@ def arr_key(k=ZarrKey.articles, subk="", root=cfg.DATA_DIR):
 
 def load_zarr(
     k=ZarrKey.articles,
-    subk: int | str ="",
+    subk: int | str = "",
     root=cfg.DATA_DIR,
     dims=1,
     overwrite=OVERWRITE_FLAG,

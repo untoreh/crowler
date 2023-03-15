@@ -527,7 +527,7 @@ def fillarticle(url, data, topic, site: Site):
             return {}
 
         final["slug"] = ut.slugify(final["title"])
-        final["desc"] = tra["description"] or goo.get("meta", {}).get("description")
+        final["desc"] = tra.get("description", "") or goo.get("meta", {}).get("description", "")
         final["author"] = (
             tra["author"]
             or "".join(goo.get("authors", ""))

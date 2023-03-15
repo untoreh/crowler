@@ -443,18 +443,19 @@ class Site:
             )
         )
 
-    @staticmethod
-    def _sources_time(arr: za.Array):
-        if not len(arr):
-            return 1
-        upd = arr.attrs.get("updated")
-        if not upd:
-            upd = arr.attrs["updated"] = time()
-        return max(1, (len(arr) * 20 * 60) - (time() - upd))
 
     @staticmethod
     def _social_time(last, kind):
         return max(1, kind.value - (time() - last))
+
+    @staticmethod
+    def _sources_time(arts: za.Array):
+        if not len(arts):
+            return 1
+        upd = arts.attrs.get("updated")
+        if not upd:
+            upd = arts.attrs["updated"] = time()
+        return max(1, (len(arts) * 20 * 60) - (time() - upd))
 
     def time_until_next(self, kind: Job, topic: str = ""):
         # How much time should we wait until next job
@@ -624,7 +625,6 @@ class Site:
             save_zarr([], k=ZarrKey.feeds, root=self.topic_dir(topic))
         self.update_article_count(topic)
 
-
     @property
     def topics(self):
         if self._topics is None:
@@ -646,7 +646,6 @@ class Site:
         if self._slugs is None:
             self._slugs = [ut.slugify(s) for s in self.topics]
         return self._slugs
-
 
     def load_topics(self, force=False):
         if self.topics_arr is None or force:
@@ -845,7 +844,7 @@ class Site:
                 if not avail:
                     avail = len(self.random_topic_list)
                 if trials > avail:
-                    return topic # exahusted
+                    return topic  # exahusted
                 if len(self.random_topic_list) == 0:
                     return ""
             idx = randint(0, len(self.random_topic_list) - 1)

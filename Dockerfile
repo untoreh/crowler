@@ -89,6 +89,7 @@ RUN /usr/bin/pip3 install -r requirements2.txt
 RUN /usr/bin/pip3 install --upgrade --pre html5lib
 
 FROM sitedeps2 AS sitedeps3
+ARG CACHE 2
 # HACK: refresh some nim packages
 RUN cd /site; \
     rm -rf ~/.nimbe/pkgs/chronos*; \

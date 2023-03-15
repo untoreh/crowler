@@ -41,7 +41,7 @@ def parsesource(url, topic, site: Site):
         try:
             a = art.fillarticle(url, data, topic, site)
             if a:
-                logger.info("Adding article")
+                logger.info("Adding article (%s)", topic)
                 ARTICLES[site.name][topic].append(a)
         except:
             traceback.print_exc()

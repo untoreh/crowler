@@ -306,7 +306,8 @@ def fromkeyword(
     res = dedup_results(res)
     if verbose:
         print(res)
-    del SCHEDULED_SEARCHES[keyword]
+    if keyword in SCHEDULED_SEARCHES:
+        del SCHEDULED_SEARCHES[keyword]
     save_tracking()
     return res
 

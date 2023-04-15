@@ -31,23 +31,23 @@ pygil.release()
 
 template withPyLock*(code): untyped =
   {.locks: [pyGil].}:
+    await pygil.acquire()
     try:
-      await pygil.acquire()
       code
     finally:
       pygil.release()
 
 template withOutPylock*(code): untyped =
+  pygil.release()
   try:
-    pygil.release()
     code
   finally:
     await pygil.acquire()
 
 template syncPyLock*(code): auto =
   {.locks: [pyGil].}:
+    pygil.globalAcquire()
     try:
-      pygil.globalAcquire()
       code
     finally:
       pygil.release()

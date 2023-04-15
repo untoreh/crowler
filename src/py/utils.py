@@ -179,7 +179,7 @@ def save_zarr(
     subk: int | str = "",
     reset=False,
 ):
-    with _get_lock((root, k, subk)):
+    with _get_lock((root, k, subk, reset)):
         if len(contents) > cfg.MAX_BACKLOG_SIZE:
             contents = contents[-cfg.MAX_BACKLOG_SIZE :]
         try:

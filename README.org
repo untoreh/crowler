@@ -1,5 +1,9 @@
 #+TITLE: Crowler
 
+This repo/app is not very useful, but it is a good example that showcases how much _it takes_ to build a fully automated website.
+It is also a good example of nim<->python interop.
+There are also nim<->rust bindings for rust libraries imageflow and minifyhtml that could be useful elsewhere.
+
 * Build
 ** css:
 For $sites assume the name of the python ~Site~ object or `$CONFIG_NAME` in nim.
